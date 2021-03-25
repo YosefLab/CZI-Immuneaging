@@ -8,9 +8,10 @@ This page did not answer your question? Please <a href="...">open an issue</a> a
 ## Table of contents
 1. [Setting up data access](#access)
     1. [Prerequisites](#access_prerequisites)
-    2. [List of donors and samples](#access_spreadsheet)
-    3. [Downloading data from the S3 website](#access_s3)
-    4. [Directory structure on S3](#access_s3_structure)
+    2. [Reading and Writing to the S3](#read_write)
+    3. [List of donors and samples](#access_spreadsheet)
+    4. [Downloading data from the S3 website](#access_s3)
+    5. [Directory structure on S3](#access_s3_structure)
 2. [Data upload](#upload)
     1. [Data naming conventions](#upload_naming)
     2. [Including metadata](#upload_metadata)
@@ -24,7 +25,7 @@ This page did not answer your question? Please <a href="...">open an issue</a> a
     2. [Processing a single sample](#processing_sample)
     3. [Data Harmonization](#processing_harmonization)
 6. [Data Hub maintenance](#maintenance)
-    1. [Setting up an AWS AIM](#maintenance_aims)
+    1. [Setting up an AWS IAM](#maintenance_iams)
     2. [Generating an AWS credentials file](#maintenance_credentials)
 
 ---
@@ -33,19 +34,23 @@ This page did not answer your question? Please <a href="...">open an issue</a> a
 
 ### <a name="access_prerequisites"></a> Prerequisites
 
-The data of the project are stored on an Amazon Web Services (AWS) Simple Storage Service (S3; "S3 bucket"). Whether you will be uploading or just downloading data from the S3 bucket, you will need to set up your access by following the next steps:
+The project data is stored on an Amazon Web Services (AWS) Simple Storage Service (S3; "S3 bucket"). Whether you will be uploading or just downloading data from the S3 bucket, you will need to set up your access via the following steps:
 
-1. Open AIM user and credentials file - 
-Identity and Access Management (AIM) user and a user-specific credentials file are required. AIM user associates a specific user with the Immune Aging S3 bucket, and the credentials file allows using the data uploading scripts and downloading data via terminal (to be described later).
+1. Get an IAM user and credentials file:
+You will be given an Identity and Access Management (IAM) user account and a user-specific credentials file (DO NOT SHARE THIS FILE) to access the S3. An IAM user is associated with a specific user in the Immune Aging S3 bucket, and the credentials file allows using the data uploading scripts and downloading data via terminal (to be described later).
 <br /><br />
-The Yosef group will manage the generation of both AIM users and credentials file for collaborators on the Immune Aging project. 
-In order to set up an AIM user and receive credentials file please email [todo] and cc your Immune Aging PI, who will need to approve your request.
+The Yosef group will manage the generation of both IAM users and credentials file for collaborators on the Immune Aging project. 
+In order to set up an IAM user and receive credentials file please email Galen (gx2113@columbia.edu) and cc your Immune Aging PI, who will need to approve your request.
 
-1. Install AWS CLI (optional if you are only downloading data) - 
- Uploading data further requires you to download the AWS Command Line Interface (CLI) from <a href="https://aws.amazon.com/cli/">here</a>. As we explain later, the AWS CLI can also be used for downloading data via terminal, however, data can alternatively be downloaded directly from your browser via the S3 user interface (in which case you do not need AWS CLI).
+1. Install AWS CLI (Optional but highly recommended):
+Uploading and downloading data is best done via the AWS Command Line Interface (CLI) from <a href="https://aws.amazon.com/cli/">here</a>. This will also let you use our helper scripts for reading and writing data.
 
-1. Download scripts (required only for uploading data) - 
-Uploading data requires having the data_upload.sd script, which can be found in this repository under the directory `scripts`. Note that this script can only run on a Linux/Unix/MacOSx system.
+**Granting temporary/one-off access:**
+To share data with temporary members (like research assistants temporarily helping out) or for one-off access, email Galen (gx2113@columbia.edu) with the S3 folder you want to share (or upload data to) and he will generate a script that will automatically upload/download data when run. This is super easy for him to do (says Galen writing this), so don't hesitate to reach out. DO NOT SHARE YOUR USER SPECIFIC CREDENTIALS!
+
+### <a name="read_write"></a> Reading and Writing to the S3
+To read data from the S3 bucket, use the `read_data.sh` script located in scripts [TODO]. See more in the [Data Download](#download) section.
+To upload data to the S3 bucket, use the `upload_data.sh` script locatied in scripts [TODO]. See more in the [Data Upload](#upload) section.
 
 ### <a name="access_spreadsheet"></a> List of donors and samples
 
@@ -135,9 +140,9 @@ Each file name must be structured as follows
 <donor_id>_<organ>_<cell_type>.<sequencer_output>.fastq
 ```
 where
-* `donor_id` - the donor ID, which should be consistent with the <a href=https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2>samples spreadsheet</a>; do not include a dot
-* `organ` - the organ, which should be consistent with the Dictionary tab in the <a href=https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2>samples spreadsheet</a>; for example, using `SPL` for spleen and `LIV` for liver.
-* `cell_type` the cell type, which should be consistent with the Dictionary tab in the <a href=https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2>samples spreadsheet</a>; for example, using `T` for T cells and `B` for B cells.
+* `donor_id` - the donor ID, which should be consistent with the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; do not include a dot
+* `organ` - the organ, which should be consistent with the Dictionary tab in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; for example, using `SPL` for spleen and `LIV` for liver.
+* `cell_type` the cell type, which should be consistent with the Dictionary tab in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; for example, using `T` for T cells and `B` for B cells.
 * `sequencer_output` - the standard output given by the raw data from the sequencer; for example, the output for a specific lane.
 
 A few examples for valid file names:
@@ -180,7 +185,7 @@ CUIMC-457_LNG_T.S1_L002_R1_001.fastq.gz
 ```
 on behalf of the Columbia group we run:
 ```
-data_upload.sh /path/to/CUIMC-457_LNG_T columbia /path/to/ai_credentials.sh
+data_upload.sh /path/to/CUIMC-457_LNG_T columbia /path/to/iam_credentials.sh
 ```
 where `/path/to/CUIMC-457_LNG_T` is the path fo the data files and the prefix of the sample that we want to upload and `/path/to/ai_credentials.sh` is the path to the credentials file of the user.
 
@@ -193,9 +198,11 @@ Notes:
 
 ## <a name="download"></a> Data Download
 
-Users with access permission can see the list of samples on the S3 bucket by logging in to...
+To read from the S3 bucket:
+1. Run your user-specific credentials file to set aws keys
+2. Sync your folders via `aws s3 sync <source> <target> [--options]` (where source is the aws folder). You can also use `aws s3 ls <target> [--options]` to list contents of a directory. Checkout more commands <a href= "https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html">here</a>.
 
-It is also possible to use the AWS CLI...
+It is also possible to use the online AWS S3 interface but it is recommended to use the CLI. 
 
 
 ## <a name="visualization"></a> Data visualization
@@ -270,7 +277,7 @@ The script `harmonization_pipeline.py`... would make sense to run on the node wi
 ## <a name="maintenance"></a> Data Hub maintenance
 
 
-### <a name="maintenance_aims"></a> Setting up an AWS AIM
+### <a name="maintenance_iams"></a> Setting up an AWS IAM
 
 Explanations...
 
