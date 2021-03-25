@@ -8,10 +8,9 @@ This page did not answer your question? Please <a href="...">open an issue</a> a
 ## Table of contents
 1. [Setting up data access](#access)
     1. [Prerequisites](#access_prerequisites)
-    2. [Reading and Writing to the S3](#read_write)
-    3. [List of donors and samples](#access_spreadsheet)
-    4. [Downloading data from the S3 website](#access_s3)
-    5. [Directory structure on S3](#access_s3_structure)
+    2. [List of donors and samples](#access_spreadsheet)
+    3. [Downloading data from the S3 website](#access_s3)
+    4. [Directory structure on S3](#access_s3_structure)
 2. [Data upload](#upload)
     1. [Data naming conventions](#upload_naming)
     2. [Including metadata](#upload_metadata)
@@ -48,9 +47,11 @@ Uploading and downloading data is best done via the AWS Command Line Interface (
 **Granting temporary/one-off access:**
 To share data with temporary members (like research assistants temporarily helping out) or for one-off access, email Galen (gx2113@columbia.edu) with the S3 folder you want to share (or upload data to) and he will generate a script that will automatically upload/download data when run. This is super easy for him to do (says Galen writing this), so don't hesitate to reach out. DO NOT SHARE YOUR USER SPECIFIC CREDENTIALS!
 
+<!---
 ### <a name="read_write"></a> Reading and Writing to the S3
 To read data from the S3 bucket, use the `read_data.sh` script located in scripts [TODO]. See more in the [Data Download](#download) section.
 To upload data to the S3 bucket, use the `upload_data.sh` script locatied in scripts [TODO]. See more in the [Data Upload](#upload) section.
+--->
 
 ### <a name="access_spreadsheet"></a> List of donors and samples
 
