@@ -1,15 +1,15 @@
 import json
+import os
+import time
+import logging
 
-def load_configs(filename):
-    with open(filename) as f: 
-        data = f.read()	
-    configs = json.loads(data)
-    validate_configs(configs)
-    return configs
-
-def validate_configs(configs):
-	assert(configs["aligner"] == "cellranger")
-
+def add_to_log(s, level = "info"):
+	toprint = time.strftime("%H:%M, %m-%d-%Y:") + s
+	if level == "info":
+		logging.info(toprint)
+	elif level == "debug":
+		logging.debug(toprint)
+		
 def set_access_keys(filepath):
 	"""
 	Sets the user's access keys to the AWS S3 bucket.
@@ -32,3 +32,15 @@ def set_access_keys(filepath):
 				keys[pair[0]] = pair[1]
 	for k in keys:
 		os.environ[k] = keys[k]
+	return
+
+def load_configs(filename):
+    with open(filename) as f: 
+        data = f.read()	
+    configs = json.loads(data)
+    validate_configs(configs)
+    return configs
+
+def validate_configs(configs):
+	assert(configs["aligner"] == "cellranger")
+	return
