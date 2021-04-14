@@ -1,7 +1,7 @@
 import pandas as pd
 import argparse
 import warnings
-
+import os
 
 def set_access_keys(filepath):
     """
@@ -26,38 +26,23 @@ def set_access_keys(filepath):
     for k in keys:
         os.environ[k] = keys[k]
 
-
-def read_google_sheet(url, output_fn=None, sheet_name=None):
-    """
-    Downloads and reads a Google Sheet. Must be xlsx.
-
-    Parameters
-    ----------
-    url
-        url of publicly accessible Google Sheet.
-    output_fn
-        Optional output filename
-    sheet_name
-        Specific sheet to return. By default returns all sheets in spreadsheet.
-    """
+def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
+    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
+    
     try:
         import gdown
-    except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(
-            "gdown is not installed. Please install gdown via: pip install gdown"
-        )
-
-    # url needs to be in a specific format
+    except ImportError as e:
+        raise ImportError('gdown is not installed. Please install gdown via: pip install gdown')
+    
     with warnings.catch_warnings(record=True) as w:
-        warnings.filterwarnings("error")
+        warnings.filterwarnings('error')
         output_fn = gdown.download(url, output_fn, quiet=False)
-        if len(w) == 1:
-            warnings.showwarning(
-                msg.message, msg.category, msg.filename, msg.lineno, msg.line
-            )
 
-    # read spreadsheet
-    data = pd.read_excel(output_fn, sheet_name=None)
+        if len(w) == 1:
+            warnings.showwarning(msg.message, msg.category,
+                      msg.filename, msg.lineno, msg.line)
+
+    data = pd.read_csv(output_fn)
     return data
 
 
@@ -79,7 +64,7 @@ def make_immuneaging_dictionary(df):
     return dictionary
 
 
-def get_fastq_gz_in_folder(folder, recursive=False):
+def get_fastq_gzs_in_folder(folder, recursive=False):
     """
     Get all the fastqs in a folder
 
@@ -93,12 +78,12 @@ def get_fastq_gz_in_folder(folder, recursive=False):
     if recursive:
         import glob
 
-        files = glob.glob(folder + "/**/*.fastq.gz", recursive=True)
+        files = glob.glob(folder + "/**/*.fastq.gz", recursive=True)        
     else:
         import os
-
-        all_dir = os.listdir(folder)
-    files = [f for f in all_dir if f.endswith(".fastq.gz")]
+        
+        files = os.listdir(folder)
+    files = [f for f in files if f.endswith(".fastq.gz")]
     return files
 
 
@@ -118,11 +103,10 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "-r",
-        "--recursive",
-        action="store_true",
-        default=False,
-        help="if flag set, will check all subfolders",
+        "--not_recursive",
+        action="store_false",
+        default=True,
+        help="if flag set, won't check subfolders",
     )
     parser.add_argument(
         "-f",
@@ -139,7 +123,7 @@ def get_non_null_values(df, col_name):
     return df[df[col_name].notnull()][col_name]
 
 
-def check_sheet(metadata):
+def check_sheet(donors, samples, dictionary):
     """
     Checks Metadata Sheet.
 
@@ -150,20 +134,30 @@ def check_sheet(metadata):
     """
     def check_col_is_numerical(df, col_name):
         vals = get_non_null_values(df, col_name)
-        is_valid = True
+        is_valid = True            
+            
         for v in vals:
-            if not str(v).isnumeric():
-                msg = "{} in {} is not numeric. Please edit the online Google sheet and rerun script.".format(
-                    v, col_name
-                )
-                warnings.warn(msg)
-                is_valid = False
+            if '-' in v:
+                tmp_v = v.split('-')
+                for x in tmp_v:
+                    try:
+                        float(x)
+                    except:
+                        msg = "The range {} is not numeric. Please edit the online Google sheet and rerun script.".format(
+                            tmp_v
+                        )
+                        warnings.warn(msg)
+                        is_valid = False
+            else:
+                try:
+                    float(v)
+                except:
+                    msg = "{} in {} is not numeric. Please edit the online Google sheet and rerun script.".format(
+                        v, col_name
+                    )
+                    warnings.warn(msg)
+                    is_valid = False
         return is_valid
-
-    dictionary = make_immuneaging_dictionary(metadata_df["Dictionary"])
-
-    donors = metadata_df["Donors"]
-    samples = metadata_df["Samples"]
 
     is_valid = True
     for col_name, valid_values in dictionary.items():
@@ -199,9 +193,9 @@ def check_sheet(metadata):
             "Please fix and rerun command or use -f to force upload."
         )
 
-    return metadata_df
+    return is_valid
 
-def check_fastq_filenames(fastq_fns, metadata_df):
+def check_fastq_filenames(fastq_fns, samples_df):
     """
     Check that the fastq filenames conforms to data schema standards
 
@@ -209,30 +203,97 @@ def check_fastq_filenames(fastq_fns, metadata_df):
     ----------
     fastq_fns
         filenames of all fastqs to be uploaded
-    metadata_df
-        DataFrame containing metadata info
+    samples_df
+        DataFrame containing sample info
 
     """
-    raise NotImplementedError
+    fns = [f.split('/')[-1] for f in fastq_fns]
+    samples.index = samples['Sample_ID']
+    sample_ids = list(samples_df['Sample_ID'])
+    lib_types =  ['GEX', 'CITE', 'TCR', 'BCR']
+    is_valid = True
+    
+    for f in fns:
+        data = f.split('_')
+        sample_id = data[0]
+        lib_type = data[1]
+        lib_id = data[2]
 
-def upload_to_s3(source_fns, destination):
+        # check sample id
+        valid_sample_id = sample_id in sample_ids
+        
+        # check library type
+        valid_lib_type = lib_type in lib_types
+        
+        # check library id
+        valid_lib_id = True
+        if valid_sample_id and valid_lib_type:
+            
+            l_ids = samples.loc[sample_id][lib_type+' lib']
+            
+            # sample id is not unique so get all library id values
+            if isinstance(l_ids, pd.core.series.Series):
+                l_ids = l_ids.values
+            elif isinstance(l_ids, str):
+                l_ids = [l_ids]
+            
+            # some library ids are seperated by commas
+            l_ids = [s.split(',') for s in l_ids]
+            
+            # if they were seperated by commas, collapse the list
+            if isinstance(l_ids[0], list):
+                l_ids = [item for sublist in l_ids for item in sublist]                    
+
+            l_ids = [s.strip() for s in l_ids] # l_ids here is finally all library ids for a sample
+            
+            valid_lib_id = (lib_id in l_ids)
+            
+        else:
+            valid_lib_id = False
+        
+        valid_sample = valid_sample_id and valid_lib_type and valid_lib_id
+        
+        if valid_sample is False:
+            is_valid = False
+            msg = 'Error for sample: {}. '.format(sample_id)
+            if valid_sample_id is False:
+                msg += 'Sample id does not exist in Sample Sheet. '
+            if valid_lib_type is False:
+                msg += "Library type of '{}' is invalid. Options: ['GEX', 'CITE', 'TCR', 'BCR'] .".format(lib_type)
+            if valid_sample_id and valid_lib_type and (valid_lib_id is False):
+                msg += 'Library id of {} is not in Sample Sheet.'.format(lib_id)
+            warnings.warn(msg)
+            
+    if is_valid:
+        print('fastq filename check successful.')
+    else:
+        raise ValueError('Error in fastq filenames. Check above warnings.')
+    
+    return is_valid
+
+def upload_to_s3(source, destination):
     """
     Upload source filenames to destination in s3.
     """
-    raise NotImplementedError
+    aws_cmd = 'aws s3 sync {} s3://immuneaging/{}'.format(source, destination)
+    print(aws_cmd)
+    os.system(aws_cmd)
+#     
+#     raise NotImplementedError
 
 if __name__ == "__main__":
     args = parse_args()
-
-    # set_access_keys(args.aws_keys)
-    # fastq_fns = get_fastq_gz_in_folder(args.fastq, recursive=args.recursive)
-
-    url = "https://drive.google.com/uc?id=1dzd6WjPaki1plsG2phgcAnvXjfbrNDkR"
-    metadata_df = read_google_sheet(url)
-
+    
+    fastq_fns = get_fastq_gzs_in_folder(args.fastq, recursive=args.not_recursive)
+  
     if not args.force:
-        check_sheet(metadata_df)
-        # check_fastq_filenames(fastq_fns, metadata_df)
+        dict_sheet = read_immune_aging_sheet(sheet='Dictionary')
+        dictionary = make_immuneaging_dictionary(dict_sheet)
+        donors = read_immune_aging_sheet(sheet='Donors')
+        samples = read_immune_aging_sheet(sheet='Samples')
+        
+        check_sheet(donors, samples, dictionary)
+        check_fastq_filenames(fastq_fns, samples)
 
-    set_access_keys(args.aws_keys)
-    upload_to_s3()
+#     set_access_keys(args.aws_keys)
+    upload_to_s3(args.fastq, 'test_folder')
