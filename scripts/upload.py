@@ -276,10 +276,8 @@ def upload_to_s3(source, destination):
     Upload source filenames to destination in s3.
     """
     aws_cmd = 'aws s3 sync {} s3://immuneaging/{}'.format(source, destination)
-    print(aws_cmd)
+    print('Running aws command: ', aws_cmd)
     os.system(aws_cmd)
-#     
-#     raise NotImplementedError
 
 if __name__ == "__main__":
     args = parse_args()
