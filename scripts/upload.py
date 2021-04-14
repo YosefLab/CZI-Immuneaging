@@ -293,5 +293,5 @@ if __name__ == "__main__":
         check_sheet(donors, samples, dictionary)
         check_fastq_filenames(fastq_fns, samples)
 
-#     set_access_keys(args.aws_keys)
+    set_access_keys(args.aws_keys)
     upload_to_s3(args.fastq, 'test_folder')
