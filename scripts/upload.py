@@ -3,6 +3,7 @@ import argparse
 import warnings
 import os
 
+
 def set_access_keys(filepath):
     """
     Sets the user's access keys to the AWS S3 bucket.
@@ -26,21 +27,27 @@ def set_access_keys(filepath):
     for k in keys:
         os.environ[k] = keys[k]
 
+
 def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
-    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
-    
+    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
+        sheet
+    )
+
     try:
         import gdown
     except ImportError as e:
-        raise ImportError('gdown is not installed. Please install gdown via: pip install gdown')
-    
+        raise ImportError(
+            "gdown is not installed. Please install gdown via: pip install gdown"
+        )
+
     with warnings.catch_warnings(record=True) as w:
-        warnings.filterwarnings('error')
+        warnings.filterwarnings("error")
         output_fn = gdown.download(url, output_fn, quiet=False)
 
         if len(w) == 1:
-            warnings.showwarning(msg.message, msg.category,
-                      msg.filename, msg.lineno, msg.line)
+            warnings.showwarning(
+                msg.message, msg.category, msg.filename, msg.lineno, msg.line
+            )
 
     data = pd.read_csv(output_fn)
     return data
@@ -78,10 +85,8 @@ def get_fastq_gzs_in_folder(folder, recursive=False):
     if recursive:
         import glob
 
-        files = glob.glob(folder + "/**/*.fastq.gz", recursive=True)        
+        files = glob.glob(folder + "/**/*.fastq.gz", recursive=True)
     else:
-        import os
-        
         files = os.listdir(folder)
     files = [f for f in files if f.endswith(".fastq.gz")]
     return files
@@ -132,13 +137,14 @@ def check_sheet(donors, samples, dictionary):
     url
         url of publicly accessible Metadata Google Sheet.
     """
+
     def check_col_is_numerical(df, col_name):
         vals = get_non_null_values(df, col_name)
-        is_valid = True            
-            
+        is_valid = True
+
         for v in vals:
-            if '-' in v:
-                tmp_v = v.split('-')
+            if "-" in v:
+                tmp_v = v.split("-")
                 for x in tmp_v:
                     try:
                         float(x)
@@ -185,7 +191,7 @@ def check_sheet(donors, samples, dictionary):
     bmi_is_valid = check_col_is_numerical(donors, "BMI (kg/m^2)")
     age_is_valid = check_col_is_numerical(donors, "Age (years)")
 
-    is_valid = (is_valid and bmi_is_valid and age_is_valid)
+    is_valid = is_valid and bmi_is_valid and age_is_valid
 
     if not is_valid:
         raise ValueError(
@@ -194,6 +200,7 @@ def check_sheet(donors, samples, dictionary):
         )
 
     return is_valid
+
 
 def check_fastq_filenames(fastq_fns, samples_df):
     """
@@ -207,91 +214,97 @@ def check_fastq_filenames(fastq_fns, samples_df):
         DataFrame containing sample info
 
     """
-    fns = [f.split('/')[-1] for f in fastq_fns]
-    samples.index = samples['Sample_ID']
-    sample_ids = list(samples_df['Sample_ID'])
-    lib_types =  ['GEX', 'CITE', 'TCR', 'BCR']
+    fns = [f.split("/")[-1] for f in fastq_fns]
+    samples.index = samples["Sample_ID"]
+    sample_ids = list(samples_df["Sample_ID"])
+    lib_types = ["GEX", "CITE", "TCR", "BCR"]
     is_valid = True
-    
+
     for f in fns:
-        data = f.split('_')
+        data = f.split("_")
         sample_id = data[0]
         lib_type = data[1]
         lib_id = data[2]
 
         # check sample id
         valid_sample_id = sample_id in sample_ids
-        
+
         # check library type
         valid_lib_type = lib_type in lib_types
-        
+
         # check library id
         valid_lib_id = True
         if valid_sample_id and valid_lib_type:
-            
-            l_ids = samples.loc[sample_id][lib_type+' lib']
-            
+
+            l_ids = samples.loc[sample_id][lib_type + " lib"]
+
             # sample id is not unique so get all library id values
             if isinstance(l_ids, pd.core.series.Series):
                 l_ids = l_ids.values
             elif isinstance(l_ids, str):
                 l_ids = [l_ids]
-            
+
             # some library ids are seperated by commas
-            l_ids = [s.split(',') for s in l_ids]
-            
+            l_ids = [s.split(",") for s in l_ids]
+
             # if they were seperated by commas, collapse the list
             if isinstance(l_ids[0], list):
-                l_ids = [item for sublist in l_ids for item in sublist]                    
+                l_ids = [item for sublist in l_ids for item in sublist]
 
-            l_ids = [s.strip() for s in l_ids] # l_ids here is finally all library ids for a sample
-            
-            valid_lib_id = (lib_id in l_ids)
-            
+            l_ids = [
+                s.strip() for s in l_ids
+            ]  # l_ids here is finally all library ids for a sample
+
+            valid_lib_id = lib_id in l_ids
+
         else:
             valid_lib_id = False
-        
+
         valid_sample = valid_sample_id and valid_lib_type and valid_lib_id
-        
+
         if valid_sample is False:
             is_valid = False
-            msg = 'Error for sample: {}. '.format(sample_id)
+            msg = "Error for sample: {}. ".format(sample_id)
             if valid_sample_id is False:
-                msg += 'Sample id does not exist in Sample Sheet. '
+                msg += "Sample id does not exist in Sample Sheet. "
             if valid_lib_type is False:
-                msg += "Library type of '{}' is invalid. Options: ['GEX', 'CITE', 'TCR', 'BCR'] .".format(lib_type)
+                msg += "Library type of '{}' is invalid. Options: ['GEX', 'CITE', 'TCR', 'BCR'] .".format(
+                    lib_type
+                )
             if valid_sample_id and valid_lib_type and (valid_lib_id is False):
-                msg += 'Library id of {} is not in Sample Sheet.'.format(lib_id)
+                msg += "Library id of {} is not in Sample Sheet.".format(lib_id)
             warnings.warn(msg)
-            
+
     if is_valid:
-        print('fastq filename check successful.')
+        print("fastq filename check successful.")
     else:
-        raise ValueError('Error in fastq filenames. Check above warnings.')
-    
+        raise ValueError("Error in fastq filenames. Check above warnings.")
+
     return is_valid
+
 
 def upload_to_s3(source, destination):
     """
     Upload source filenames to destination in s3.
     """
-    aws_cmd = 'aws s3 sync {} s3://immuneaging/{}'.format(source, destination)
-    print('Running aws command: ', aws_cmd)
+    aws_cmd = "aws s3 sync {} s3://immuneaging/{}".format(source, destination)
+    print("Running aws command: ", aws_cmd)
     os.system(aws_cmd)
+
 
 if __name__ == "__main__":
     args = parse_args()
-    
+
     fastq_fns = get_fastq_gzs_in_folder(args.fastq, recursive=args.not_recursive)
-  
+
     if not args.force:
-        dict_sheet = read_immune_aging_sheet(sheet='Dictionary')
+        dict_sheet = read_immune_aging_sheet(sheet="Dictionary")
         dictionary = make_immuneaging_dictionary(dict_sheet)
-        donors = read_immune_aging_sheet(sheet='Donors')
-        samples = read_immune_aging_sheet(sheet='Samples')
-        
+        donors = read_immune_aging_sheet(sheet="Donors")
+        samples = read_immune_aging_sheet(sheet="Samples")
+
         check_sheet(donors, samples, dictionary)
         check_fastq_filenames(fastq_fns, samples)
 
     set_access_keys(args.aws_keys)
-    upload_to_s3(args.fastq, 'test_folder')
+    upload_to_s3(args.fastq, "test_folder")
