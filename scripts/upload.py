@@ -55,6 +55,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
             )
 
     data = pd.read_csv(output_fn)
+    os.remove(output_fn)
     return data
 
 
