@@ -33,6 +33,11 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
         sheet
     )
 
+    # testing url of bad sample sheet
+    # url = "https://docs.google.com/spreadsheets/d/1YO1HLGLnO3PPUiK1vKZd52yoCInwpLl60zoi4zxkOrE/gviz/tq?tqx=out:csv&sheet={}".format(
+    #     sheet
+    # )
+
     try:
         import gdown
     except ImportError as e:
@@ -103,6 +108,9 @@ def parse_args():
     )
     parser.add_argument("--aws_keys", help="path to aws keys", required=True)
     parser.add_argument(
+        "--destination", help="destination folder to upload data to", required=True
+    )
+    parser.add_argument(
         "--fastq",
         help="path to folder containing fastqs",
         required=True,
@@ -144,6 +152,7 @@ def check_sheet(donors, samples, dictionary):
 
         for v in vals:
             v = str(v)
+            # for numerical ranges
             if "-" in v:
                 tmp_v = v.split("-")
                 for x in tmp_v:
@@ -167,6 +176,13 @@ def check_sheet(donors, samples, dictionary):
         return is_valid
 
     is_valid = True
+
+    dictionary["GEX chem"] = dictionary["Chemistry"]
+    dictionary["CITE chem"] = dictionary["Chemistry"]
+    dictionary["TCR chem"] = dictionary["Chemistry"]
+    dictionary["BCR chem"] = dictionary["Chemistry"]
+    del dictionary["Chemistry"]
+
     for col_name, valid_values in dictionary.items():
         if col_name in donors.keys():
             values = get_non_null_values(donors, col_name)
@@ -192,9 +208,15 @@ def check_sheet(donors, samples, dictionary):
     bmi_is_valid = check_col_is_numerical(donors, "BMI (kg/m^2)")
     age_is_valid = check_col_is_numerical(donors, "Age (years)")
     height_is_valid = check_col_is_numerical(donors, "height (cm)")
-    smoker_is_valid = check_col_is_numerical(donors, 'smoker (pack-years)')
+    smoker_is_valid = check_col_is_numerical(donors, "smoker (pack-years)")
 
-    is_valid = is_valid and bmi_is_valid and age_is_valid and height_is_valid and smoker_is_valid
+    is_valid = (
+        is_valid
+        and bmi_is_valid
+        and age_is_valid
+        and height_is_valid
+        and smoker_is_valid
+    )
 
     if not is_valid:
         raise ValueError(
@@ -214,37 +236,39 @@ def check_fastq_filenames(fastq_fns, samples, donors):
     fastq_fns
         filenames of all fastqs to be uploaded
     """
-    fns = [f.split('/')[-1] for f in fastq_fns]
-    donors.index = donors['Donor ID']
-    donor_ids = list(donors['Donor ID'])
-    
-    samples.index = samples['Donor ID']
-    
-    lib_types =  ['GEX', 'CITE', 'TCR', 'BCR']
+    fns = [f.split("/")[-1] for f in fastq_fns]
+    donors.index = donors["Donor ID"]
+    donor_ids = list(donors["Donor ID"])
+
+    samples.index = samples["Donor ID"]
+
+    lib_types = ["GEX", "CITE", "TCR", "BCR"]
     is_valid = True
-    
+
     for f in fns:
-        data = f.split('_')
+        data = f.split("_")
         donor_id = data[0]
         lib_type = data[1]
         lib_id = data[2]
 
         # check donor id
         valid_donor_id = donor_id in donor_ids
-        
+
         # check library type
         valid_lib_type = lib_type in lib_types
-        
+
         # check library id
         valid_lib_id = True
         if valid_donor_id and valid_lib_type:
-            
-            if samples.loc[donor_id][lib_type+' lib'].isnull().values.any():
-                msg = "{} has no entry in the '{} lib' column in the Samples".format(f, lib_type)
+
+            if samples.loc[donor_id][lib_type + " lib"].isnull().values.any():
+                msg = "{} has no entry in the '{} lib' column in the Samples".format(
+                    f, lib_type
+                )
                 warnings.warn(msg)
                 valid_lib_id = False
             else:
-                l_ids = samples.loc[donor_id][lib_type+' lib']
+                l_ids = samples.loc[donor_id][lib_type + " lib"]
 
                 # sample id is not unique so get all library id values
                 if isinstance(l_ids, pd.core.series.Series):
@@ -253,38 +277,41 @@ def check_fastq_filenames(fastq_fns, samples, donors):
                     l_ids = [l_ids]
 
                 # some library ids are seperated by commas
-                l_ids = [s.split(',') for s in l_ids]
-
+                l_ids = [s.split(",") for s in l_ids]
 
                 # if they were seperated by commas, collapse the list
                 if isinstance(l_ids[0], list):
-                    l_ids = [item for sublist in l_ids for item in sublist]                    
+                    l_ids = [item for sublist in l_ids for item in sublist]
 
-                l_ids = [s.strip() for s in l_ids] # sids here is finally all library ids for a sample
+                l_ids = [
+                    s.strip() for s in l_ids
+                ]  # l_ids here is finally all library ids for a sample
 
-                valid_lib_id = (lib_id in l_ids)
-            
+                valid_lib_id = lib_id in l_ids
+
         else:
             valid_lib_id = False
-        
+
         valid_sample = valid_donor_id and valid_lib_type and valid_lib_id
-        
+
         if valid_sample is False:
             is_valid = False
-            msg = 'Error for file: {}. '.format(f)
+            msg = "Error for file: {}. ".format(f)
             if valid_donor_id is False:
-                msg += 'Donor id does not exist in Sample Sheet. '
+                msg += "Donor id does not exist in Sample Sheet. "
             if valid_lib_type is False:
-                msg += "Library type of '{}' is invalid. Options: ['GEX', 'CITE', 'TCR', 'BCR'] .".format(lib_type)
+                msg += "Library type of '{}' is invalid. Options: ['GEX', 'CITE', 'TCR', 'BCR'] .".format(
+                    lib_type
+                )
             if valid_donor_id and valid_lib_type and (valid_lib_id is False):
-                msg += 'Library id of {} is not in Sample Sheet.'.format(lib_id)
+                msg += "Library id of {} is not in Sample Sheet.".format(lib_id)
             warnings.warn(msg)
-            
+
     if is_valid:
-        print('fastq filename check successful.')
+        print("fastq filename check successful.")
     else:
-        raise ValueError('Error in fastq filenames. Check above warnings.')
-    
+        raise ValueError("Error in fastq filenames. Check above warnings.")
+
     return is_valid
 
 
@@ -300,10 +327,11 @@ def upload_to_s3(source, destination):
 if __name__ == "__main__":
     args = parse_args()
 
-    fastq_fns = get_fastq_gzs_in_folder(args.fastq, recursive=args.not_recursive)
-    
+    fastq_fns = get_fastq_gzs_in_folder(args.fastq, recursive=args.recursive)
+
     # comment out if we want to give the force option
     args.force = False
+
     if not args.force:
         dict_sheet = read_immune_aging_sheet(sheet="Dictionary")
         dictionary = make_immuneaging_dictionary(dict_sheet)
@@ -313,5 +341,5 @@ if __name__ == "__main__":
 
         check_fastq_filenames(fastq_fns, samples, donors)
 
-    #set_access_keys(args.aws_keys)
-    upload_to_s3(args.fastq, "test_folder")
+    # set_access_keys(args.aws_keys)
+    upload_to_s3(args.fastq, args.destination)
