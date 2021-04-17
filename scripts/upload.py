@@ -112,7 +112,7 @@ def parse_args():
     )
     parser.add_argument(
         "--fastq",
-        help="path to folder containing fastqs",
+        help="path to folder containing fastq.gz files",
         required=True,
     )
     parser.add_argument(
@@ -221,7 +221,8 @@ def check_sheet(donors, samples, dictionary):
     if not is_valid:
         raise ValueError(
             "Invalid values in metadata sheet. Check above warnings. "
-            "Please fix and rerun command or use -f to force upload."
+            #"Please fix and rerun command or use -f to force upload."
+            "Please fix and rerun command."
         )
 
     return is_valid
@@ -229,27 +230,40 @@ def check_sheet(donors, samples, dictionary):
 
 def check_fastq_filenames(fastq_fns, samples, donors):
     """
-    Check that the fastq filenames conforms to data schema standards
+    Check that the fastq filenames conforms to data schema standards:
+    <donor id>_<library_type>_<library ID>_<10x reaction>_<seq run>_<lane>_<read>.fastq.gz
 
     Parameters
     ----------
     fastq_fns
         filenames of all fastqs to be uploaded
     """
+    fn_format = "<donor_id>_<library_type>_<library_ID>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz"
+    
     fns = [f.split("/")[-1] for f in fastq_fns]
     donors.index = donors["Donor ID"]
     donor_ids = list(donors["Donor ID"])
 
     samples.index = samples["Donor ID"]
 
-    lib_types = ["GEX", "CITE", "TCR", "BCR"]
+    # ADT is a CITE-seq library, often referred to as ADT or antibody-derived tag.
+    lib_types = ["GEX", "ADT", "TCR", "BCR"]
     is_valid = True
 
     for f in fns:
-        data = f.split("_")
-        donor_id = data[0]
-        lib_type = data[1]
-        lib_id = data[2]
+        try:
+            data = f.split(".")
+            assert ".".join(data[-2:]) == "fastq.gz"
+            data = data[0].split("_")
+            donor_id = data[0]
+            lib_type = data[1]
+            lib_id = data[2]
+            tenx_reaction = data[3]
+            seq_run = data[4]
+            lane = data[5]
+            read_num = data[6]
+        except ImportError as e:
+            raise ValueError("Bad file name. Please adhere to the format " + fn_format)
 
         # check donor id
         valid_donor_id = donor_id in donor_ids
@@ -285,14 +299,42 @@ def check_fastq_filenames(fastq_fns, samples, donors):
 
                 l_ids = [
                     s.strip() for s in l_ids
-                ]  # l_ids here is finally all library ids for a sample
+                ]  # l_ids here is finally all library ids for the samples of a donor
 
                 valid_lib_id = lib_id in l_ids
 
         else:
             valid_lib_id = False
 
-        valid_sample = valid_donor_id and valid_lib_type and valid_lib_id
+
+        valid_tenx_reaction = False
+        valid_seq_run = False
+        valid_lane = False
+        valid_read_num = False
+        
+        try:
+            int(valid_tenx_reaction)
+            valid_tenx_reaction = True
+        except: pass
+
+        try:
+            int(seq_run)
+            valid_seq_run = True
+        except: pass
+            
+        try:
+            assert lane[0] == "L"
+            int(lane[1:])
+            valid_lane = True
+        except: pass
+            
+        try:
+            assert read_num[0] == "R"
+            int(read_num[1:])
+            valid_read_num = True
+        except: pass
+
+        valid_sample = valid_donor_id and valid_lib_type and valid_lib_id and valid_tenx_reaction and valid_seq_run and valid_lane and valid_read_num
 
         if valid_sample is False:
             is_valid = False
@@ -300,11 +342,22 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             if valid_donor_id is False:
                 msg += "Donor id does not exist in Sample Sheet. "
             if valid_lib_type is False:
-                msg += "Library type of '{}' is invalid. Options: ['GEX', 'CITE', 'TCR', 'BCR'] .".format(
+                msg += "Library type of '{}' is invalid. Options: ['GEX', 'ADT', 'TCR', 'BCR'] .".format(
                     lib_type
                 )
             if valid_donor_id and valid_lib_type and (valid_lib_id is False):
-                msg += "Library id of {} is not in Sample Sheet.".format(lib_id)
+                msg += "Library id of {} is not in Sample Sheet.".format(
+                    lib_id)
+            if valid_tenx_reaction is False:
+                msg += "10x_reaction number in the file name should be a number (e.g., 0001); instead found {}. ".format(tenx_reaction)
+            if valid_seq_run is False:
+                msg += "seq_run number in the file name should be a number (e.g., 001); instead found {}. ".format(seq_run)
+            if valid_lane is False:
+                msg += "lane in the file name should be in a valid format (e.g., L001); instead found {}. ".format(lane)
+            if valid_read_num is False:
+                msg += "read in the file name should be in a valid format (e.g., R1); instead found {}. ".format(read_num)
+            if (valid_tenx_reaction and valid_seq_run and valid_lane and valid_read_num) is False:
+                msg += "Please adhere to the format {}. ".format(fn_format)
             warnings.warn(msg)
 
     if is_valid:
@@ -319,13 +372,26 @@ def upload_to_s3(source, destination):
     """
     Upload source filenames to destination in s3.
     """
+    if destination == "sanger" or destination == "columbia":
+        destination = "raw_" + destination
+    else:
+        destination = "test_folder"
     aws_cmd = "aws s3 sync {} s3://immuneaging/{}".format(source, destination)
     print("Running aws command: ", aws_cmd)
     os.system(aws_cmd)
 
 
+def validate_args(args):
+    destinations = ["test", "sanger", "columbia"]
+    print(args)
+    if args.destination not in destinations:
+        raise ValueError(
+            "--destination must be one of the followings: {0}".format(", ".join(destinations)))
+
+
 if __name__ == "__main__":
     args = parse_args()
+    validate_args(args)
 
     fastq_fns = get_fastq_gzs_in_folder(args.fastq, recursive=args.recursive)
 
@@ -341,5 +407,5 @@ if __name__ == "__main__":
 
         check_fastq_filenames(fastq_fns, samples, donors)
 
-    # set_access_keys(args.aws_keys)
+    set_access_keys(args.aws_keys)
     upload_to_s3(args.fastq, args.destination)
