@@ -5,19 +5,20 @@
 This repository serves as the data hub of the Immune Aging project.
 Here you can find all the resources and information needed for accessing and visualizing the currently available processed data of the project, as well as a complete documentation of the data collection process, including data upload and data processing.
 
-This page did not answer your question? Please <a href="...">open an issue</a> and label it as a 'question'.
+This page did not answer your question? Please <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/issues">open an issue</a> and label it as a 'question'.
 
 ## Table of contents
-1. [Setting up data access](#access)
-    1. [Prerequisites](#access_prerequisites)
-    2. [List of donors and samples](#access_spreadsheet)
-    3. [Downloading data from the S3 website](#access_s3)
-    4. [Directory structure on S3](#access_s3_structure)
-2. [Data upload](#upload)
-    1. [Data naming conventions](#upload_naming)
-    2. [Including metadata](#upload_metadata)
+1. [Preliminaries](#preliminaries)
+    1. [Setting up data access](#preliminaries_access)
+    2. [List of donors and samples](#preliminaries_spreadsheet)
+2. [Data Download](#download)
+    1. [Directory structure on S3](#download_structure)
+    2. [Downloading data via the AWS console](#download_console)
+    3. [Downloading data via terminal](#download_terminal)
+3. [Data upload](#upload)
+    1. [Prerequisites](#prerequisites)
+    2. [File naming conventions](#upload_naming)
     3. [Upload to S3](#upload_upload)
-3. [Data Download](#download)
 4. [Data visualization](#visualization)
     1. [Live VISION Session](#visualization_live)
     2. [Local VISION Session](#visualization_local)
@@ -31,63 +32,63 @@ This page did not answer your question? Please <a href="...">open an issue</a> a
 
 ---
 
-## <a name="access"></a> Setting up data access
+## <a name="preliminaries"></a> Preliminaries
 
-### <a name="access_prerequisites"></a> Prerequisites
+### <a name="preliminaries_access"></a> Setting up data access
 
-The project data is stored on an Amazon Web Services (AWS) Simple Storage Service (S3; "S3 bucket"). Whether you will be uploading or just downloading data from the S3 bucket, you will need to set up your access via the following steps:
+The project's data is stored on an Amazon Web Services (AWS) Simple Storage Service (S3; "S3 bucket"). Whether you will be uploading data to the Immune Aging S3 bucket or just using it for downloading data, you will need to set up your access as follows:
 
 1. Get an IAM user and credentials file:
-You will be given an Identity and Access Management (IAM) user account and a user-specific credentials file (DO NOT SHARE THIS FILE) to access the S3. An IAM user is associated with a specific user in the Immune Aging S3 bucket, and the credentials file allows using the data uploading scripts and downloading data via terminal (to be described later).
+You will need an Identity and Access Management (IAM) user account, which will be associated with a specific user in the Immune Aging S3 bucket. Your user account will allow you to access the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>.
+<br /><br />
+If you will be uploading data to the bucket or will be using terminal commands for downloading data (i.e. rather using the AWS console for downloading; terminal download, which will be described later, allows to download large amount of files more conveniently), you will also need a user-specific credentials file that will allow you to access the S3 bucket via terminal.
 <br /><br />
 The Yosef group will manage the generation of both IAM users and credentials file for collaborators on the Immune Aging project. 
-In order to set up an IAM user and receive credentials file please email Galen (gx2113@columbia.edu) and cc your Immune Aging PI, who will need to approve your request.
+In order to set up an IAM user and receive credentials file please email Elior (erahmani@berkeley.edu) and Galen (gx2113@columbia.edu) and cc your Immune Aging PI, who will need to approve your request. Note that IAM accounts and credentials files will be issued with read access only for all users, except for designated data uploaders who will also get write access. In any case, **DO NOT SHARE THE CREDENTIALS FILE WITH ANYONE**.
 
-1. Install AWS CLI (Optional but highly recommended):
-Uploading and downloading data is best done via the AWS Command Line Interface (CLI) from <a href="https://aws.amazon.com/cli/">here</a>. This will also let you use our helper scripts for reading and writing data.
+1. Install AWS CLI (Optional for downloading data):
 
+* Uploading data is done via the AWS Command Line Interface (CLI), which can be downloaded from <a href="https://aws.amazon.com/cli/">here</a>. While you will not need to explicitly use the AWS CLI for data upload, the upload script (to be described later) requires it as a dependency.
+* Downloading multiple data files becomes more streamlined by using the AWS CLI rather than the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>, which is a web-based graphical user interface. For more details see [Data Download](#download).
+
+<!--
 **Granting temporary/one-off access:**
 To share data with temporary members (like research assistants temporarily helping out) or for one-off access, email Galen (gx2113@columbia.edu) with the S3 folder you want to share (or upload data to) and he will generate a script that will automatically upload/download data when run. This is super easy for him to do (says Galen writing this), so don't hesitate to reach out. DO NOT SHARE YOUR USER SPECIFIC CREDENTIALS!
+-->
 
-<!---
-### <a name="read_write"></a> Reading and Writing to the S3
-To read data from the S3 bucket, use the `read_data.sh` script located in scripts [TODO]. See more in the [Data Download](#download) section.
-To upload data to the S3 bucket, use the `upload_data.sh` script locatied in scripts [TODO]. See more in the [Data Upload](#upload) section.
---->
+### <a name="preliminaries_spreadsheet"></a> List of donors and samples
 
-### <a name="access_spreadsheet"></a> List of donors and samples
+The project's donors and samples, as well as the raw metadata, can be found in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2" target="_blank">AI samples Google Spreadsheet</a>.
+**DO NOT SHARE THIS LINK WITH ANYONE OUTSIDE THE IMMUNE AGING PROJECT**.
 
-The list and raw metadata of the project's donors and samples can be found in <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2" target="_blank">this Google spreadsheet</a>.
-In order to get access to this spreadsheet, please contact...[todo].
+Note that:
 
-For data uploaders, this file serves as the samples organizer and should include a description of all the data that are being generated. 
-Further instructions about naming conventions to be used in this spreadsheet for new samples are provided under the Data upload section.
+* This spreadsheet does not reflect at any given moment the existing data on the S3 bucket or which samples have already been processed. Specifically, it may include information about donors and samples that either were not sequenced yet, are being currently sequenced, being uploaded, or pending data processing.
+* The metadata of the donors and samples in the spreadsheet is also available in the processed data files (see below).
 
-Note that this spreadsheet does not reflect at any given moment the existing data on S3 or which samples have already been processed. Specifically, it may include information about donors and samples that either were not sequenced yet, are being currently sequenced, being uploaded, or pending data processing.
 
-### <a name="access_s3"></a> Downloading data from the S3 website
+## <a name="download"></a> Data Download
 
-Data that were already uploaded to the S3 bucket can be downloaded by logging in to AWS through <a href="https://911998420209.signin.aws.amazon.com/console.">this link</a> and navigating through the project's directory structure (see below for details).
+### <a name="download_structure"></a> Directory structure on S3
 
-In addition, we provide a simple script for automatically downloading processed data - either specific samples or harmonized datasets with multiple samples. See Section (<a name="data_download">Data download</a>.
+Whether you will be downloading data from the S3 bucket [directly from the AWS consol](#download_console) or [via terminal](#download_terminal), you will need to know the bucket's directory structure.
 
-### <a name="access_s3_structure"></a> Directory structure on S3
-
-Whether you will be logging in to the 3S bucket for downloading data or using the download script (<a name="data_download">Data download</a> section), it will be helpful to understand the directory structure, which shows how we maintain difference versions of the data (e.g., data that went through different processing pipelines).
-
-The data on S3 is structured as follows:
+The root directory if the Immune Aging S3 bucket includes the following sub-directories:
 
 * raw_columbia/
 * raw_sanger/
 * processed/
-* harmonized/
+* integrated/
 * vision/
 
-The first two directories are designated for raw data uploads (.fastq files).
+The first two directories are designated for raw data uploads (fastq.gz files).
 The third and fourth directories, which are discussed in detail below, are processed versions of the raw data. The `vision` directory will be discussed later under Data Visualization.
 
 The `processed` directory includes a `h5ad` file for each sample. This file can be used for downstream analysis in single-cell analysis tools such as scvi-tools [ref] and Seurat[ref]. 
 Throughout the life cycle of the Immune Aging project we expect to improve our data processing pipelines. We therefore version the processed data by structuring the directories accordingly and by including a `.log` file with each processed sample that describes in details the processing pipeline used, such as the aligner used, software versions etc. The log file is important to guarantee reproducibility at the long-term, as we expect our pipeline to update from time to time, as new best practices in the field emerge.
+
+TODO: add the `configs` dirs in processed and harmonized...
+TODO: describe the cell ranger outputs and other outputs that are specific for each sample..
 
 The structure of the `processed` directory is designed as follows:
 
@@ -127,38 +128,46 @@ The structure of the `harmonized` directory is designed as follows:
         * ...
     * ...
 
-For example, given two files `data_name.harmonized.v1.Feb21.h5ad, data_name.harmonized.v1.April21.h5ad`, we can tell by the file names that both used version `v1` of the harmonization pipeline, however, given the two different time stamps, we know that each file includes a different subset of samples.
+For example, given two files `data_name.harmonized.v1.03-01-2021.h5ad, data_name.harmonized.v1.03-15-2021.h5ad`, we can tell by the file names that both used version `v1` of the harmonization pipeline, however, given the two different time stamps, we know that each file includes a different subset of samples.
 The exact information will appear in the matching log files of the data files, however, we also maintain a lookup table that maps each version and time stamp to a concise summary of the processing pipeline used and the samples that are included in the data file. You can find this table <a href="...">here</a>[todo].
+
+
+### <a name="download_console"></a> Downloading data via the AWS console
+
+Data that were already uploaded to the S3 bucket can be downloaded by logging in to AWS through <a href="https://911998420209.signin.aws.amazon.com/console.">this link</a> and navigating through the project's directory structure.
+
+
+### <a name="download_terminal"></a> Downloading data via terminal
+
+To read from the S3 bucket:
+1. Run your user-specific credentials file to set aws keys
+2. Sync your folders via `aws s3 sync <source> <target> [--options]` (where source is the aws folder). You can also use `aws s3 ls <target> [--options]` to list contents of a directory. Checkout more commands <a href= "https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html">here</a>.
+
 
 
 ## <a name="upload"></a> Data upload
 
-### <a name="upload_naming"></a> Data naming conventions
+### <a name="upload_naming"></a> File naming conventions
 
-New samples can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file should follow a specific naming convention, which includes donor ID, organ, and cell type (unsorted mononuclear cells [MNCs], T cells, B cells, or myeloid cells).
-The upload process (described later) will now allow uploading files that do not follow the required naming convention.
-
-Each file name must be structured as follows
+New samples can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file must follow the following naming convention:
 ```
-<donor_id>_<organ>_<cell_type>.<sequencer_output>.fastq
+<donor_id>_<library_type>_<library_id>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz
 ```
+<!--
 where
-* `donor_id` - the donor ID, which should be consistent with the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; do not include a dot
+* `donor_id` - the donor ID, should be consistent with the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; do not include a dot
 * `organ` - the organ, which should be consistent with the Dictionary tab in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; for example, using `SPL` for spleen and `LIV` for liver.
 * `cell_type` the cell type, which should be consistent with the Dictionary tab in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; for example, using `T` for T cells and `B` for B cells.
 * `sequencer_output` - the standard output given by the raw data from the sequencer; for example, the output for a specific lane.
+-->
+The entries `<donor_id>` and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the following four possible values: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor).
 
-A few examples for valid file names:
+A few examples for valid file names include:
 ```
-CUIMC-457_LNG_T.S1_L001_R1_001.fastq.gz
-CUIMC-457_LNG_T.S1_L002_R1_001.fastq.gz
-D456_COL_MNC.S1_L001_R1_001.fastq.gz
-D456_COL_MNC.S1_L001_R2_001.fastq.gz
+591C_ADT_CZI-IA10034945_0001_01_L001_R1.fastq.gz
+583B_TCR_CZI-IA9924344_0001_01_L001_R1.fastq.gz
+583B_GEX_CZI-IA9924327_0001_01_L001_R1.fastq.gz
 ```
-
-### <a name="upload_metadata"></a> Including metadata
-
-TODO... 
 
 <!--- 
 Tcells-rest vs Tcells-stim, cell isolation (FAC-sorting, magnetic beads, etc)  information can go in obs field of h5ad
@@ -167,45 +176,38 @@ Use established naming convention for donors and tissues
 
 ### <a name="upload_upload"></a> Upload to S3
 
-The very first step in uploading data is to update the <a href=https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2>samples spreadsheet</a> and name the new `fastq.gz` files following the naming conventions provided in the previous subsection.
+Once the Google spreadsheet is updated and the fastq files are ready to be uploaded, you can move forward to the actual data upload, which can be done using a designated script.
 
-Once the samples spreadsheet is updated and the files are ready, you can move on to the actual data upload.
-We provide the script `data_upload.sh`, which uploads data files of a single sample by running the following command in terminal:
+First, download the <a href="https://raw.githubusercontent.com/YosefLab/Immune-Aging-Data-Hub/main/scripts/upload.py?token=ABMIR5NCITOWBYXLVHEE6CLAQSSHC"> upload.py</a> script (open the link, right click on the screen, and save as "upload.py"). Second, make sure you have a working installation of python with the `pandas` library installed. If you do not have python with `pandas` already installed, you can simply download and install <a href="https://www.anaconda.com/products/individual">Anaconda</a>, a distribution of python that includes many popular libraries for data science, including `pandas`.
+
+Simple usage of the upload.py script - type in terminal:
 ```
-data_upload.sh <sample_prefix> <institute> <credentials_file>
+python upload.py --aws_keys <aws_keys> --destination <destination> --fastq <fastq>
 ```
 
-Description of arguments:
+Arguments:
 
-* `<sample_prefix>` - the sample prefix, which is essentially the prefix `<donor_id>_<organ>_<cell_type>` that is described in the previous subsection. In case the data files of the samples are not in the current working directory you should include a path to data files.
-* `<institute>` - can either be set to `columbia` or `sanger`.
-* `<credentials_file>` - path to the user-specific credentials file (see Prerequisites subsection under Data Access).
+* `<aws_keys>` - path to the user-specific credentials file (see details under [Setting up data access](#preliminaries_access)).
+* `<destination>` - can either be set to `columbia` or `sanger`; `test` is also allowed - for testing purposes (will upload data to a directory named `test_folder` on the S3 bucket).
+* `<fastq>` - path to folder containing fastq.gz files to be uploaded (**note:** all `fastq.gz` files in the provided folder will be uploaded).
 
-For example, for uploading the files
+For example:
 ```
-CUIMC-457_LNG_T.S1_L001_R1_001.fastq.gz
-CUIMC-457_LNG_T.S1_L002_R1_001.fastq.gz
+python upload.py --aws_keys my_credentials.sh --destination sanger --fastq 390C_files/
 ```
-on behalf of the Columbia group we run:
-```
-data_upload.sh /path/to/CUIMC-457_LNG_T columbia /path/to/iam_credentials.sh
-```
-where `/path/to/CUIMC-457_LNG_T` is the path fo the data files and the prefix of the sample that we want to upload and `/path/to/ai_credentials.sh` is the path to the credentials file of the user.
 
-Finally, after uploading new data, please notify Elior Rahmani by email (erahmani@berkeley.edu). The Yosef team will then run the new sample through the processing pipeline.
+At any time, you can see a description of the arguments accepted by the upload script by running:
+```
+python scripts/upload.py -h
+```
+
+The script runs several validations before performing the actual upload, including checking the metadata in the Google spreadsheet for consistency and verifying that all file names properly follow the naming convention. The script will issue detailed warnings and errors in case any of those validations fails (in which case no files will be uploaded).
+
+Finally, after uploading new data, please notify Elior (erahmani@berkeley.edu). The Yosef team will then run the new data through the processing pipeline.
 
 Notes:
-
-* `data_upload.sh` will not allow uploading data files that do not properly follow the naming convention; in such a case an error will be issued.
-* Uploading more than one sample can be done by running the script multiple times, once per each sample.
-
-## <a name="download"></a> Data Download
-
-To read from the S3 bucket:
-1. Run your user-specific credentials file to set aws keys
-2. Sync your folders via `aws s3 sync <source> <target> [--options]` (where source is the aws folder). You can also use `aws s3 ls <target> [--options]` to list contents of a directory. Checkout more commands <a href= "https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html">here</a>.
-
-It is also possible to use the online AWS S3 interface but it is recommended to use the CLI. 
+* The way the upload.py script works is by syncing the data in the user-specified folder (provided via the `--fastq` argument) with the S3 bucket, rather than performing a naive upload. In case of a lost connection while the script is running, this mechanism allows the script to automatically resume the upload without re-uploading files that are already in the bucket.
+* Deleting files that have already been uploaded can only be done by an admin. If you believe that some raw files were uploaded by mistake and should be deleted please email Elior (erahmani@berkeley.edu) and Galen (gx2113@columbia.edu).
 
 
 ## <a name="visualization"></a> Data visualization
@@ -260,6 +262,12 @@ For example,..
 conda env create -f iadh.v1.march_2021.yml
 ```
 This will create a new environment under `$CONDA_PREFIX"/envs/iadh.v1.march_2021"`
+
+install cell ranger..
+
+download reference genome, link to 10x
+
+adding keys to the config files - (1) if adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files... (2) otherwise it will automatically generate a new version etc.. but need to make sure the script is backwards compatible...
 
 ### <a name="processing_sample"></a> Processing a single sample
 
