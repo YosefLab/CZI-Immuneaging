@@ -239,7 +239,7 @@ def check_fastq_filenames(fastq_fns, samples, donors):
     fastq_fns
         filenames of all fastqs to be uploaded
     """
-    fn_format = "<donor_id>_<library_type>_<library_ID>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz"
+    fn_format = "<donor_id>_<library_type>_<library_id>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz"
     
     fns = [f.split("/")[-1] for f in fastq_fns]
     donors.index = donors["Donor ID"]
