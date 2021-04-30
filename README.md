@@ -178,7 +178,7 @@ Use established naming convention for donors and tissues
 
 Once the Google spreadsheet is updated and the fastq files are ready to be uploaded, you can move forward to the actual data upload, which can be done using a designated script.
 
-First, download the <a href="https://raw.githubusercontent.com/YosefLab/Immune-Aging-Data-Hub/main/scripts/upload.py?token=ABMIR5NCITOWBYXLVHEE6CLAQSSHC"> upload.py</a> script (open the link, right click on the screen, and save as "upload.py"). Second, make sure you have a working installation of python with the `pandas` library installed. If you do not have python with `pandas` already installed, you can simply download and install <a href="https://www.anaconda.com/products/individual">Anaconda</a>, a distribution of python that includes many popular libraries for data science, including `pandas`.
+First, download the <a href="https://raw.githubusercontent.com/YosefLab/Immune-Aging-Data-Hub/main/scripts/upload.py?token=ABMIR5MFHUTH6CWXMNS4YGDASVMJW"> upload.py</a> script (open the link, right click on the screen, and save as "upload.py"). Second, make sure you have a working installation of python with the `pandas` library installed. If you do not have python with `pandas` already installed, you can simply download and install <a href="https://www.anaconda.com/products/individual">Anaconda</a>, a distribution of python that includes many popular libraries for data science, including `pandas`.
 
 Simple usage of the upload.py script - type in terminal:
 ```
