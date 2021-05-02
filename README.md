@@ -44,7 +44,7 @@ You will need an Identity and Access Management (IAM) user account, which will b
 If you will be uploading data to the bucket or will be using terminal commands for downloading data (i.e. rather using the AWS console for downloading; terminal download, which will be described later, allows to download large amount of files more conveniently), you will also need a user-specific credentials file that will allow you to access the S3 bucket via terminal.
 <br /><br />
 The Yosef group will manage the generation of both IAM users and credentials file for collaborators on the Immune Aging project. 
-In order to set up an IAM user and receive credentials file please email Elior (erahmani@berkeley.edu) and Galen (gx2113@columbia.edu) and cc your Immune Aging PI, who will need to approve your request. Note that IAM accounts and credentials files will be issued with read access only for all users, except for designated data uploaders who will also get write access. In any case, **DO NOT SHARE THE CREDENTIALS FILE WITH ANYONE**.
+In order to set up an IAM user and receive credentials file please email Elior (erahmani@berkeley.edu) and Galen (gx2113@columbia.edu) and cc your PI for approval of your request (the project's PIs are Menna Clatworthy, Donna Farber, Muzz Haniffa, Joanne Jones, Peter Sims, Sarah Teichmann, Roser Vento, and Nir Yosef). Note that IAM accounts and credentials files will be issued with read access only for all users, except for designated data uploaders who will also get write access. In any case, **DO NOT SHARE THE CREDENTIALS FILE WITH ANYONE**.
 
 1. Install AWS CLI (Optional for downloading data):
 

@@ -182,6 +182,7 @@ def check_sheet(donors, samples, dictionary):
     dictionary["CITE chem"] = dictionary["Chemistry"]
     dictionary["TCR chem"] = dictionary["Chemistry"]
     dictionary["BCR chem"] = dictionary["Chemistry"]
+    dictionary["HTO chem"] = dictionary["Chemistry"]
     del dictionary["Chemistry"]
 
     for col_name, valid_values in dictionary.items():
@@ -248,7 +249,8 @@ def check_fastq_filenames(fastq_fns, samples, donors):
     samples.index = samples["Donor ID"]
 
     # ADT is a CITE-seq library, often referred to as ADT or antibody-derived tag.
-    lib_types = ["GEX", "ADT", "TCR", "BCR"]
+    # HTO is hashtag (in case the library was prepared and sequenced separately)
+    lib_types = ["GEX", "ADT", "TCR", "BCR", "HTO"]
     is_valid = True
 
     for f in fns:
@@ -343,7 +345,7 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             if valid_donor_id is False:
                 msg += "Donor id does not exist in Sample Sheet. "
             if valid_lib_type is False:
-                msg += "Library type of '{}' is invalid. Options: ['GEX', 'ADT', 'TCR', 'BCR'] .".format(
+                msg += "Library type of '{}' is invalid. Options: ['GEX', 'ADT', 'TCR', 'BCR',' HTO'] .".format(
                     lib_type
                 )
             if valid_donor_id and valid_lib_type and (valid_lib_id is False):
