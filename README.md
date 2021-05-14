@@ -151,7 +151,7 @@ To read from the S3 bucket:
 
 New samples can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file must follow the following naming convention:
 ```
-<donor_id>_<library_type>_<library_id>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz
+<donor_id>_<seq_run>_<library_type>_<library_id>_<S_number>_<lane>_<read>_001.fastq.gz
 ```
 <!--
 where
@@ -160,13 +160,14 @@ where
 * `cell_type` the cell type, which should be consistent with the Dictionary tab in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; for example, using `T` for T cells and `B` for B cells.
 * `sequencer_output` - the standard output given by the raw data from the sequencer; for example, the output for a specific lane.
 -->
-The entries `<donor_id>` and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the following five possible values: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor), HTO (hashtag; in case a hashtag library was processed separately).
+Note that the suffix `<library_id>_<S_number>_<lane>_<read>_001` is the expected file name format of the raw sequencing output.
+The entries `<donor_id>`, `<library_type>`, and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the following five possible values: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor), HTO (hashtag; in case a hashtag library was processed separately). The field `<seq_run>` is a lab-specific counter that allows to distinguish between sequencing runs; particularly, it can be used in order to distinguish between different sequencing runs of the same libraries if needed.
 
 A few examples for valid file names include:
 ```
-591C_ADT_CZI-IA10034945_0001_01_L001_R1.fastq.gz
-583B_TCR_CZI-IA9924344_0001_01_L001_R1.fastq.gz
-583B_GEX_CZI-IA9924327_0001_01_L001_R1.fastq.gz
+582C_001_HTO_CZI-IA9924321_S1_L001_R1_001.fastq.gz
+582C_002_ADT_CZI-IA9924369_S1_L001_R1_001.fastq.gz
+591C_010_GEX_CZI-IA10034921_S2_L002_R2_001.fastq.gz
 ```
 
 <!--- 
