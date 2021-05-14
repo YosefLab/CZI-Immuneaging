@@ -3,6 +3,16 @@ import argparse
 import warnings
 import os
 
+"""
+This script can be tested as follows:
+cd test_data
+./make_test_fastqs.sh
+cd ../
+# testing bad file names (the script should issue a warning "xyz bad file names out of xyz files")
+python upload.py --aws_keys read_immuneaging_s3.sh --destination test --fastq test_data/bad
+# testing good file names (files should be uploaded to AWS):
+python upload.py --aws_keys read_immuneaging_s3.sh --destination test --fastq test_data/good
+"""
 
 def set_access_keys(filepath):
     """
@@ -233,14 +243,14 @@ def check_sheet(donors, samples, dictionary):
 def check_fastq_filenames(fastq_fns, samples, donors):
     """
     Check that the fastq filenames conforms to data schema standards:
-    <donor id>_<library_type>_<library ID>_<10x reaction>_<seq run>_<lane>_<read>.fastq.gz
+    <donor_id>_<seq_run>_<library_type>_<library_id>_<S_number>_<lane>_<read>_001.fastq.gz
 
     Parameters
     ----------
     fastq_fns
         filenames of all fastqs to be uploaded
     """
-    fn_format = "<donor_id>_<library_type>_<library_id>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz"
+    fn_format = "<donor_id>_<seq_run>_<library_type>_<library_id>_<S_number>_<lane>_<read>_001.fastq.gz"
     
     fns = [f.split("/")[-1] for f in fastq_fns]
     donors.index = donors["Donor ID"]
@@ -252,6 +262,7 @@ def check_fastq_filenames(fastq_fns, samples, donors):
     # HTO is hashtag (in case the library was prepared and sequenced separately)
     lib_types = ["GEX", "ADT", "TCR", "BCR", "HTO"]
     is_valid = True
+    num_invalid_files = 0
 
     for f in fns:
         try:
@@ -259,15 +270,21 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             assert ".".join(data[-2:]) == "fastq.gz"
             data = data[0].split("_")
             donor_id = data[0]
-            lib_type = data[1]
-            lib_id = data[2]
-            tenx_reaction = data[3]
-            seq_run = data[4]
+            seq_run = data[1]
+            lib_type = data[2]
+            lib_id = data[3]
+            s_number = data[4] #
             lane = data[5]
             read_num = data[6]
+            name_suffix = data[7]
+            #tenx_reaction = data[3]
+            
         except ImportError as e:
             raise ValueError("Bad file name. Please adhere to the format " + fn_format)
 
+        if (name_suffix != "001"):
+            raise ValueError("Bad file name. Please adhere to the format " + fn_format)
+        
         # check donor id
         valid_donor_id = donor_id in donor_ids
 
@@ -308,22 +325,22 @@ def check_fastq_filenames(fastq_fns, samples, donors):
 
         else:
             valid_lib_id = False
-
-
-        valid_tenx_reaction = False
+        
         valid_seq_run = False
+        valid_s_number = False
         valid_lane = False
         valid_read_num = False
-        
-        try:
-            int(valid_tenx_reaction)
-            valid_tenx_reaction = True
-        except: pass
 
         try:
             int(seq_run)
             valid_seq_run = True
         except: pass
+
+        if s_number[0] == "S" and len(s_number) == 2:
+            try:
+                int(s_number[1])
+                valid_s_number = True
+            except: pass
             
         try:
             assert lane[0] == "L"
@@ -337,9 +354,10 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             valid_read_num = True
         except: pass
 
-        valid_sample = valid_donor_id and valid_lib_type and valid_lib_id and valid_tenx_reaction and valid_seq_run and valid_lane and valid_read_num
+        valid_sample = valid_donor_id and valid_lib_type and valid_lib_id and valid_s_number and valid_seq_run and valid_lane and valid_read_num
 
         if valid_sample is False:
+            num_invalid_files += 1
             is_valid = False
             msg = "Error for file: {}. ".format(f)
             if valid_donor_id is False:
@@ -351,22 +369,23 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             if valid_donor_id and valid_lib_type and (valid_lib_id is False):
                 msg += "Library id of {} is not in Sample Sheet.".format(
                     lib_id)
-            if valid_tenx_reaction is False:
-                msg += "10x_reaction number in the file name should be a number (e.g., 0001); instead found {}. ".format(tenx_reaction)
+            if valid_s_number is False:
+                msg += "S_number in the file name should be the character S followed by a number (e.g., S1 or S2); instead found {}. ".format(valid_s_number)
             if valid_seq_run is False:
                 msg += "seq_run number in the file name should be a number (e.g., 001); instead found {}. ".format(seq_run)
             if valid_lane is False:
                 msg += "lane in the file name should be in a valid format (e.g., L001); instead found {}. ".format(lane)
             if valid_read_num is False:
                 msg += "read in the file name should be in a valid format (e.g., R1); instead found {}. ".format(read_num)
-            if (valid_tenx_reaction and valid_seq_run and valid_lane and valid_read_num) is False:
+            if (valid_s_number and valid_seq_run and valid_lane and valid_read_num) is False:
                 msg += "Please adhere to the format {}. ".format(fn_format)
             warnings.warn(msg)
 
     if is_valid:
         print("fastq filename check successful.")
     else:
-        raise ValueError("Error in fastq filenames. Check above warnings.")
+        err_msg = "{0} bad file names out of {1} files".format(num_invalid_files,len(fastq_fns))
+        raise ValueError("Error in fastq filenames. Check above warnings.\n" + err_msg)
 
     return is_valid
 
