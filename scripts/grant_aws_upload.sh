@@ -1,5 +1,10 @@
 #!/bin/bash -e
 
+## This script is a wrapper around AWS CLI for uploading data to the S3 bucket.
+## It can be used either for a one-time data upload without AWS access or for uploading general files (i.e. not just fastq files via the upload.py script).
+yea and also if we just have data that someone without aws access needs to just quickly upload
+
+
 if [ $# -ne 2 ]; then
   echo "Usage: $0 <S3_BUCKET> <S3_FOLDER>"
   exit 1

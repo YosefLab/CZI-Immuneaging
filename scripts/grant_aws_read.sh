@@ -1,5 +1,7 @@
 #!/bin/bash
 
+## This script is a wrapper around AWS CLI for reading (downloading) data from the S3 bucket.
+
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <S3_PATH> [S3_BUCKET]"
   exit 1
