@@ -51,6 +51,9 @@ In order to set up an IAM user and receive credentials file please email Elior (
 * Uploading data is done via the AWS Command Line Interface (CLI), which can be downloaded from <a href="https://aws.amazon.com/cli/">here</a>. While you will not need to explicitly use the AWS CLI for data upload, the upload script (to be described later) requires it as a dependency.
 * Downloading multiple data files becomes more streamlined by using the AWS CLI rather than the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>, which is a web-based graphical user interface. For more details see [Data Download](#download).
 
+**Note:** Non-US based users that wish to download data via AWS CLI or upload data using the upload tool described below may need to manually configure their location prior to any download/upload. Specifically, if your download/upload fails and you receive an error "Could not connect to the endpoint URL" then log in to the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a> with your account and properly set the location in the top right corner of the console to match your physical location (e.g., users located in London should set `eu-west-2`).
+If the problem persists, run in terminal the command `aws configure`. You will then be prompted to enter your `AWS Access Key ID` and `AWS Secret Access Key` - enter those keys as they appear in your credentials file. When prompted to enter your `Default region name`, enter the region name as you specified in the AWS console (e.g., London users should enter `eu-west-2`).
+
 <!--
 **Granting temporary/one-off access:**
 To share data with temporary members (like research assistants temporarily helping out) or for one-off access, email Galen (gx2113@columbia.edu) with the S3 folder you want to share (or upload data to) and he will generate a script that will automatically upload/download data when run. This is super easy for him to do (says Galen writing this), so don't hesitate to reach out. DO NOT SHARE YOUR USER SPECIFIC CREDENTIALS!
@@ -151,7 +154,7 @@ To read from the S3 bucket:
 
 New samples can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file must follow the following naming convention:
 ```
-<donor_id>_<library_type>_<library_id>_<10x_reaction>_<seq_run>_<lane>_<read>.fastq.gz
+<donor_id>_<seq_run>_<library_type>_<library_id>_<S_number>_<lane>_<read>_001.fastq.gz
 ```
 <!--
 where
@@ -160,13 +163,14 @@ where
 * `cell_type` the cell type, which should be consistent with the Dictionary tab in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2">samples spreadsheet</a>; for example, using `T` for T cells and `B` for B cells.
 * `sequencer_output` - the standard output given by the raw data from the sequencer; for example, the output for a specific lane.
 -->
-The entries `<donor_id>` and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the following five possible values: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor), HTO (hashtag; in case a hashtag library was processed separately).
+Note that the suffix `<library_id>_<S_number>_<lane>_<read>_001` is the expected file name format of the raw sequencing output; for `<read>` only the values `R1` or `R2` are allowed.
+The entries `<donor_id>`, `<library_type>`, and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the following five possible values: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor), HTO (hashtag; in case a hashtag library was processed separately). The field `<seq_run>` is a lab-specific counter that allows to distinguish between sequencing runs; particularly, it can be used in order to distinguish between different sequencing runs of the same libraries if needed.
 
 A few examples for valid file names include:
 ```
-591C_ADT_CZI-IA10034945_0001_01_L001_R1.fastq.gz
-583B_TCR_CZI-IA9924344_0001_01_L001_R1.fastq.gz
-583B_GEX_CZI-IA9924327_0001_01_L001_R1.fastq.gz
+582C_001_HTO_CZI-IA9924321_S1_L001_R1_001.fastq.gz
+582C_002_ADT_CZI-IA9924369_S1_L001_R1_001.fastq.gz
+591C_010_GEX_CZI-IA10034921_S2_L002_R2_001.fastq.gz
 ```
 
 <!--- 
@@ -178,7 +182,7 @@ Use established naming convention for donors and tissues
 
 Once the Google spreadsheet is updated and the fastq files are ready to be uploaded, you can move forward to the actual data upload, which can be done using a designated script.
 
-First, download the <a href="https://raw.githubusercontent.com/YosefLab/Immune-Aging-Data-Hub/main/scripts/upload.py?token=ABMIR5MFHUTH6CWXMNS4YGDASVMJW"> upload.py</a> script (open the link, right click on the screen, and save as "upload.py"). Second, make sure you have a working installation of python with the `pandas` library installed. If you do not have python with `pandas` already installed, you can simply download and install <a href="https://www.anaconda.com/products/individual">Anaconda</a>, a distribution of python that includes many popular libraries for data science, including `pandas`.
+First, download the <a href="https://raw.githubusercontent.com/YosefLab/Immune-Aging-Data-Hub/main/scripts/upload.py?token=ABMIR5MFHUTH6CWXMNS4YGDASVMJW"> upload.py</a> script (open the link, right click on the screen, and save as "upload.py"). Please make sure you always use the most updated version of the script. Second, make sure you have a working installation of python with the `pandas` library installed. If you do not have python with `pandas` already installed, you can simply download and install <a href="https://www.anaconda.com/products/individual">Anaconda</a>, a distribution of python that includes many popular libraries for data science, including `pandas`.
 
 Simple usage of the upload.py script - type in terminal:
 ```
