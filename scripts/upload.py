@@ -291,8 +291,10 @@ def check_fastq_filenames(fastq_fns, samples, donors):
         # check library type
         valid_lib_type = lib_type in lib_types
 
-        # check library id
+        # check library id and protein panel
         valid_lib_id = True
+        valid_prot_panel = True
+
         if valid_donor_id and valid_lib_type:
 
             if samples.loc[donor_id][lib_type + " lib"].isnull().values.any():
@@ -303,6 +305,33 @@ def check_fastq_filenames(fastq_fns, samples, donors):
                 valid_lib_id = False
             else:
                 l_ids = samples.loc[donor_id][lib_type + " lib"]
+
+                if lib_type == "ADT":
+                    prot_panel_wrn_msg = "The library type of {} is ADT and therefore a valid protein panel entry is required under 'Protein panel' in the samples spreadsheet. Note that all samples processed under this library ID must have the same protein panel.".format(
+                                    f, lib_type
+                                )
+                    prot_panels = samples.loc[donor_id]["Protein panel"]
+                    prot_panel = None
+                    for i in range(len(l_ids)):
+                        if lib_id in l_ids[i]:
+                            if prot_panel is None:
+                                prot_panel = prot_panels[i]
+                            if prot_panels[i] == "None" or prot_panels[i] == "":
+                                warnings.warn(prot_panel_wrn_msg)
+                                valid_prot_panel = False
+                                break
+                            else:
+                                # there must be just one protein panel for the samples that are processed under the same ADT lib
+                                if prot_panel != prot_panels[i]:
+                                    warnings.warn(prot_panel_wrn_msg)
+                                    valid_prot_panel = False
+                                    break
+                    if valid_prot_panel:
+                        try:
+                            prot_panel_sheet = read_immune_aging_sheet(sheet=prot_panel)
+                        except: 
+                            warnings.warn(prot_panel_wrn_msg)
+                            valid_prot_panel = False
 
                 # sample id is not unique so get all library id values
                 if isinstance(l_ids, pd.core.series.Series):
@@ -354,7 +383,7 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             valid_read_num = True
         except: pass
 
-        valid_sample = valid_donor_id and valid_lib_type and valid_lib_id and valid_s_number and valid_seq_run and valid_lane and valid_read_num
+        valid_sample = valid_donor_id and valid_lib_type and valid_lib_id and valid_s_number and valid_seq_run and valid_lane and valid_read_num and valid_prot_panel
 
         if valid_sample is False:
             num_invalid_files += 1
@@ -367,7 +396,7 @@ def check_fastq_filenames(fastq_fns, samples, donors):
                     lib_type
                 )
             if valid_donor_id and valid_lib_type and (valid_lib_id is False):
-                msg += "Library id of {} is not in Sample Sheet.".format(
+                msg += "Library id of {} is not in Sample Sheet under the specified library type.".format(
                     lib_id)
             if valid_s_number is False:
                 msg += "S_number in the file name should be the character S followed by a number (e.g., S1 or S2); instead found {}. ".format(valid_s_number)
