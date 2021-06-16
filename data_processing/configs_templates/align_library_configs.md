@@ -6,10 +6,10 @@ The configuration file is formatted as json with the following fields:
 
 * `"donor"` - Donor ID, as indicated in the Google Spreadsheet
 * `"seq_run"` - Seq run, as indicated in the Google Spreadsheet
-* `"output"`_destination - Absolute path that will be used for saving outputs
+* `"output_destination"` - Absolute path that will be used for saving outputs
 * `"aligner"` - The file name of the aligner executable file; currently only `"cellranger"` is allowed
 * `"aligner_version"` - Version of the aligner used
-* `"aligner_software_path"` - absolute path to the directory containing the executable of the aligner
+* `"aligner_software_path"` - Absolute path to the directory containing the executable of the aligner
 * `"alignment_ref_genome_file"` - File name of the reference genome file to be used for alignment
 * `"alignment_ref_genome_path"` - Absolute path to the directory containing the provided reference genome file
 * `"berkeley_user"` - The Berkeley username of the person executing the align_library.py script
