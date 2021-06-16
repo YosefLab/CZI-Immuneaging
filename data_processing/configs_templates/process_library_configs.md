@@ -4,9 +4,9 @@ The template for the configuration file can be found <a href="https://github.com
 
 The configuration file is formatted as json with the following fields:
 
-* `"sandbox_mode"` - "True"/"False. Always set to `"True"` if you are not an admin. Note that execution will fail and you will be alerted by the script if setting `"sandbox_mode": "True"` without aws permissions of an admin.
+* `"sandbox_mode"` - `"True"` or `"False` to indicate whether running in sandbox mode or not. Always set to `"True"` if you are not an admin. Note that execution will fail and you will be alerted by the script if setting `"sandbox_mode": "True"` without AWS permissions of an admin.
 * `"data_owner"` - name or username of the data owner (the person executing the process_library.py)
-* `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with data_processing/scripts)
+* `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with `"data_processing/scripts"`)
 * `"output_destination"` - Absolute path that will be used for saving outputs
 * `"s3_access_file"` - absolute path to the aws credentials file (provided by the admin)
 * `"donor"` - Donor ID, as indicated in the Google Spreadsheet
