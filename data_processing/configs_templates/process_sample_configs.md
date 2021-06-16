@@ -20,8 +20,8 @@ The configuration file is formatted as json with the following fields:
 * `"highly_variable_genes_flavor"` - The flavor for identifying highly variable genes using `scanpy.pp.highly_variable_genes`
 * `"scvi_max_epochs"` - The maximum number of epochs to be used when applying SCVI
 * `"solo_max_epochs"` - The maximum number of epochs to be used when applying solo for doublet detection
-* `"neighborhood_graph_n_neighbors"` - The number of neighbors to use for computing the neighborhood graph (using `sc.pp.neighbors`)
-* `"umap_min_dist"` - The `min_dist` argument for computing UMAP (using `sc.tl.umap`)
-* `"umap_spread"` - The `spread` argument for computing UMAP (using `sc.tl.umap`)
-* `"umap_n_components"` - The number of UMAP components to compute (using `sc.tl.umap`)
+* `"neighborhood_graph_n_neighbors"` - The number of neighbors to use for computing the neighborhood graph (using `scanpy.pp.neighbors`)
+* `"umap_min_dist"` - The `min_dist` argument for computing UMAP (using `scanpy.tl.umap`)
+* `"umap_spread"` - The `spread` argument for computing UMAP (using `scanpy.tl.umap`)
+* `"umap_n_components"` - The number of UMAP components to compute (using `scanpy.tl.umap`)
  * `"python_env_version"` - The environment name to be used when running python commands for process_sample.py
