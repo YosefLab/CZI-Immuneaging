@@ -100,9 +100,9 @@ else:
 
 add_to_log("Downloading h5ad file of aligned library from S3...")
 aligned_h5ad_file = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
-    configs["library_id"], configs["aligned_libraries_configs_version"])
+    configs["library_id"], configs["aligned_library_configs_version"])
 sync_cmd = 'aws s3 sync s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
-    configs["aligned_libraries_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
+    configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
     configs["library_id"], data_dir, aligned_h5ad_file)
 add_to_log("sync_cmd: {}".format(sync_cmd))
 add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
@@ -130,9 +130,8 @@ n_cells_before = adata.n_obs
 adata = adata[adata.obs['pct_counts_ribo'] >= configs["filter_cells_min_pct_counts_ribo"], :]
 add_to_log("Filtered out {} cells with less than {}\% counts coming from ribosomal genes.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_pct_counts_ribo"]))
 
-configs["genes_to_exclude"] = "MALAT1,RPS"
 genes_to_exclude = np.zeros((adata.n_vars,), dtype=bool)
-if configs["genes_to_exclude"] is not None:
+if configs["genes_to_exclude"] != "None":
     for gene in configs["genes_to_exclude"].split(','):
         genes_to_exclude = np.add(genes_to_exclude,adata.var_names.str.startswith(gene))
 
