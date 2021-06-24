@@ -98,8 +98,9 @@ def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs
 	configs_dir_local = os.path.join(data_dir,"configs")
 	os.system("mkdir -p " + configs_dir_local)
 	cmd = 'aws s3 sync {0} {1} --exact-timestamps'.format(configs_dir_remote, configs_dir_local)
-	add_to_log("get_configs_version_alignment: {0}".format(cmd), level = "debug")
-	add_to_log("cmd: {0}".format(os.popen(cmd).read()), level = "debug")
+	#print("get_configs_version_alignment: {0}".format(cmd))
+	os.system(cmd)
+	#print("cmd: {0}".format(os.popen(cmd).read()))
 	version = None
 	max_version = 0
 	configs_invariant = {i:configs[i] for i in configs if i not in variable_config_keys}
@@ -117,8 +118,9 @@ def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs
 		configs_file = os.path.join(configs_dir_local,"{0}{1}.txt".format(configs_file_remote_prefix, version))
 		with open(configs_file, 'w') as f:
 			json.dump(configs_invariant, f)
-		cmd = 'aws s3 sync {0} s3://immuneaging/processed/configs/ --exclude "*" --include {1}'.format(configs_dir_local,configs_file)
-		add_to_log("Uploading configs_file to S3 : {0}".format(os.popen(cmd).read()), level = "debug")
+		cmd = 'aws s3 sync {0} {1} --exclude "*" --include {2}'.format(configs_dir_local,configs_dir_remote,configs_file)
+		#print("Uploading configs_file to S3 : {0}".format(os.popen(cmd).read()))
+		os.system(cmd)
 	return version
 
 def zipdir(path, ziph):

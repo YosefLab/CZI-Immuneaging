@@ -297,18 +297,18 @@ adata.write(os.path.join(data_dir,h5ad_file))
 
 if not sandbox_mode:
     add_to_log("Uploading h5ad file to S3...")
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, h5ad_file)
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     add_to_log("Uploading scvi model files (a single .zip file) to S3...")
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, scvi_model_file)
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     add_to_log("Execution of process_sample.py is complete.")
     # Uploading log file to S3...
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
