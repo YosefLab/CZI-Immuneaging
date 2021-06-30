@@ -8,7 +8,6 @@ import subprocess
 s3_access_file = sys.argv[1]
 output_destination = sys.argv[2]
 code_path = sys.argv[3]
-output_prefix = sys.argv[4]
 
 sys.path.append("code_path")
 from utils import *
@@ -23,7 +22,7 @@ os.system("mkdir -p " + jobs_run_destination)
 outfiles = []
 
 for job_type in ("process_library", "process_sample"):
-    sh_cmds = []
+    sh_cmds = {}
     ls_cmd = 'aws s3 ls s3://immuneaging/job_queue/{}/'.format(job_type)
     aws_response = os.popen(ls_cmd).read()
     if len(aws_response):
@@ -33,10 +32,8 @@ for job_type in ("process_library", "process_sample"):
     else:
         print("No jobs of type " + job_type)
         next
-    flag = False
     for i in aws_response.split("\n"):
         if "configs.txt" in i:
-            flag = True
             configs_filename = i.split(" ")[-1]
             queue_filename = os.path.join(jobs_queue_destination,configs_filename)
             with open(queue_filename, "r") as f:
@@ -46,23 +43,26 @@ for job_type in ("process_library", "process_sample"):
             configs["code_path"] = code_path
             configs["output_destination"] = output_destination
             configs["s3_access_file"] = s3_access_file
+            if configs["donor"] not in sh_cmds:
+                sh_cmds[configs["donor"]] = []
             # save configs file
             with open(run_filename, 'w') as f:
                 json.dump(configs, f)
             # add commands for running the current job
-            sh_cmds.append("source activate {}".format(configs["python_env_version"])) 
-            sh_cmds.append("python {}.py {}".format(job_type,run_filename))
-            sh_cmds.append("conda deactivate")
-            sh_cmds.append('echo "Execution of {}.py on job {} is complete."'.format(job_type,run_filename))
+            sh_cmds[configs["donor"]].append("source activate {}".format(configs["python_env_version"])) 
+            sh_cmds[configs["donor"]].append("python {}.py {}".format(job_type,run_filename))
+            sh_cmds[configs["donor"]].append("conda deactivate")
+            sh_cmds[configs["donor"]].append('echo "Execution of {}.py on job {} is complete."'.format(job_type,run_filename))
             # move the original file on S3 from the queue to the running folder
             mv_cmd = 'aws s3 mv s3://immuneaging/job_queue/{0}/{1} s3://immuneaging/job_queue/{0}.running/{1}'.format(job_type, configs_filename)
             os.popen(mv_cmd).read()
-    # save the sh_cmds
-    if flag:
-        outfiles.append(os.path.join(code_path,"{}{}_jobs.sh".format(output_prefix,job_type)))
-        with open(outfiles[-1], 'w') as f:
-            for cmd in sh_cmds:
-                f.write(cmd+"\n")
+    # save the commands in sh_cmds, for each donor separately
+    if len(sh_cmds):
+        for i in sh_cmds:
+            outfiles.append(os.path.join(code_path,"{}.{}_jobs.sh".format(i,job_type)))
+            with open(outfiles[-1], 'w') as f:
+                for cmd in sh_cmds[i]:
+                    f.write(cmd+"\n")
 
 if (len(outfiles)):
     print("Generated the following files:")
