@@ -179,7 +179,7 @@ To read from the S3 bucket via terminal:
 
 ### <a name="upload_naming"></a> File naming conventions
 
-New samples can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file must follow the following naming convention:
+New data can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file must follow the following naming convention:
 ```
 <donor_id>_<seq_run>_<library_type>_<library_id>_<S_number>_<lane>_<read>_001.fastq.gz
 ```
@@ -191,7 +191,7 @@ where
 * `sequencer_output` - the standard output given by the raw data from the sequencer; for example, the output for a specific lane.
 -->
 Note that the suffix `<library_id>_<S_number>_<lane>_<read>_001` is the expected file name format of the raw sequencing output; for `<read>` only the values `R1` or `R2` are allowed.
-The entries `<donor_id>`, `<library_type>`, and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the following five possible values: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor), HTO (hashtag; in case a hashtag library was processed separately). The field `<seq_run>` is a lab-specific counter that allows to distinguish between sequencing runs; particularly, it can be used in order to distinguish between different sequencing runs of the same libraries if needed.
+The entries `<donor_id>`, `<library_type>`, and `<library_id>` must be consistent with the donors sheet and the samples sheet of the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/">IA Google spreadsheet</a>, and that library type can take a value out of the five following options: GEX (for gene expression), ADT (for CITE-seq), TCR (T-Cell Receptor), BCR (T-Cell Receptor), HTO (hashtag; in case a hashtag library was processed separately). The field `<seq_run>` is a site-specific value that can be set to any 3-digit value in the range 001-999 (e.g., it can always be set to 001, or it can be increased by 1 for every new donor), however, in case of resequenced libraries that are designated to be processed together with an initial sequencing version of the same libraries, this number should be the same one used for the libraries from the initial sequencing.
 
 A few examples for valid file names include:
 ```
@@ -238,8 +238,7 @@ Finally, after uploading new data, please notify Elior (erahmani@berkeley.edu). 
 
 Notes:
 * The way the upload.py script works is by syncing the data in the user-specified folder (provided via the `--fastq` argument) with the S3 bucket, rather than performing a naive upload. In case of a lost connection while the script is running, this mechanism allows the script to automatically resume the upload without re-uploading files that are already in the bucket.
-* Deleting files that have already been uploaded can only be done by an admin. If you believe that some raw files were uploaded by mistake and should be deleted please email Elior (erahmani@berkeley.edu) and Galen (gx2113@columbia.edu).
-
+* Deleting files that have already been uploaded can only be done by an admin. If you believe that some raw files were uploaded by mistake and should be deleted please email Elior Rahmani (erahmani@berkeley.edu).
 
 ## <a name="visualization"></a> Data visualization
 
