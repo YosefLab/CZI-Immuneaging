@@ -122,29 +122,46 @@ The structure of the `aligned_libraries` directory is as follows:
 
 The `configs` directory includes versioned configuration files for the alingment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alingment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log filw documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
+The `processed_libraries` directory stores data of processed libraries (i.e. beyond alingment), an intermediate product before the sample-level processing; its structure is as follows:
 
-
-The `harmonized` directory includes a `h5ad` with harmonized data containing multiple samples. Since the samples in the Immune Aging project are not generated and processed at the same time, for every new incoming sample or a batch of samples we will pool together and harmonize all existing data at the specific point in time.
-
-The structure of the `harmonized` directory is designed as follows:
-* harmonized/
-    * v1/
-        * data_name1.harmonized.v1.time_stamp1.h5ad
-        * data_name1.harmonized.v1.time_stamp1.h5ad.log
-        * data_name1.harmonized.v1.time_stamp2.h5ad
-        * data_name1.harmonized.v1.time_stamp2.h5ad.log
-        * data_name2.harmonized.v1.time_stamp1.h5ad
-        * data_name2.harmonized.v1.time_stamp1.h5ad.log
-        * data_name2.harmonized.v1.time_stamp2.h5ad
-        * data_name2.harmonized.v1.time_stamp2.h5ad.log
+* processed_libraries/
+    * library1/
+        * v1/
+            * library1.processed.v1.h5ad
+            * process_library.library1.v1.log
+            * process_library.configs.library1.v1.txt
+        * v2/
+            * library1.processed.v2.h5ad
+            * process_library.library1.v2.log
+            * process_library.configs.library1.v2.txt
         * ...
-    * v2/
+    * library2/
         * ...
     * ...
 
-For example, given two files `data_name.harmonized.v1.03-01-2021.h5ad, data_name.harmonized.v1.03-15-2021.h5ad`, we can tell by the file names that both used version `v1` of the harmonization pipeline, however, given the two different time stamps, we know that each file includes a different subset of samples.
-The exact information will appear in the matching log files of the data files, however, we also maintain a lookup table that maps each version and time stamp to a concise summary of the processing pipeline used and the samples that are included in the data file. You can find this table <a href="...">here</a>[todo].
+Here, files with the prefix `process_library.configs.` incude the configurations that were used in the execution of the library processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. As in the `aligned_libraries` directory, the actual library names follow the naming convention `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
+The `processed_samples` directory stores data of processed samples (i.e. sample-level integration across different libraries); its structure is as follows:
+
+* processed_samples/
+    * sample1/
+        * v1/
+            * sample1.processed.v1.h5ad
+            * sample1.processed.v1.scvi_model.zip
+            * process_sample.sample1.v1.log
+            * process_sample.configs.sample1.v1.txt
+        * v2/
+            * sample1.processed.v2.h5ad
+            * sample1.processed.v2.scvi_model.zip
+            * process_sample.sample1.v2.log
+            * process_sample.configs.sample11.v2.txt
+        * ...
+    * sample2/
+        * ...
+    * ...
+
+Here, files with the prefix `process_sample.configs.` incude the configurations that were used in the execution of the sample processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. 
+Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
 ### <a name="download_console"></a> Downloading data via the AWS console
 
