@@ -33,7 +33,7 @@ for job_type in ("process_library", "process_sample"):
         print("No jobs of type " + job_type)
         next
     for i in aws_response.split("\n"):
-        if "configs.txt" in i:
+        if "configs" in i:
             configs_filename = i.split(" ")[-1]
             queue_filename = os.path.join(jobs_queue_destination,configs_filename)
             with open(queue_filename, "r") as f:

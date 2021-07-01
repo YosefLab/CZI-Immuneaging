@@ -155,13 +155,18 @@ for j in range(len(library_ids)):
         library_type, library_id, library_version))
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
+    adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+    sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["filter_genes_min_cells"])
 
 add_to_log("Concatenating all cells of sample {} from all libraries...".format(sample_id))
-adata = adata_dict[library_ids[0]][adata_dict[library_ids[0]].obs["Classification"] == sample_id]
-adata = adata.concatenate([adata_dict[library_ids[j]][adata_dict[library_ids[j]].obs["Classification"] == sample_id] for j in range(1,len(library_ids))])
+#adata = adata_dict[library_ids[0]][adata_dict[library_ids[0]].obs["Classification"] == sample_id]
+adata = adata_dict[library_ids[0]]
+if len(library_ids) > 1:
+    adata = adata.concatenate([adata_dict[library_ids[j]] for j in range(1,len(library_ids))])
+
+add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 
 add_to_log("Adding metadata...")
-
 add_to_log("Downloading the Donors sheet from the Google spreadsheets...")
 donors = read_immune_aging_sheet("Donors")
 donor_index = donors["Donor ID"] == donor
@@ -181,115 +186,125 @@ if library_type == "GEX":
     adata.obs["HTO_chem"] = samples["HTO chem"][sample_index].values[0]
     adata.obs["ADT_chem"] = samples["CITE chem"][sample_index].values[0]
 
-is_hto = len(library_ids)>1
-is_cite = "feature_types" in adata.var and "Antibody Capture" in np.unique(adata.var.feature_types)
-if is_cite:
-    add_to_log("Detected Antibody Capture features.")    
-    add_to_log("Normalizing CITE data separately...")
-    rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()    
+if adata.n_obs > 0:
+    no_cells = False
+    add_to_log("Current number of cells: {}.".format(adata.n_obs))
+    add_to_log("Current number of genes: {}.".format(adata.n_vars))
 else:
-    rna = adata.copy()
+    no_cells = True
+    add_to_log("Detected no cells. Skipping data processing steps.")
 
-add_to_log("Detecting highly variable genes...")
-sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
-    flavor=configs["highly_variable_genes_flavor"], batch_key="batch")
-
-add_to_log("Setting up scvi...")
-scvi.data.setup_anndata(rna, batch_key="batch")
-
-add_to_log("Training scvi model...")
-model = scvi.model.SCVI(rna)
-model.train(check_val_every_n_epoch=1000, max_epochs=configs["scvi_max_epochs"])
-
-add_to_log("Saving scvi latent representation...")
-latent = model.get_latent_representation()
-rna.obsm["X_scVI"] = latent
-
-scvi_model_file = "{}.processed.{}.scvi_model.zip".format(prefix, version)
-add_to_log("Saving the scvi model into {}...".format(scvi_model_file))
-scvi_model_file_path = os.path.join(data_dir, scvi_model_file)
-scvi_model_dir_path = os.path.join(data_dir,"{}.scvi_model/".format(prefix))
-if os.path.isdir(scvi_model_dir_path):
-    os.system("rm -r " + scvi_model_dir_path)
-
-model.save(scvi_model_dir_path)
-zipf = zipfile.ZipFile(scvi_model_file_path, 'w', zipfile.ZIP_DEFLATED)
-zipdir(scvi_model_dir_path, zipf)
-zipf.close()
-
-add_to_log("Running solo for detecting doublets...")
-if is_hto:
-    batches = np.unique(rna.obs["batch"])
-    add_to_log("Running solo on the following batches separately: {}".format(batches))
-    is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
-    for batch in batches:
-        add_to_log("Running solo on batch {}...".format(batch))
-        solo_batch = scvi.external.SOLO.from_scvi_model(model, restrict_to_batch=batch)
-        solo_batch.train(max_epochs=configs["solo_max_epochs"])
-        is_solo_singlet[(rna.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
-    rna.obs["is_solo_singlet"] = is_solo_singlet
-else:
-    add_to_log("Running solo...")
-    solo = scvi.external.SOLO.from_scvi_model(model)
-    solo_batch.train(max_epochs=configs["solo_max_epochs"])
-    is_solo_singlet = solo.predict(soft=False) == "singlet"
-
-add_to_log("Removing doublets...")
-n_obs_before = rna.n_obs
-rna = rna[is_solo_singlet,]
-add_to_log("Removed {} estimated doublets; {} droplets remained.".format(n_obs_before-rna.n_obs,rna.n_obs))
-
-add_to_log("Normalizing RNA...")
-rna.layers["counts"] = rna.X.copy()
-sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
-sc.pp.log1p(rna)
-sc.pp.scale(rna)
-rna.raw = rna
-
-add_to_log("Calculating PCA...")
-sc.pp.pca(rna)
-
-add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
-key = "pca_neighbors"
-rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-    use_rep="X_pca", key_added=key) 
-rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-    n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
-
-add_to_log("Calculating neighborhood graph and UMAP based on SCVI components...")
-key = "scvi_neighbors"
-rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-    use_rep="X_scVI", key_added=key) 
-rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-    n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
-
-
-add_to_log("Gathering data...")
-adata = adata[is_solo_singlet,]
-adata.obsm.update(rna.obsm)
-adata.obs[rna.obs.columns] = rna.obs
-# save raw counts
-adata.layers["counts"] = adata.X.copy()
-adata.raw = adata
-# normalize RNA
-if is_cite:
-    # normalize RNA and protein separately
-    rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
-    sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
-    sc.pp.log1p(rna)
-    protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
-    sc.pp.normalize_total(protein, target_sum=configs["normalize_total_target_sum"])
-    sc.pp.log1p(protein)
-else:
-    rna = adata.copy()
-
-adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
-if is_cite:
-    adata.X[:, (adata.var["feature_types"] == "Antibody Capture").values] = protein.X
+if not no_cells:
+    try:
+        is_hto = len(library_ids)>1
+        is_cite = "feature_types" in adata.var and "Antibody Capture" in np.unique(adata.var.feature_types)
+        if is_cite:
+            add_to_log("Detected Antibody Capture features.")    
+            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()    
+        else:
+            rna = adata.copy()
+        add_to_log("Detecting highly variable genes...")
+        if len(library_ids) == 1:
+            batch_key = None
+        else:
+            batch_key = "batch"
+        sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
+            flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key)
+        add_to_log("Setting up scvi...")
+        scvi.data.setup_anndata(rna, batch_key=batch_key)
+        add_to_log("Training scvi model...")
+        model = scvi.model.SCVI(rna)
+        model.train(check_val_every_n_epoch=1000, max_epochs=configs["scvi_max_epochs"])
+        add_to_log("Saving scvi latent representation...")
+        latent = model.get_latent_representation()
+        rna.obsm["X_scVI"] = latent
+        scvi_model_file = "{}.processed.{}.scvi_model.zip".format(prefix, version)
+        add_to_log("Saving the scvi model into {}...".format(scvi_model_file))
+        scvi_model_file_path = os.path.join(data_dir, scvi_model_file)
+        scvi_model_dir_path = os.path.join(data_dir,"{}.scvi_model/".format(prefix))
+        if os.path.isdir(scvi_model_dir_path):
+            os.system("rm -r " + scvi_model_dir_path)
+        model.save(scvi_model_dir_path)
+        zipf = zipfile.ZipFile(scvi_model_file_path, 'w', zipfile.ZIP_DEFLATED)
+        zipdir(scvi_model_dir_path, zipf)
+        zipf.close()
+        add_to_log("Running solo for detecting doublets...")
+        if is_hto:
+            batches = pd.unique(rna.obs["batch"])
+            add_to_log("Running solo on the following batches separately: {}".format(batches))
+            is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
+            for batch in batches:
+                add_to_log("Running solo on batch {}...".format(batch))
+                solo_batch = scvi.external.SOLO.from_scvi_model(model, restrict_to_batch=batch)
+                solo_batch.train(max_epochs=configs["solo_max_epochs"])
+                is_solo_singlet[(rna.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
+            rna.obs["is_solo_singlet"] = is_solo_singlet
+        else:
+            add_to_log("Running solo...")
+            solo = scvi.external.SOLO.from_scvi_model(model)
+            solo.train(max_epochs=configs["solo_max_epochs"])
+            is_solo_singlet = solo.predict(soft=False) == "singlet"
+        add_to_log("Removing doublets...")
+        n_obs_before = rna.n_obs
+        rna = rna[is_solo_singlet,]
+        add_to_log("Removed {} estimated doublets; {} droplets remained.".format(n_obs_before-rna.n_obs,rna.n_obs))
+        if rna.n_obs == 0:
+            add_to_log("No cells left after doublet detection. Skipping the next processing steps.")
+        else:
+            add_to_log("Normalizing RNA...")
+            rna.layers["counts"] = rna.X.copy()
+            sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
+            sc.pp.log1p(rna)
+            sc.pp.scale(rna)
+            rna.raw = rna
+            add_to_log("Calculating PCA...")
+            sc.pp.pca(rna)
+            add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
+            key = "pca_neighbors"
+            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+                use_rep="X_pca", key_added=key) 
+            rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
+            add_to_log("Calculating neighborhood graph and UMAP based on SCVI components...")
+            key = "scvi_neighbors"
+            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+                use_rep="X_scVI", key_added=key) 
+            rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
+        add_to_log("Gathering data...")
+        adata = adata[is_solo_singlet,]
+        adata.obsm.update(rna.obsm)
+        adata.obs[rna.obs.columns] = rna.obs
+        # save raw counts
+        adata.layers["counts"] = adata.X.copy()
+        adata.raw = adata
+        if adata.n_obs>0:
+            # normalize RNA
+            if is_cite:
+                # normalize RNA and protein separately
+                rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+                sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
+                sc.pp.log1p(rna)
+                protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
+                sc.pp.normalize_total(protein, target_sum=configs["normalize_total_target_sum"])
+                sc.pp.log1p(protein)
+            else:
+                rna = adata.copy()
+            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
+            if is_cite:
+                adata.X[:, (adata.var["feature_types"] == "Antibody Capture").values] = protein.X
+    except Exception as err:
+        add_to_log("Execution failed with the following error:\n{}".format(err))
+        add_to_log("Terminating execution prematurely.")
+        # upload log to S3
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+        data_dir, prefix, version, logger_file)
+        os.system(sync_cmd)
+        print(err)
+        sys.exit()
 
 add_to_log("Saving h5ad file...")
 adata.write(os.path.join(data_dir,h5ad_file))
-
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
@@ -301,14 +316,14 @@ if not sandbox_mode:
         data_dir, prefix, version, h5ad_file)
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-    add_to_log("Uploading scvi model files (a single .zip file) to S3...")
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, scvi_model_file)
-    add_to_log("sync_cmd: {}".format(sync_cmd))
-    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-    add_to_log("Execution of process_sample.py is complete.")
+    if not no_cells:
+        add_to_log("Uploading scvi model files (a single .zip file) to S3...")
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+            data_dir, prefix, version, scvi_model_file)
+        add_to_log("sync_cmd: {}".format(sync_cmd))
+        add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        add_to_log("Execution of process_sample.py is complete.")
     # Uploading log file to S3...
     sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
-    add_to_log("sync_cmd: {}".format(sync_cmd))
-    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    os.system(sync_cmd)

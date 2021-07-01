@@ -20,6 +20,6 @@ The configuration file is formatted as json with the following fields:
 * `"genes_to_exclude"` - A comma-separated (no spaces) list of genes to exclude regardless of other quality procedures; set to `"None"` if no such genes
 * `"exclude_mito_genes"` - Set `"True"` or `"False"` to indicate whether mitochondrial genes should be excluded regardless of other quality procedures
 * `"hashsolo_priors"` - A comma-separated (no spaces) list of priors for hashsolo; the values are the expected fractions of multiplets, singlets, and doublets, respectively
-* `"hashsolo_number_of_noise_barcodes"` - The number of barcodes to be used by hashsolo to create the noise distribution; can set to `"None"`
+* `"hashsolo_number_of_noise_barcodes"` - The number of barcodes to be used by hashsolo to create the noise distribution; this number must be less than the number of multiplexed samples (is a number larger than that is provided then the maximal number allows by hashsolo will be used).
 * `"aligned_library_configs_version"` - The alignment version of the library to process - this version number is determined by the configs version that was used to align the library; the latest alignment version of each aligned library can be found on the S3 bucket under `s3://immuneaging/aligned_libraries`
 * `"python_env_version"` - The environment name to be used when running python commands for process_library.py

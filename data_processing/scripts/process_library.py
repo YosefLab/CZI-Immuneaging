@@ -56,11 +56,13 @@ logger_file = os.path.join("process_library.{}.{}.log".format(prefix,version))
 logger_file_path = os.path.join(data_dir, logger_file)
 if os.path.isfile(logger_file_path):
 	os.remove(logger_file_path)
+
 start_logger(level = LOGGER_LEVEL, filename = logger_file_path)
 add_to_log("Running process_library.py...")
 add_to_log("Starting time: {}".format(timestamp))
 with open(process_lib_script, "r") as f:
     add_to_log("process_library.py md5 checksum: {}\n".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
+
 add_to_log("using the following configurations:\n{}".format(str(configs)))
 add_to_log("Configs version: " + version)
 add_to_log("New configs version: " + str(is_new_version))
@@ -145,16 +147,13 @@ adata = adata[:,genes_to_keep]
 add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude_names)))
 
 cell_hashing = [i for i in adata.var_names[np.where(adata.var_names.str.startswith(configs["donor"]+"-"))]]
-if (len(cell_hashing)>0):
+if len(cell_hashing)>1:
     add_to_log("Demultiplexing is needed; using hashsolo...")
     # add the HTO counts to .obs
     adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
     hashsolo_priors = [float(i) for i in configs["hashsolo_priors"].split(',')]
-    if configs["hashsolo_number_of_noise_barcodes"] !=  "None":
-        sc.external.pp.hashsolo(adata, cell_hashing_columns = cell_hashing, priors = hashsolo_priors, inplace = True,
-            number_of_noise_barcodes = configs["hashsolo_number_of_noise_barcodes"])
-    else:
-        sc.external.pp.hashsolo(adata, cell_hashing_columns = cell_hashing, priors = hashsolo_priors, inplace = True)
+    sc.external.pp.hashsolo(adata, cell_hashing_columns = cell_hashing, priors = hashsolo_priors, inplace = True,
+        number_of_noise_barcodes = min(len(cell_hashing)-1,configs["hashsolo_number_of_noise_barcodes"]))
     num_doublets = sum(adata.obs["Classification"] == "Doublet")
     add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(100*num_doublets/adata.n_obs, num_doublets, adata.n_obs))
     adata = adata[adata.obs["Classification"] != "Doublet"]
