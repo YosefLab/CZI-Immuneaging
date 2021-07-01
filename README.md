@@ -74,21 +74,25 @@ Note that:
 
 Whether you will be downloading data from the S3 bucket [directly from the AWS consol](#download_console) or [via terminal](#download_terminal), you will need to know the bucket's directory structure.
 
-The root directory if the Immune Aging S3 bucket includes the following sub-directories:
+The root directory of the Immune Aging S3 bucket includes the following sub-directories:
 
+* aligned_libraries/
+* job_queue/
+* processed_libraries/
+* processed_samples/
 * raw_columbia/
 * raw_sanger/
-* processed/
-* integrated/
-* vision/
+* test_folder/
 
-The first two directories are designated for raw data uploads (fastq.gz files).
-The third and fourth directories, which are discussed in detail below, are processed versions of the raw data. The `vision` directory will be discussed later under Data Visualization.
+Most of the users should mostly care about the `processed_samples`, which includes a processed data file for each sample in the project.
+This directory, as well as the directories `aligned_libraries` and `processed_libraries` -  intermediate products of the data processing pipline - are discussed in detail below.
+Briefly, the directories `raw_columbia` and `raw_sanger` are designated for raw data uploads (more details under [Data upload](#upload)) ,`job_queue` is a job queue to be used by data processors (more details under [Data Processing](#processing)), and `test_folder` is being used by the system admins for testing.
 
-The `processed` directory includes a `h5ad` file for each sample. This file can be used for downstream analysis in single-cell analysis tools such as scvi-tools [ref] and Seurat[ref]. 
-Throughout the life cycle of the Immune Aging project we expect to improve our data processing pipelines. We therefore version the processed data by structuring the directories accordingly and by including a `.log` file with each processed sample that describes in details the processing pipeline used, such as the aligner used, software versions etc. The log file is important to guarantee reproducibility at the long-term, as we expect our pipeline to update from time to time, as new best practices in the field emerge.
+The `aligned_libraries` directory stores data of aligned libraries and supplementary files related to the alignment. Particularly, it includes a `h5ad` file for each sequenced library (a file format which can be used for downstream analysis in single-cell analysis tools such as <a href="https://scvi-tools.org/">scvi-tools</a> and <a href="https://satijalab.org/seurat/">Seurat</a>).
+Throughout the life cycle of the Immune Aging project we expect to improve our data processing pipelines. We therefore version each intermediate step of processed data by structuring the directories accordingly and by including a `.log` file with each processed data file that describes in details the processing pipeline used. The log file is important to guarantee reproducibility at the long-term, as we expect our pipeline to update from time to time, as new best practices in the field emerge.
 
-TODO: add the `configs` dirs in processed and harmonized...
+
+
 TODO: describe the cell ranger outputs and other outputs that are specific for each sample..
 
 The structure of the `processed` directory is designed as follows:
