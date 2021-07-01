@@ -22,8 +22,10 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     2. [Local VISION Session](#visualization_local)
 5. [Data Processing](#processing)
     1. [Prerequisites](#processing_prerequisites)
-    2. [Processing a single sample](#processing_sample)
-    3. [Data Harmonization](#processing_harmonization)
+    2. [Processing libraries](#Processing_libraries)
+    3. [Processing samples](#processing_samples)
+    4. [Sandbox envorinment](#sandbox_envorinment)
+    5. [Job queue](#job_queue)
 6. [Data Hub maintenance](#maintenance)
     1. [Setting up an AWS IAM](#maintenance_iams)
     2. [Generating an AWS credentials file](#maintenance_credentials)
@@ -285,27 +287,21 @@ Then, in order to start a VISION session locally, we run:
 
 ## <a name="processing"></a> Data Processing
 
-This section documents the pipeline for data processing that will be performed by the Yosef group members.
+This section documents the pipeline for data processing (post-alignment processing of libraries and sample-level integration).
+Data processing can be performed by data owners in a sandbox environment (on a local machine), which allows to fine tune configurations. One such configurations are curated by a data owner, they can be uploaded to the S3 bucket into a queue, from which a system admin from the Yosef group will execute the processing (based on the configurations provided by the data owners). 
 
 ### <a name="processing_prerequisites"></a> Prerequisites
 
-Download anaconda with python >= 3.7...make sure your anaconda is in the path etc.
+First, Download anaconda with python >= 3.7.
+Second, get the .yml file of the latest version of the python environment from <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/envs">here</a> (i.e. immune_aging.py_env.*.yml where * is the latest version available), and use it to set up a new conda environment via terminal.
 
-...explain about the .yml files and versioning and why we use it...
-
-For example,.. 
+For example:
 ```
-conda env create -f iadh.v1.march_2021.yml
+conda env create -f immune_aging.py_env.v1.yml
 ```
-This will create a new environment under `$CONDA_PREFIX"/envs/iadh.v1.march_2021"`
+This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`
 
-install cell ranger..
-
-download reference genome, link to 10x
-
-adding keys to the config files - (1) if adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files... (2) otherwise it will automatically generate a new version etc.. but need to make sure the script is backwards compatible...
-
-### <a name="processing_sample"></a> Processing a single sample
+### <a name="processing_libraries"></a> Processing libraries
 
 The script `run_processing_pipeline.py` will...
 
@@ -316,9 +312,13 @@ python run_processing_pipeline.py test_config_file.txt
 
 This script initiates processing_pipeline.py which.. runs a job..
 
-### <a name="processing_harmonization"></a> Data Harmonization
+### <a name="processing_samples"></a> Processing samples
 
 The script `harmonization_pipeline.py`... would make sense to run on the node with the GPU (s130)
+
+### <a name="sandbox_envorinment"></a> Sandbox envorinment
+
+### <a name="job_queue"></a> Job queue
 
 
 ## <a name="maintenance"></a> Data Hub maintenance
@@ -331,6 +331,12 @@ Explanations...
 ### <a name="maintenance_credentials"></a> Generating an AWS credentials file
 
 Explanations...
+
+### align libraries
+
+install cellranger and download ref genome..
+
+adding keys to the config files - (1) if adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files... (2) otherwise it will automatically generate a new version etc.. but need to make sure the script is backwards compatible...
 
 
 ---
