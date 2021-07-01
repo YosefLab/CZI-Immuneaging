@@ -120,12 +120,9 @@ The structure of the `aligned_libraries` directory is as follows:
         * ...
     * ...
 
-the structure of the name of the library dir `<donor_id>_<seq_run>_<library_type>_<library_id>`
+The `configs` directory includes versioned configuration files for the alingment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alingment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log filw documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
-TODO: describe the cell ranger outputs and other outputs that are specific for each sample..
 
-For example, given two files `sample_name_1.processed.v1.h5ad, sample_name_1.processed.v2.h5ad`, we can tell by the file names that they were generated using a different data processing pipeline.
-The exact differences and the complete information about each `h5ad` file can be found in the file's log. In addition, we further maintain a lookup table that maps each version to a concise summary of the pipeline used to generate the data file. You can find this table <a href="...">here</a>[todo].
 
 The `harmonized` directory includes a `h5ad` with harmonized data containing multiple samples. Since the samples in the Immune Aging project are not generated and processed at the same time, for every new incoming sample or a batch of samples we will pool together and harmonize all existing data at the specific point in time.
 
