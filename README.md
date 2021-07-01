@@ -165,14 +165,13 @@ Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
 ### <a name="download_console"></a> Downloading data via the AWS console
 
-Data that were already uploaded to the S3 bucket can be downloaded by logging in to AWS through <a href="https://911998420209.signin.aws.amazon.com/console.">this link</a> and navigating through the project's directory structure.
-
+Data can be downloaded from the Immune Aging S3 bucket by logging in to AWS through <a href="https://911998420209.signin.aws.amazon.com/console.">this link</a> and navigating through the project's directory structure.
 
 ### <a name="download_terminal"></a> Downloading data via terminal
 
-To read from the S3 bucket:
-1. Run your user-specific credentials file to set aws keys
-2. Sync your folders via `aws s3 sync <source> <target> [--options]` (where source is the aws folder). You can also use `aws s3 ls <target> [--options]` to list contents of a directory. Checkout more commands <a href= "https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html">here</a>.
+To read from the S3 bucket via terminal:
+1. Run your user-specific credentials file to set the aws keys (note that the credential file is a shell file, which can be executed in a linux/mac environment).
+2. Sync directories to your local machine via `aws s3 sync <source> <target> [--options]` (where source is the aws folder). You can also use `aws s3 ls <target> [--options]` to list contents of a directory. Check out more commands <a href= "https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html">here</a>.
 
 
 
