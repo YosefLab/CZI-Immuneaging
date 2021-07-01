@@ -91,26 +91,38 @@ Briefly, the directories `raw_columbia` and `raw_sanger` are designated for raw 
 The `aligned_libraries` directory stores data of aligned libraries and supplementary files related to the alignment. Particularly, it includes a `h5ad` file for each sequenced library (a file format which can be used for downstream analysis in single-cell analysis tools such as <a href="https://scvi-tools.org/">scvi-tools</a> and <a href="https://satijalab.org/seurat/">Seurat</a>).
 Throughout the life cycle of the Immune Aging project we expect to improve our data processing pipelines. We therefore version each intermediate step of processed data by structuring the directories accordingly and by including a `.log` file with each processed data file that describes in details the processing pipeline used. The log file is important to guarantee reproducibility at the long-term, as we expect our pipeline to update from time to time, as new best practices in the field emerge.
 
+The structure of the `aligned_libraries` directory is as follows:
 
-
-TODO: describe the cell ranger outputs and other outputs that are specific for each sample..
-
-The structure of the `processed` directory is designed as follows:
-
-* processed/
+* aligned_libraries/
+    * configs/
+        * align_library.v1.txt
+        * align_library.v2.txt
+        * ...
     * v1/
-        * sample_name_1.processed.v1.h5ad
-        * sample_name_1.processed.v1.h5ad.log
-        * sample_name_2.processed.v1.h5ad
-        * sample_name_2.processed.v1.h5ad.log
+        * library1
+            * library1.cellranger.cloupe.cloupe
+            * library1.cellranger.feature_ref.csv
+            * library1.cellranger.libraries.csv
+            * library1.cellranger.metrics_summary.csv
+            * library1.cellranger.web_summary.html
+            * library1.v1.h5ad
+            * align_library.library1.v1.log
+        * library2
+            * library2.cellranger.cloupe.cloupe
+            * library2.cellranger.feature_ref.csv
+            * library2.cellranger.libraries.csv
+            * library2.cellranger.metrics_summary.csv
+            * library2.cellranger.web_summary.html
+            * library2.v1.h5ad
+            * align_library.library2.v1.log
         * ...
     * v2/
-        * sample_name_1.processed.v2.h5ad
-        * sample_name_1.processed.v2.h5ad.log
-        * sample_name_2.processed.v2.h5ad
-        * sample_name_2.processed.v2.h5ad.log
         * ...
     * ...
+
+the structure of the name of the library dir `<donor_id>_<seq_run>_<library_type>_<library_id>`
+
+TODO: describe the cell ranger outputs and other outputs that are specific for each sample..
 
 For example, given two files `sample_name_1.processed.v1.h5ad, sample_name_1.processed.v2.h5ad`, we can tell by the file names that they were generated using a different data processing pipeline.
 The exact differences and the complete information about each `h5ad` file can be found in the file's log. In addition, we further maintain a lookup table that maps each version to a concise summary of the pipeline used to generate the data file. You can find this table <a href="...">here</a>[todo].
