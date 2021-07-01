@@ -245,6 +245,8 @@ Notes:
 
 ### <a name="visualization_live"></a> Live VISION Session
 
+Coming soon...
+<!--
 We provide a live VISION session of the latest version of the harmonized data.
 VISION allows to... [ref]...
 Every time a new sample or a batch of samples has been uploaded, the data will be processed and harmonized with all the existing samples in the project, followed by generating a new VISION session.
@@ -252,9 +254,12 @@ Every time a new sample or a batch of samples has been uploaded, the data will b
 The most updated VISION sessions can be found here, separated by tissue:
 * <a href="...">Lung</a> 
 * <a href="...">Liver</a> 
+-->
 
 ### <a name="visualization_local"></a> Local VISION Session
 
+Coming soon...
+<!--
 VISION can also be launched locally given a vision object.
 We keep the previous VISION objects (i.e. that were previously displayed in the live session) as well as the latest vision object on the S3 bucket.
 
@@ -277,6 +282,7 @@ Then, in order to start a VISION session locally, we run:
 ...
 ```
 
+-->
 
 ## <a name="processing"></a> Data Processing
 
