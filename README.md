@@ -18,8 +18,9 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     2. [File naming conventions](#upload_naming)
     3. [Upload to S3](#upload_upload)
 4. [Data visualization](#visualization)
-    1. [Live VISION Session](#visualization_live)
-    2. [Local VISION Session](#visualization_local)
+    1. [Visualization using cellxgene](#visualization_cellxgene)
+    2. [Live VISION Sessions](#visualization_live)
+    3. [Local VISION Sessions](#visualization_local)
 5. [Data Processing](#processing)
     1. [Prerequisites](#processing_prerequisites)
     2. [Processing libraries](#Processing_libraries)
@@ -244,7 +245,20 @@ Notes:
 
 ## <a name="visualization"></a> Data visualization
 
-### <a name="visualization_live"></a> Live VISION Session
+### <a name="visualization_cellxgene"></a> Visualization using cellxgene
+
+Processed data can be easily visualized using <a href="https://chanzuckerberg.github.io/cellxgene/">cellxgene</a>, which provides a browser-based user-interface for basic data exploration. Currently, only our sample-level data files can be visualized by cellxgene (i.e. .h5ad files under the `processed_samples` directory on the S3 bucket).
+
+In order to run cellxgene, first install it via terminal by running:
+
+``pip install cellxgene``
+
+Then, after downloading a processed .h5ad file from the S3 bucket (see [Data Download](#download)) you can open a cellxgene session with the data by running:
+
+``cellxgene launch filename.h5ad --open``
+
+
+### <a name="visualization_live"></a> Live VISION Sessions
 
 Coming soon...
 <!--
@@ -257,7 +271,7 @@ The most updated VISION sessions can be found here, separated by tissue:
 * <a href="...">Liver</a> 
 -->
 
-### <a name="visualization_local"></a> Local VISION Session
+### <a name="visualization_local"></a> Local VISION Sessions
 
 Coming soon...
 <!--
@@ -314,7 +328,6 @@ This script initiates processing_pipeline.py which.. runs a job..
 
 ### <a name="processing_samples"></a> Processing samples
 
-The script `harmonization_pipeline.py`... would make sense to run on the node with the GPU (s130)
 
 ### <a name="sandbox_envorinment"></a> Sandbox envorinment
 
