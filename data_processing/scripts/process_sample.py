@@ -142,12 +142,15 @@ if not sandbox_mode:
         add_to_log("sync_cmd: {}".format(sync_cmd))
         add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
+summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
+
 ############################################
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
 
 add_to_log("Reading h5ad files of processed libraries...")
 adata_dict = {}
+initial_n_obs = 0
 for j in range(len(library_ids)):
     library_id = library_ids[j]
     library_version = library_versions[j]
@@ -156,6 +159,7 @@ for j in range(len(library_ids)):
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
     adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+    initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
     sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["filter_genes_min_cells"])
 
 add_to_log("Concatenating all cells of sample {} from all libraries...".format(sample_id))
@@ -165,6 +169,8 @@ if len(library_ids) > 1:
     adata = adata.concatenate([adata_dict[library_ids[j]] for j in range(1,len(library_ids))])
 
 add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
+summary.append("Started with a total of {} cells and {} genes coming from {} libraries.".format(
+    initial_n_obs, adata.n_vars, len(library_ids)))
 
 add_to_log("Adding metadata...")
 add_to_log("Downloading the Donors sheet from the Google spreadsheets...")
@@ -193,6 +199,7 @@ if adata.n_obs > 0:
 else:
     no_cells = True
     add_to_log("Detected no cells. Skipping data processing steps.")
+    summary.append("Detected no cells; skipped data processing steps.")
 
 if not no_cells:
     try:
@@ -248,8 +255,10 @@ if not no_cells:
         n_obs_before = rna.n_obs
         rna = rna[is_solo_singlet,]
         add_to_log("Removed {} estimated doublets; {} droplets remained.".format(n_obs_before-rna.n_obs,rna.n_obs))
+        summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
             add_to_log("No cells left after doublet detection. Skipping the next processing steps.")
+            summary.append("No cells left after doublet detection.")
         else:
             add_to_log("Normalizing RNA...")
             rna.layers["counts"] = rna.X.copy()
@@ -322,7 +331,16 @@ if not sandbox_mode:
             data_dir, prefix, version, scvi_model_file)
         add_to_log("sync_cmd: {}".format(sync_cmd))
         add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-        add_to_log("Execution of process_sample.py is complete.")
+
+add_to_log("Execution of process_sample.py is complete.")
+
+summary.append("Final number of cells: {}, final number of genes: {}.".format(
+    adata.n_obs, adata.n_vars))
+for i in summary:
+    add_to_log(i)
+
+logging.shutdown()
+if not sandbox_mode:
     # Uploading log file to S3...
     sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)

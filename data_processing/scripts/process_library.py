@@ -96,6 +96,8 @@ else:
     if not h5ad_file_exists:
         add_to_log("The following h5ad file does not exist on S3: {}".format(h5ad_file))
 
+summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
+
 ############################################
 ###### LIBRARY PROCESSING BEGINS HERE ######
 ############################################
@@ -112,6 +114,9 @@ add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 add_to_log("Reading aligned h5ad file...")
 aligned_h5ad_file = os.path.join(data_dir, aligned_h5ad_file)
 adata = sc.read_h5ad(aligned_h5ad_file)
+
+summary.append("Started with a total of {} cells and {} genes.".format(
+    adata.n_obs, adata.n_vars))
 
 add_to_log("Applying basic filters...")
 
@@ -169,10 +174,18 @@ if not sandbox_mode:
         data_dir, prefix, version, h5ad_file)
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-    add_to_log("Uploading log file to S3...")
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, logger_file)
-    add_to_log("sync_cmd: {}".format(sync_cmd))
-    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
 add_to_log("Execution of process_library.py is complete.")
+
+summary.append("Final number of cells: {}, final number of genes: {}.".format(
+    adata.n_obs, adata.n_vars))
+for i in summary:
+    add_to_log(i)
+
+logging.shutdown()
+if not sandbox_mode:
+    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+        data_dir, prefix, version, logger_file)
+    os.system(sync_cmd)
+    #add_to_log("sync_cmd: {}".format(sync_cmd))
+    #add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
