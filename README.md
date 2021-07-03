@@ -14,16 +14,15 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     2. [Downloading data via the AWS console](#download_console)
     3. [Downloading data via terminal](#download_terminal)
 3. [Data upload](#upload)
-    1. [Prerequisites](#prerequisites)
-    2. [File naming conventions](#upload_naming)
-    3. [Upload to S3](#upload_upload)
+    1. [File naming conventions](#upload_naming)
+    2. [Upload to S3](#upload_upload)
 4. [Data visualization](#visualization)
     1. [Visualization using cellxgene](#visualization_cellxgene)
     2. [Live VISION Sessions](#visualization_live)
     3. [Local VISION Sessions](#visualization_local)
 5. [Data Processing](#processing)
     1. [Prerequisites](#processing_prerequisites)
-    2. [Processing libraries](#Processing_libraries)
+    2. [Processing libraries](#processing_libraries)
     3. [Processing samples](#processing_samples)
     4. [Sandbox envorinment](#sandbox_envorinment)
     5. [Job queue](#job_queue)
@@ -306,7 +305,7 @@ Then, in order to start a VISION session locally, we run:
 ## <a name="processing"></a> Data Processing
 
 This section documents the pipeline for data processing (post-alignment processing of libraries and sample-level integration).
-Data processing can be performed by data owners in a sandbox environment (on a local machine), which allows to fine tune configurations. One such configurations are curated by a data owner, they can be uploaded to the S3 bucket into a queue, from which a system admin from the Yosef group will execute the processing (based on the configurations provided by the data owners). 
+Data processing should be performed by data owners in a sandbox environment (on a local machine), which allows to fine tune processing configurations. Once such configurations are curated by a data owner, they can be uploaded to the S3 bucket into a queue, from which a system admin from the Yosef group will execute the processing (i.e., based on the configurations provided by the data owners). This process is detailed below.
 
 ### <a name="processing_prerequisites"></a> Prerequisites
 
@@ -319,23 +318,44 @@ conda env create -f immune_aging.py_env.v1.yml
 ```
 This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`
 
+Finally, as a data owner, you will need to fine tune processing configurations for each of the libraries and each of the samples that you are in charge of. This will require you to run the processing scripts locally. The processing scripts can be found in this repository, <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/scripts">here</a>. It is advised that you clone the repository and make sure to pull updates before working on new data.
+
 ### <a name="processing_libraries"></a> Processing libraries
 
-The script `run_processing_pipeline.py` will...
+The script `process_library.py` runs on a single aligned library and performs basic filtering as well as demultiplexing if applicable. All the parameters for the filtering steps and the demultiplexing are defined in a configuration file. Once you set up a configuration file you can run the library processing script as follows:
 
-For example, run:
 ```python
-python run_processing_pipeline.py test_config_file.txt
+python process_library.py configs.txt
 ```
-
-This script initiates processing_pipeline.py which.. runs a job..
+<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_library.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_library.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_library_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
 ### <a name="processing_samples"></a> Processing samples
+
+The script `process_sample.py` process data from a single sample (i.e. specific donor, tissue, and stimulation/no-stimulation). For samples that were sequences using multiple libraries this script integrates the data from the different libraries. Briefly, the script performs filtering, normalization, batch correction, ans doublet detection, as well as collects all available metadata for the sample (from the IA Google Spreadsheet). All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
+
+```python
+python process_sample.py configs.txt
+```
+<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_library.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
 
 ### <a name="sandbox_envorinment"></a> Sandbox envorinment
 
 ### <a name="job_queue"></a> Job queue
+
+
+
+
+	upload jobs via console
+	document the queue folder and the .running folders
+	explain the idea - they locally test and eventually upload configfiles (upload mechanism does not exist yet)
+			for process sample the aligned data files (either generated locally by the process library script or downloaded via cli from s3) should be in a directory called <donor_id>_<seq_run>
+	link to config files, template and docs
+	sandbox mode -- there is a field in the configs
+	can clone repo and run the scripts locally
+	can open new branch and us PRs to make updates to scipr;t script must remain consistent with previous versions in a way that allows previous configs files to work (so never removing funtionality, just addine new) - critical for reproducibility.
+	need to explain that in some cases execution may faild (e.g., due to inappropriate parameters or no ramaining enough cells -- the logs will be uploaded in that case to S3 etc)
+
 
 
 ## <a name="maintenance"></a> Data Hub maintenance
