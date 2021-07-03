@@ -341,21 +341,19 @@ python process_sample.py configs.txt
 
 ### <a name="sandbox_envorinment"></a> Sandbox envorinment
 
+The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with differnet configurations. Once the configurations were tuned and reported by the data owner as appropriate, a system admin can run the processing while setting `sandbox_mode` to `"False"`.
+
+It is likely that during data curation data owners will find bugs and/or will have suggestions for implementing additional/different logics in the processing scripts. You can do so by either posting an issue or making a pull request with your suggested fixes. If you are suggesting you own fixed, please bear in mind that any updates will have to maintain backwards compatibility, which will assure future reproducibility of previous versions of the processed data.
+
 ### <a name="job_queue"></a> Job queue
 
+Once a data owner makes a final decision about configurations for the processing of specific libraries and samples, the final configuration files should be uploaded to the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>. Specifically, configurations for processing libraries should be uploaded to `s3://immuneaging/job_queue/process_library/` and configurations for processing samples should be uploaded to `s3://immuneaging/job_queue/process_sample/`. Once configuration files are uploaded to these directiroes they are considered as jobs to be executed, and the outputs of the processing will be saved, stamed with a version, and become viewable via the S3 bucket to everyone with data access in the project.
 
+Once an admin starts executing the jobs in the queue, the configuration files will be removed from their original directories and will be moved to 
+`s3://immuneaging/job_queue/process_library.running/` and `s3://immuneaging/job_queue/process_sample.running/` to indicate their status.
 
-
-	upload jobs via console
-	document the queue folder and the .running folders
-	explain the idea - they locally test and eventually upload configfiles (upload mechanism does not exist yet)
-			for process sample the aligned data files (either generated locally by the process library script or downloaded via cli from s3) should be in a directory called <donor_id>_<seq_run>
-	link to config files, template and docs
-	sandbox mode -- there is a field in the configs
-	can clone repo and run the scripts locally
-	can open new branch and us PRs to make updates to scipr;t script must remain consistent with previous versions in a way that allows previous configs files to work (so never removing funtionality, just addine new) - critical for reproducibility.
-	need to explain that in some cases execution may faild (e.g., due to inappropriate parameters or no ramaining enough cells -- the logs will be uploaded in that case to S3 etc)
-
+**NOTE**:
+At the moment, the system does not notify the admins about new jobs in the queue. If you upload new jobs please notify Elior Rahmani by email (erahmani@berkeley.edu).
 
 
 ## <a name="maintenance"></a> Data Hub maintenance
