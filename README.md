@@ -166,6 +166,10 @@ The `processed_samples` directory stores data of processed samples (i.e. sample-
 Here, files with the prefix `process_sample.configs.` incude the configurations that were used in the execution of the sample processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. 
 Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
+
+**Note**:
+In some cases, the sub-directories under `processed_libraries` and `processed_samples` may not contain data files (i.e., h5ad files) due to a failure of the processing pipeline to run on a specific library or sample. In such cases, there will still be a log file that should include some error message at the end.
+
 ### <a name="download_console"></a> Downloading data via the AWS console
 
 Data can be downloaded from the Immune Aging S3 bucket by logging in to AWS through <a href="https://911998420209.signin.aws.amazon.com/console.">this link</a> and navigating through the project's directory structure.
