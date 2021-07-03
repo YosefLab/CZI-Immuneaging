@@ -384,12 +384,10 @@ Brief explanation of the process of working with the queue - has a script for ge
 
 ---
 
-## Authors & Maintainers of the Immune Aging Data Hub
+## Current Admins of the Immune Aging Data Hub
 
 Elior Rahmani <erahmani@berkeley.edu>
 
-Galen Xing <gx2113@columbia.edu>
+## Authors of the Immune Aging Data Hub
 
-Allon Wagner <allonwag@berkeley.edu>
-
-Nir Yosef <niryosef@berkeley.edu>
+Elior Rahmani, Galen Xing, Allon Wagner, and Nir Yosef
