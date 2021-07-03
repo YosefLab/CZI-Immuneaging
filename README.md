@@ -41,10 +41,10 @@ The project's data is stored on an Amazon Web Services (AWS) Simple Storage Serv
 1. Get an IAM user and credentials file:
 You will need an Identity and Access Management (IAM) user account, which will be associated with a specific user in the Immune Aging S3 bucket. Your user account will allow you to access the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>.
 <br /><br />
-If you will be uploading data to the bucket or will be using terminal commands for downloading data (i.e. rather than using the AWS console for downloading; terminal download, which will be described later, allows to download large amount of files more conveniently), you will also need a user-specific credentials file that will allow you to access the S3 bucket via terminal.
+If you will be uploading data to the bucket or will be using terminal commands for downloading data (i.e., rather than using the AWS console for downloading; terminal download, which will be described later, allows to download large amount of files more conveniently), you will also need a user-specific credentials file that will allow you to access the S3 bucket via terminal.
 <br /><br />
 The Yosef group will manage the generation of both IAM users and credentials file for collaborators on the Immune Aging project. 
-In order to set up an IAM user and receive credentials file please email Elior Rahmani (erahmani@berkeley.edu) and cc your PI for approval of your request (the project's PIs are Menna Clatworthy, Donna Farber, Muzz Haniffa, Joanne Jones, Peter Sims, Sarah Teichmann, Roser Vento, and Nir Yosef). Note that IAM accounts and credentials files will be issued with read access only for all users, except for designated data uploaders and data processors who will also get write (i.e. upload) access. In any case, **DO NOT SHARE THE CREDENTIALS FILE WITH ANYONE**.
+In order to set up an IAM user and receive credentials file please email Elior Rahmani (erahmani@berkeley.edu) and cc your PI for approval of your request (the project's PIs are Menna Clatworthy, Donna Farber, Muzz Haniffa, Joanne Jones, Peter Sims, Sarah Teichmann, Roser Vento, and Nir Yosef). Note that IAM accounts and credentials files will be issued with read access only for all users, except for designated data uploaders and data processors who will also get write (i.e., upload) access. In any case, **DO NOT SHARE THE CREDENTIALS FILE WITH ANYONE**.
 
 1. Install AWS CLI (Optional for downloading data):
 
@@ -86,7 +86,7 @@ The root directory of the Immune Aging S3 bucket includes the following sub-dire
 * raw_sanger/
 * test_folder/
 
-Most of the users should mostly care about the `processed_samples`, which includes a processed data file for each sample in the project.
+Most of the users should mostly care about the `processed_samples` directory, which includes a processed data file for each sample in the project.
 This directory, as well as the directories `aligned_libraries` and `processed_libraries` -  intermediate products of the data processing pipline - are discussed in detail below.
 Briefly, the directories `raw_columbia` and `raw_sanger` are designated for raw data uploads (more details under [Data upload](#upload)) ,`job_queue` is a job queue to be used by data processors (more details under [Data Processing](#processing)), and `test_folder` is being used by the system admins for testing.
 
@@ -124,7 +124,7 @@ The structure of the `aligned_libraries` directory is as follows:
 
 The `configs` directory includes versioned configuration files for the alingment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alingment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log filw documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
-The `processed_libraries` directory stores data of processed libraries (i.e. beyond alingment), an intermediate product before the sample-level processing; its structure is as follows:
+The `processed_libraries` directory stores data of processed libraries (i.e., beyond alingment), an intermediate product before the sample-level processing; its structure is as follows:
 
 * processed_libraries/
     * library1/
@@ -143,7 +143,7 @@ The `processed_libraries` directory stores data of processed libraries (i.e. bey
 
 Here, files with the prefix `process_library.configs.` incude the configurations that were used in the execution of the library processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. As in the `aligned_libraries` directory, the actual library names follow the naming convention `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
-The `processed_samples` directory stores data of processed samples (i.e. sample-level integration across different libraries); its structure is as follows:
+The `processed_samples` directory stores data of processed samples (i.e., sample-level integration across different libraries); its structure is as follows:
 
 * processed_samples/
     * sample1/
@@ -185,7 +185,7 @@ To read from the S3 bucket via terminal:
 
 ### <a name="upload_naming"></a> File naming conventions
 
-New data can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e. `.fastq.gz` files). Each file must follow the following naming convention:
+New data can only be uploaded as pre-aligned, gzip-compressed `fastq` files (i.e., `.fastq.gz` files). Each file must follow the following naming convention:
 ```
 <donor_id>_<seq_run>_<library_type>_<library_id>_<S_number>_<lane>_<read>_001.fastq.gz
 ```
@@ -250,7 +250,7 @@ Notes:
 
 ### <a name="visualization_cellxgene"></a> Visualization using cellxgene
 
-Processed data can be easily visualized using <a href="https://chanzuckerberg.github.io/cellxgene/">cellxgene</a>, which provides a browser-based user-interface for basic data exploration. Currently, only our sample-level data files can be visualized by cellxgene (i.e. .h5ad files under the `processed_samples` directory on the S3 bucket).
+Processed data can be easily visualized using <a href="https://chanzuckerberg.github.io/cellxgene/">cellxgene</a>, which provides a browser-based user-interface for basic data exploration. Currently, only our sample-level data files can be visualized by cellxgene (i.e., .h5ad files under the `processed_samples` directory on the S3 bucket).
 
 In order to run cellxgene, first install it via terminal by running:
 
@@ -279,7 +279,7 @@ The most updated VISION sessions can be found here, separated by tissue:
 Coming soon...
 <!--
 VISION can also be launched locally given a vision object.
-We keep the previous VISION objects (i.e. that were previously displayed in the live session) as well as the latest vision object on the S3 bucket.
+We keep the previous VISION objects (i.e., that were previously displayed in the live session) as well as the latest vision object on the S3 bucket.
 
 In more detail the S3 bucket includes a directory named `vision`, which follows the following structure:
 * vision/
@@ -305,12 +305,12 @@ Then, in order to start a VISION session locally, we run:
 ## <a name="processing"></a> Data Processing
 
 This section documents the pipeline for data processing (post-alignment processing of libraries and sample-level integration).
-Data processing should be performed by data owners in a sandbox environment (on a local machine), which allows to fine tune processing configurations. Once such configurations are curated by a data owner, they can be uploaded to the S3 bucket into a queue, from which a system admin from the Yosef group will execute the processing (i.e., based on the configurations provided by the data owners). This process is detailed below.
+Data processing should be performed by data owners in a sandbox environment (on their own local machine or server), which allows to fine tune processing configurations. Once such configurations are curated by a data owner, they can be uploaded to the S3 bucket into a queue, from which a system admin from the Yosef group will execute the final processing (i.e., based on the configurations provided by the data owners) to generate the processed data files and make them downloadable for other users in the project. This process is detailed below.
 
 ### <a name="processing_prerequisites"></a> Prerequisites
 
 First, Download anaconda with python >= 3.7.
-Second, get the .yml file of the latest version of the python environment from <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/envs">here</a> (i.e. immune_aging.py_env.*.yml where * is the latest version available), and use it to set up a new conda environment via terminal.
+Second, get the .yml file of the latest version of the python environment from <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/envs">here</a> (i.e., immune_aging.py_env.*.yml where * is the latest version available), and use it to set up a new conda environment via terminal.
 
 For example:
 ```
@@ -331,23 +331,23 @@ python process_library.py configs.txt
 
 ### <a name="processing_samples"></a> Processing samples
 
-The script `process_sample.py` process data from a single sample (i.e. specific donor, tissue, and stimulation/no-stimulation). For samples that were sequences using multiple libraries this script integrates the data from the different libraries. Briefly, the script performs filtering, normalization, batch correction, ans doublet detection, as well as collects all available metadata for the sample (from the IA Google Spreadsheet). All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
+The script `process_sample.py` process data from a single sample (i.e., specific donor, tissue, and stimulation/no-stimulation). For samples that were sequenced using multiple libraries this script integrates the data from the different libraries. Briefly, the script performs filtering, normalization, batch correction, and doublet detection, as well as collects all available metadata for the sample (from the IA Google Spreadsheet). All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
 
 ```python
 python process_sample.py configs.txt
 ```
-<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_library.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample_configs.md">here</a> you can find a description of each of the fields in the configuration file.
+<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_sample.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
 
 ### <a name="sandbox_envorinment"></a> Sandbox envorinment
 
-The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with differnet configurations. Once the configurations were tuned and reported by the data owner as appropriate, a system admin can run the processing while setting `sandbox_mode` to `"False"`.
+The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with differnet configurations. Once the configurations were tuned and reported by the data owner as appropriate (see next subsection), a system admin can run the processing while setting `sandbox_mode` to `"False"`.
 
-It is likely that during data curation data owners will find bugs and/or will have suggestions for implementing additional/different logics in the processing scripts. You can do so by either posting an issue or making a pull request with your suggested fixes. If you are suggesting you own fixed, please bear in mind that any updates will have to maintain backwards compatibility, which will assure future reproducibility of previous versions of the processed data.
+It is likely that during data curation data owners will find bugs and/or will have suggestions for implementing additional/different logics in the processing scripts. You can either post an issue or make a pull request with your suggestions. If you are suggesting any changes please bear in mind that any updates will have to maintain backwards compatibility in order to gaurantee reproducibility of previous versions of the processed data.
 
 ### <a name="job_queue"></a> Job queue
 
-Once a data owner makes a final decision about configurations for the processing of specific libraries and samples, the final configuration files should be uploaded to the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>. Specifically, configurations for processing libraries should be uploaded to `s3://immuneaging/job_queue/process_library/` and configurations for processing samples should be uploaded to `s3://immuneaging/job_queue/process_sample/`. Once configuration files are uploaded to these directiroes they are considered as jobs to be executed, and the outputs of the processing will be saved, stamed with a version, and become viewable via the S3 bucket to everyone with data access in the project.
+Once a data owner makes a final decision about configurations for the processing of specific libraries and samples, the final configuration files should be uploaded to the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>. Specifically, configurations for processing libraries should be uploaded to `s3://immuneaging/job_queue/process_library/` and configurations for processing samples should be uploaded to `s3://immuneaging/job_queue/process_sample/`. Once configuration files are uploaded to these directiroes they are considered as jobs to be executed, and the outputs of the processing will be saved, stamped with a version, and become viewable via the S3 bucket to everyone with data access in the project.
 
 Once an admin starts executing the jobs in the queue, the configuration files will be removed from their original directories and will be moved to 
 `s3://immuneaging/job_queue/process_library.running/` and `s3://immuneaging/job_queue/process_sample.running/` to indicate their status.
