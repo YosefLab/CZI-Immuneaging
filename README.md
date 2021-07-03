@@ -384,7 +384,7 @@ Brief explanation of the process of working with the queue - has a script for ge
 
 ---
 
-## Current Admins of the Immune Aging Data Hub
+## Admins of the Immune Aging Data Hub
 
 Elior Rahmani <erahmani@berkeley.edu>
 
