@@ -358,21 +358,29 @@ At the moment, the system does not notify the admins about new jobs in the queue
 
 ## <a name="maintenance"></a> Data Hub maintenance
 
+This section is a documentation for system admins.
 
 ### <a name="maintenance_iams"></a> Setting up an AWS IAM
 
-Explanations...
+TODO...
 
 ### <a name="maintenance_credentials"></a> Generating an AWS credentials file
 
-Explanations...
+TODO...
 
 ### align libraries
 
+TODO...
+
+<!--
 install cellranger and download ref genome..
 
 adding keys to the config files - (1) if adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files... (2) otherwise it will automatically generate a new version etc.. but need to make sure the script is backwards compatible...
 
+link to the configs template and description of `align_library.py`
+
+Brief explanation of the process of working with the queue - has a script for generating default configs for testing; those can then be manually uploaded to s3 and then there's a script for generating sh files for running jobs. they'll be splitted by donors and one script for samples one for libs. run the libs first and only then the samples one.
+-->
 
 ---
 
