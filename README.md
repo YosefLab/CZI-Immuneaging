@@ -318,6 +318,16 @@ conda env create -f immune_aging.py_env.v1.yml
 ```
 This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`
 
+Every time you wish to run the processing scripts you need to activate the environment. Activating the above environment can be done by running:
+```
+source activate immune_aging.py_env.v1
+```
+
+At the end of the execution you can deactivate the environment by typing
+```
+conda deactivate
+```
+
 Finally, as a data owner, you will need to fine tune processing configurations for each of the libraries and each of the samples that you are in charge of. This will require you to run the processing scripts locally. The processing scripts can be found in this repository, <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/scripts">here</a>. It is advised that you clone the repository and make sure to pull updates before working on new data.
 
 ### <a name="processing_libraries"></a> Processing libraries
