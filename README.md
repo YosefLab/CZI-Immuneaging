@@ -27,8 +27,7 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     4. [Sandbox envorinment](#sandbox_envorinment)
     5. [Job queue](#job_queue)
 6. [Data Hub admins](#admins)
-    1. [Setting up an AWS IAM](#admins_iams)
-    2. [Generating an AWS credentials file](#admins_credentials)
+    1. [Aligning libraries](#admins_lib_alignment)
 
 ---
 
@@ -370,17 +369,14 @@ At the moment, the system does not notify the admins about new jobs in the queue
 
 This section is a documentation for system admins.
 
-### <a name="admins_iams"></a> Setting up an AWS IAM
-
-TODO...
-
-### <a name="admins_credentials"></a> Generating an AWS credentials file
-
-TODO...
-
 ### <a name="admins_lib_alignment"></a> Aligning libraries
 
-TODO...
+Once the fastq files of new data from a donor have been uploaded to the S3 bucket and the Google Spreadsheet has been properly updated to include all metadata about the donor and the associated samples we can start the library alignment. The script `generate_library_alignment_script.py` generates a shell script that can be used to execute the library alignment script `align_library.py` on all the libraries associated with the donor.
+
+Note that the script `generate_library_alignment_script.py` requires a configuration file, which will be used for the execution of `align_library.py`.
+<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library.configs_file.example.txt">Here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library_configs.md">here</a> you can find a description of each of the configuration fields.
+
+Following alignment, we can now process the libraries and then the samples - see [Data processing](#processing).
 
 <!--
 install cellranger and download ref genome..
