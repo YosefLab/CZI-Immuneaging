@@ -26,9 +26,9 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     3. [Processing samples](#processing_samples)
     4. [Sandbox envorinment](#sandbox_envorinment)
     5. [Job queue](#job_queue)
-6. [Data Hub maintenance](#maintenance)
-    1. [Setting up an AWS IAM](#maintenance_iams)
-    2. [Generating an AWS credentials file](#maintenance_credentials)
+6. [Data Hub admins](#admins)
+    1. [Setting up an AWS IAM](#admins_iams)
+    2. [Generating an AWS credentials file](#admins_credentials)
 
 ---
 
@@ -366,19 +366,19 @@ Once an admin starts executing the jobs in the queue, the configuration files wi
 At the moment, the system does not notify the admins about new jobs in the queue. If you upload new jobs please notify Elior Rahmani by email (erahmani@berkeley.edu).
 
 
-## <a name="maintenance"></a> Data Hub maintenance
+## <a name="admins"></a> Data Hub admins
 
 This section is a documentation for system admins.
 
-### <a name="maintenance_iams"></a> Setting up an AWS IAM
+### <a name="admins_iams"></a> Setting up an AWS IAM
 
 TODO...
 
-### <a name="maintenance_credentials"></a> Generating an AWS credentials file
+### <a name="admins_credentials"></a> Generating an AWS credentials file
 
 TODO...
 
-### align libraries
+### <a name="admins_lib_alignment"></a> Aligning libraries
 
 TODO...
 
