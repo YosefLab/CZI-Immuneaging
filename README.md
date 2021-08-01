@@ -26,9 +26,8 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     3. [Processing samples](#processing_samples)
     4. [Sandbox envorinment](#sandbox_envorinment)
     5. [Job queue](#job_queue)
-6. [Data Hub maintenance](#maintenance)
-    1. [Setting up an AWS IAM](#maintenance_iams)
-    2. [Generating an AWS credentials file](#maintenance_credentials)
+6. [Data Hub admins](#admins)
+    1. [Aligning libraries](#admins_lib_alignment)
 
 ---
 
@@ -318,6 +317,16 @@ conda env create -f immune_aging.py_env.v1.yml
 ```
 This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`
 
+Every time you wish to run the processing scripts you need to activate the environment. Activating the above environment can be done by running:
+```
+source activate immune_aging.py_env.v1
+```
+
+At the end of the execution you can deactivate the environment by typing
+```
+conda deactivate
+```
+
 Finally, as a data owner, you will need to fine tune processing configurations for each of the libraries and each of the samples that you are in charge of. This will require you to run the processing scripts locally. The processing scripts can be found in this repository, <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/scripts">here</a>. It is advised that you clone the repository and make sure to pull updates before working on new data.
 
 ### <a name="processing_libraries"></a> Processing libraries
@@ -356,21 +365,18 @@ Once an admin starts executing the jobs in the queue, the configuration files wi
 At the moment, the system does not notify the admins about new jobs in the queue. If you upload new jobs please notify Elior Rahmani by email (erahmani@berkeley.edu).
 
 
-## <a name="maintenance"></a> Data Hub maintenance
+## <a name="admins"></a> Data Hub admins
 
 This section is a documentation for system admins.
 
-### <a name="maintenance_iams"></a> Setting up an AWS IAM
+### <a name="admins_lib_alignment"></a> Aligning libraries
 
-TODO...
+Once the fastq files of new data from a donor have been uploaded to the S3 bucket and the Google Spreadsheet has been properly updated to include all metadata about the donor and the associated samples we can start the library alignment. The script `generate_library_alignment_script.py` generates a shell script that can be used to execute the library alignment script `align_library.py` on all the libraries associated with the donor.
 
-### <a name="maintenance_credentials"></a> Generating an AWS credentials file
+Note that the script `generate_library_alignment_script.py` requires a configuration file, which will be used for the execution of `align_library.py`.
+<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library.configs_file.example.txt">Here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library_configs.md">here</a> you can find a description of each of the configuration fields.
 
-TODO...
-
-### align libraries
-
-TODO...
+Following alignment, we can now process the libraries and then the samples - see [Data processing](#processing).
 
 <!--
 install cellranger and download ref genome..
@@ -384,12 +390,10 @@ Brief explanation of the process of working with the queue - has a script for ge
 
 ---
 
-## Authors & Maintainers of the Immune Aging Data Hub
+## Admins of the Immune Aging Data Hub
 
 Elior Rahmani <erahmani@berkeley.edu>
 
-Galen Xing <gx2113@columbia.edu>
+## Authors of the Immune Aging Data Hub
 
-Allon Wagner <allonwag@berkeley.edu>
-
-Nir Yosef <niryosef@berkeley.edu>
+Elior Rahmani, Galen Xing, Allon Wagner, and Nir Yosef
