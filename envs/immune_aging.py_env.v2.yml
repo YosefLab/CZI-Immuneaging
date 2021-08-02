@@ -1,0 +1,24 @@
+# Note that this environment allows using celda and vision, however, exporting it to get exact package versions yields a yml file that dails when trying to install celda using the immune_aging.R_setup.v2.R script.
+name: immune_aging.py_env.v2
+channels:
+  - conda-forge
+  - r
+  - bioconda
+  - defaults
+prefix: $CONDA_PREFIX"/envs/immune_aging.py_env.v2"
+dependencies:
+  - pip=20.3.3=pyhd8ed1ab_0
+  - python=3.7.9=h7579374_0
+  - r-base=4.0.5=hb67fd72_2
+  - gdown=3.12.2=pyh9f0ad1d_0
+  - r-devtools=2.4.0
+  - r-magick
+  - r-cairo
+  - bioconductor-complexheatmap
+  - r-multipanelfigure
+  - r-sodium # for vision
+  - r-plumber # for vision
+  - pip:
+    - scvi-tools==0.11.0
+    - scanpy==1.7.2
+    - scikit-misc==0.1.3
