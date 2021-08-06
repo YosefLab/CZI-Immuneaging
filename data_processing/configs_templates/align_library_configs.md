@@ -16,5 +16,5 @@ The configuration file is formatted as json with the following fields:
 * `"s3_access_file"` - absolute path to the aws credentials file (provided by the admin)
 * `"python_env_version"` - The environment name to be used when running python commands for align_library.py
 * `"r_env_version"` - The environment name to be used when running R commands for align_library.py; this environment is currently unused in align_library.py
-* `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `r_env_version`; this is currently unused in align_library.py
+* `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `r_env_version`
 * `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with data_processing/scripts)
