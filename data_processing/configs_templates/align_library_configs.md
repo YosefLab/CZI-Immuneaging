@@ -14,7 +14,7 @@ The configuration file is formatted as json with the following fields:
 * `"alignment_ref_genome_path"` - Absolute path to the directory containing the provided reference genome file
 * `"berkeley_user"` - The Berkeley username of the person executing the align_library.py script
 * `"s3_access_file"` - absolute path to the aws credentials file (provided by the admin)
-* `"python_env_version"` - The environment name to be used when running python commands for align_library.py
-* `"r_env_version"` - The environment name to be used when running R commands for align_library.py; this environment is currently unused in align_library.py
-* `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `r_env_version`
+* `"python_env_version"` - The environment name to be used when running align_library.py
+* `"r_env_version"` - The environment name to be used when running R commands for align_library.py; this environment is currently unused in align_library.py, and should be set to `"immune_aging.r_env.v1"`
+* `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
 * `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with data_processing/scripts)

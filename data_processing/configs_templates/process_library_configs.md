@@ -22,4 +22,6 @@ The configuration file is formatted as json with the following fields:
 * `"hashsolo_priors"` - A comma-separated (no spaces) list of priors for hashsolo; the values are the expected fractions of multiplets, singlets, and doublets, respectively
 * `"hashsolo_number_of_noise_barcodes"` - The number of barcodes to be used by hashsolo to create the noise distribution; this number must be less than the number of multiplexed samples (is a number larger than that is provided then the maximal number allows by hashsolo will be used).
 * `"aligned_library_configs_version"` - The alignment version of the library to process - this version number is determined by the configs version that was used to align the library; the latest alignment version of each aligned library can be found on the S3 bucket under `s3://immuneaging/aligned_libraries`
-* `"python_env_version"` - The environment name to be used when running python commands for process_library.py
+* `"python_env_version"` - The environment name to be used when running process_library.py
+* `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
+

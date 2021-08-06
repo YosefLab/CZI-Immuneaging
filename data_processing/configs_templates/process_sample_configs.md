@@ -25,4 +25,5 @@ The configuration file is formatted as json with the following fields:
 * `"umap_min_dist"` - The `min_dist` argument for computing UMAP (using `scanpy.tl.umap`)
 * `"umap_spread"` - The `spread` argument for computing UMAP (using `scanpy.tl.umap`)
 * `"umap_n_components"` - The number of UMAP components to compute (using `scanpy.tl.umap`)
- * `"python_env_version"` - The environment name to be used when running python commands for process_sample.py
+* `"python_env_version"` - The environment name to be used when running process_sample.py
+* `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
