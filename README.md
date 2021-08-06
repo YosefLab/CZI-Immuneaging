@@ -148,11 +148,13 @@ The `processed_samples` directory stores data of processed samples (i.e., sample
     * sample1/
         * v1/
             * sample1.processed.v1.h5ad
+            * sample1.processed.v1.decontx_model.RData
             * sample1.processed.v1.scvi_model.zip
             * process_sample.sample1.v1.log
             * process_sample.configs.sample1.v1.txt
         * v2/
             * sample1.processed.v2.h5ad
+            * sample1.processed.v2.decontx_model.RData
             * sample1.processed.v2.scvi_model.zip
             * process_sample.sample1.v2.log
             * process_sample.configs.sample11.v2.txt
@@ -317,12 +319,13 @@ conda env create -f immune_aging.py_env.v1.yml
 ```
 This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`
 
-Every time you wish to run the processing scripts you need to activate the environment. Activating the above environment can be done by running:
+Activate the environment by typing:
 ```
 source activate immune_aging.py_env.v1
 ```
+and then complete the setup of the environment by openning an R session and running the commands in the latest version of the R setup script (`immune_aging.R_setup.v*.R`), which can be found <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/envs">here</a>.
 
-At the end of the execution you can deactivate the environment by typing
+Note that every time you wish to run the processing scripts you need to activate the environment. At the end of the execution you can deactivate the environment by typing
 ```
 conda deactivate
 ```
