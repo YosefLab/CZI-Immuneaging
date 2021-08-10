@@ -47,9 +47,11 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
 		else:
 			assert BCR_lib is not None
 	# set chemistry
-	assert chemistry == "5'v2" or chemistry == "3'v3"
-	if chemistry == "5'v2":
+	assert chemistry == "5'v1" or chemistry == "5'v2" or chemistry == "3'v2" or chemistry == "3'v3"
+	if chemistry == "5'v1" or chemistry == "5'v2":
 		chem = "fiveprime"
+	if chemistry == "3'v2":
+		chem = "SC3Pv2"
 	if chemistry == "3'v3":
 		chem = "SC3Pv3"
 	libs = []
