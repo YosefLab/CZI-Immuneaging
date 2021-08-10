@@ -1,4 +1,5 @@
 ## This script generates .sh files with commands for running the current processing jobs in the job queue on S3 (one script for running the library processing jobs in the queue and one for the sample processing jobs).
+## Example: python generate_processing_scripts.py <aws_credentials_file> /data/yosef2/scratch/immuneaging/process_libraries /data/yosef2/users/erahmani/projects/immune_aging/code
 
 import sys
 import os

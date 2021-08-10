@@ -151,6 +151,7 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 add_to_log("Reading h5ad files of processed libraries...")
 adata_dict = {}
 initial_n_obs = 0
+solo_genes = set()
 for j in range(len(library_ids)):
     library_id = library_ids[j]
     library_version = library_versions[j]
@@ -159,8 +160,13 @@ for j in range(len(library_ids)):
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
     adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+    solo_genes_j = adata_dict[library_id].var.index[np.logical_not(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0])]
+    if j == 0:
+        solo_genes = solo_genes_j
+    else:
+        solo_genes = np.intersect1d(solo_genes,solo_genes_j)
     initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
-    sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["filter_genes_min_cells"])
+    
 
 add_to_log("Concatenating all cells of sample {} from all libraries...".format(sample_id))
 #adata = adata_dict[library_ids[0]][adata_dict[library_ids[0]].obs["Classification"] == sample_id]
@@ -207,21 +213,61 @@ if not no_cells:
         is_cite = "feature_types" in adata.var and "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
             add_to_log("Detected Antibody Capture features.")    
-            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()    
+            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         else:
             rna = adata.copy()
         add_to_log("Detecting highly variable genes...")
-        if len(library_ids) == 1:
-            batch_key = None
-        else:
+        if is_hto:
             batch_key = "batch"
+        else:
+            batch_key = None
+        add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
+        decontx_data_dir = os.path.join(data_dir,"decontx")
+        os.system("mkdir -p " + decontx_data_dir)
+        raw_counts_file = os.path.join(decontx_data_dir, "{}.raw_counts.txt".format(prefix))
+        decontaminated_counts_file = os.path.join(decontx_data_dir, "{}.decontx.decontaminated.txt".format(prefix))
+        contamination_levels_file = os.path.join(decontx_data_dir, "{}.decontx.contamination.txt".format(prefix))
+        decontx_model_file = os.path.join(decontx_data_dir, "{}.processed.{}.decontx_model.RData".format(prefix, version))
+        r_script_file = os.path.join(decontx_data_dir, "{}.decontx.script.R".format(prefix))
+        df = pd.DataFrame(rna.X.todense().T)
+        df.index = rna.var.index
+        df.columns = rna.obs.index
+        df.to_csv(raw_counts_file)
+        if batch_key is None:
+            batch_file = None
+        else:
+            batch_file = os.path.join(decontx_data_dir, "{}.batch.txt".format(prefix))
+            pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file,  header=False, index=False)
+        # R commands for running and outputing decontx
+        l = ["library('celda')",
+            "x <- as.matrix(read.csv('{}', row.names=1))".format(raw_counts_file),
+            "batch <- if ('{0}' == 'None') NULL else as.character(read.table('{0}', header=FALSE)$V1)".format(batch_file),
+            "res <- decontX(x=x, batch=batch)",
+            "write.table(res$contamination, file ='{}',quote = FALSE,row.names = FALSE,col.names = FALSE)".format(contamination_levels_file),
+            "write.table(as.matrix(res$decontXcounts), file ='{}',quote = FALSE,sep = ',')".format(decontaminated_counts_file),
+            "decontx_model <- list('estimates'=res$estimates, 'z'= res$z)",
+            "save(decontx_model, file='{}')".format(decontx_model_file)]
+        with open(r_script_file,'w') as f: 
+            f.write("\n".join(l))
+        add_to_log("Running the script in {}".format(decontx_model_file))
+        os.system("Rscript " + r_script_file)
+        add_to_log("Adding decontaminated counts and contamination levels to data object...")
+        contamination_levels = pd.read_csv(contamination_levels_file, index_col=0, header=None).index
+        decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
+        rna.obs["contamination_levels"] = contamination_levels
+        rna.layers["decontaminated_counts"] = decontaminated_counts
+        rna.X = np.round(decontaminated_counts)
+        #rna.layers["decontaminated_counts.rounded"] = np.round(rna.layers["decontaminated_counts"])
+        # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
+        rna = rna[:,solo_genes]
+        add_to_log("Detecting highly variable genes...")
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
-            flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key)
+            flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         add_to_log("Setting up scvi...")
         scvi.data.setup_anndata(rna, batch_key=batch_key)
         add_to_log("Training scvi model...")
         model = scvi.model.SCVI(rna)
-        model.train(check_val_every_n_epoch=1000, max_epochs=configs["scvi_max_epochs"])
+        model.train(max_epochs=configs["scvi_max_epochs"])
         add_to_log("Saving scvi latent representation...")
         latent = model.get_latent_representation()
         rna.obsm["X_scVI"] = latent
@@ -242,10 +288,12 @@ if not no_cells:
             is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
             for batch in batches:
                 add_to_log("Running solo on batch {}...".format(batch))
+                #tmp=scvi.external.SOLO(rna)
+                #tmp.train(max_epochs=5)
                 solo_batch = scvi.external.SOLO.from_scvi_model(model, restrict_to_batch=batch)
                 solo_batch.train(max_epochs=configs["solo_max_epochs"])
                 is_solo_singlet[(rna.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
-            rna.obs["is_solo_singlet"] = is_solo_singlet
+                rna.obs["is_solo_singlet"] = is_solo_singlet
         else:
             add_to_log("Running solo...")
             solo = scvi.external.SOLO.from_scvi_model(model)
@@ -285,8 +333,8 @@ if not no_cells:
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
         # save raw counts
-        adata.layers["counts"] = adata.X.copy()
         adata.raw = adata
+        adata.layers["raw_counts"] = adata.X.copy()
         if adata.n_obs>0:
             # normalize RNA
             if is_cite:
@@ -299,6 +347,8 @@ if not no_cells:
                 sc.pp.log1p(protein)
             else:
                 rna = adata.copy()
+                sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
+                sc.pp.log1p(rna)
             adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
             if is_cite:
                 adata.X[:, (adata.var["feature_types"] == "Antibody Capture").values] = protein.X
@@ -329,6 +379,11 @@ if not sandbox_mode:
         add_to_log("Uploading scvi model files (a single .zip file) to S3...")
         sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
             data_dir, prefix, version, scvi_model_file)
+        add_to_log("sync_cmd: {}".format(sync_cmd))
+        add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))        
+        add_to_log("Uploading decontx model file to S3...")
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+            decontx_data_dir, prefix, version, decontx_model_file.split("/")[-1])
         add_to_log("sync_cmd: {}".format(sync_cmd))
         add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
