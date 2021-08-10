@@ -9,6 +9,7 @@
 "sample_id": "591C-SPL-1",
 "library_ids": "CZI-IA10034924,CZI-IA10034925,CZI-IA10034926",
 "processed_library_configs_version": "v1,v1,v1",
+"min_cells_per_library": 200,
 "normalize_total_target_sum": 10000,
 "n_highly_variable_genes": 3000,
 "highly_variable_genes_flavor": "seurat_v3",

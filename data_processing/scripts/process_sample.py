@@ -148,10 +148,14 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
 
+alerts = []
+
 add_to_log("Reading h5ad files of processed libraries...")
+is_hto = len(library_ids)>1
 adata_dict = {}
 initial_n_obs = 0
 solo_genes = set()
+library_ids_keep = []
 for j in range(len(library_ids)):
     library_id = library_ids[j]
     library_version = library_versions[j]
@@ -159,16 +163,27 @@ for j in range(len(library_ids)):
         library_type, library_id, library_version))
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
-    adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+    if is_hto:
+        adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+        if "min_cells_per_library" in configs and configs["min_cells_per_library"] > adata_dict[library_id].n_obs:
+            # do not consider cells from this library
+            msg = "Cells from library {} were not included - there are {} cells from the sample, however, min_cells_per_library was set to {}.".format(
+                library_id,adata_dict[library_id].n_obs,configs["min_cells_per_library"])
+            add_to_log(msg)
+            alerts.append(msg)
+            del adata_dict[library_id]
+            continue
+    library_ids_keep.append(library_id)
     solo_genes_j = adata_dict[library_id].var.index[np.logical_not(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0])]
+    initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
     if j == 0:
         solo_genes = solo_genes_j
     else:
         solo_genes = np.intersect1d(solo_genes,solo_genes_j)
-    initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
-    
 
-add_to_log("Concatenating all cells of sample {} from all libraries...".format(sample_id))
+library_ids = library_ids_keep
+
+add_to_log("Concatenating all cells of sample {} from available libraries...".format(sample_id))
 #adata = adata_dict[library_ids[0]][adata_dict[library_ids[0]].obs["Classification"] == sample_id]
 adata = adata_dict[library_ids[0]]
 if len(library_ids) > 1:
@@ -209,7 +224,6 @@ else:
 
 if not no_cells:
     try:
-        is_hto = len(library_ids)>1
         is_cite = "feature_types" in adata.var and "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
             add_to_log("Detected Antibody Capture features.")    
@@ -393,6 +407,13 @@ summary.append("Final number of cells: {}, final number of genes: {}.".format(
     adata.n_obs, adata.n_vars))
 for i in summary:
     add_to_log(i)
+
+if len(alerts) == 0:
+    add_to_log("No alerts.")
+else:
+    add_to_log("Alerts:")
+    for i in alerts:
+        add_to_log(i)
 
 logging.shutdown()
 if not sandbox_mode:
