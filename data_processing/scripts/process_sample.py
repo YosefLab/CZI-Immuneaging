@@ -174,7 +174,8 @@ for j in range(len(library_ids)):
             del adata_dict[library_id]
             continue
     library_ids_keep.append(library_id)
-    solo_genes_j = adata_dict[library_id].var.index[np.logical_not(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0])]
+    solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
+    solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]
     initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
     if j == 0:
         solo_genes = solo_genes_j
@@ -268,12 +269,21 @@ if not no_cells:
         add_to_log("Adding decontaminated counts and contamination levels to data object...")
         contamination_levels = pd.read_csv(contamination_levels_file, index_col=0, header=None).index
         decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
+        decontaminated_counts.index = rna.obs.index # note that decontx replaces "-" with "." in the cell names
         rna.obs["contamination_levels"] = contamination_levels
-        rna.layers["decontaminated_counts"] = decontaminated_counts
+        # rna.layers["decontaminated_counts"] = decontaminated_counts
         rna.X = np.round(decontaminated_counts)
         #rna.layers["decontaminated_counts.rounded"] = np.round(rna.layers["decontaminated_counts"])
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
-        rna = rna[:,solo_genes]
+        rna = rna[:,rna.var.index.isin(solo_genes)]
+        # remove empty cells after decontaminations
+        n_obs_before = rna.n_obs
+        rna = rna[rna.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:]
+        n_decon_cells_filtered = n_obs_before-rna.n_obs
+        msg = "Removed {} cells with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(
+            n_decon_cells_filtered, configs["filter_decontaminated_cells_min_genes"])
+        add_to_log(msg)
+        summary.append(msg)
         add_to_log("Detecting highly variable genes...")
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
@@ -323,7 +333,7 @@ if not no_cells:
             summary.append("No cells left after doublet detection.")
         else:
             add_to_log("Normalizing RNA...")
-            rna.layers["counts"] = rna.X.copy()
+            #rna.layers["decontaminated_counts"] = rna.X.copy()
             sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(rna)
             sc.pp.scale(rna)
@@ -343,12 +353,16 @@ if not no_cells:
             rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
         add_to_log("Gathering data...")
-        adata = adata[is_solo_singlet,]
+        keep = adata.obs.index.isin(rna.obs.index)
+        adata = adata[keep,]
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
         # save raw counts
-        adata.raw = adata
         adata.layers["raw_counts"] = adata.X.copy()
+        # save decontaminated counts
+        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
+        # note that for protein counts the decontaminated_counts will be set as the raw_counts
+        adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
             # normalize RNA
             if is_cite:

@@ -79,6 +79,7 @@ for sample_id in sample_ids:
         "library_ids": ",".join(library_ids),
         "processed_library_configs_version": ",".join(processed_library_configs_version),
         "min_cells_per_library": 200,
+        "filter_decontaminated_cells_min_genes": 100,
         "normalize_total_target_sum": 10000,
         "n_highly_variable_genes": 3000,
         "highly_variable_genes_flavor": "seurat_v3",
