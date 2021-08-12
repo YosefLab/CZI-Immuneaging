@@ -169,7 +169,7 @@ for j in range(len(library_ids)):
             # do not consider cells from this library
             msg = "Cells from library {} were not included - there are {} cells from the sample, however, min_cells_per_library was set to {}.".format(
                 library_id,adata_dict[library_id].n_obs,configs["min_cells_per_library"])
-            add_to_log(msg)
+            #add_to_log(msg)
             alerts.append(msg)
             del adata_dict[library_id]
             continue
@@ -177,12 +177,24 @@ for j in range(len(library_ids)):
     solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
     solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]
     initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
-    if j == 0:
+    if len(solo_genes)==0:
         solo_genes = solo_genes_j
     else:
         solo_genes = np.intersect1d(solo_genes,solo_genes_j)
 
 library_ids = library_ids_keep
+
+if len(library_ids)==0:
+    for i in alerts:
+        add_to_log(i)
+    add_to_log("No cells passed the filtering steps. Terminating execution.")
+    logging.shutdown()
+    if not sandbox_mode:
+        # Uploading log file to S3...
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+            data_dir, prefix, version, logger_file)
+        os.system(sync_cmd)
+        sys.exit()
 
 add_to_log("Concatenating all cells of sample {} from available libraries...".format(sample_id))
 #adata = adata_dict[library_ids[0]][adata_dict[library_ids[0]].obs["Classification"] == sample_id]
