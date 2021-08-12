@@ -343,7 +343,7 @@ python process_library.py configs.txt
 
 ### <a name="processing_samples"></a> Processing samples
 
-The script `process_sample.py` process data from a single sample (i.e., specific donor, tissue, and stimulation/no-stimulation). For samples that were sequenced using multiple libraries this script integrates the data from the different libraries. Briefly, the script performs filtering, normalization, batch correction, and doublet detection, as well as collects all available metadata for the sample (from the IA Google Spreadsheet). All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
+The script `process_sample.py` process data from a single sample (i.e., specific donor, tissue, and stimulation/no-stimulation). For samples that were sequenced using multiple libraries this script integrates the data from the different libraries. Briefly, the script performs filtering, integration, normalization, batch correction, ambient RNA filtering, and doublet detection, as well as collects all available metadata for the sample (from the IA Google Spreadsheet). All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
 
 ```python
 python process_sample.py configs.txt
