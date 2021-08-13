@@ -144,6 +144,27 @@ if not sandbox_mode:
 
 summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 
+add_to_log("Downloading the Donors sheet from the Google spreadsheets...")
+donors = read_immune_aging_sheet("Donors")
+add_to_log("Downloading the Samples sheet from the Google spreadsheets...")
+samples = read_immune_aging_sheet("Samples")
+
+# check for each library whether it is hto library (i.e., used to collect more than one sample)
+is_hto = []
+lib_col = "{} lib".format(library_type)
+indices = samples[lib_col].isin(library_ids)
+library_ids2 = samples[lib_col][indices]
+for lib_id in library_ids:
+    if np.sum(library_ids2==lib_id)>1:
+        is_hto.append(True)
+    else:
+        is_hto.append(False)
+
+is_adt = False
+if library_type == "GEX":
+    is_adt = np.all(np.logical_not(pd.isnull(samples["ADT lib"][indices])))
+
+
 ############################################
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
@@ -151,7 +172,6 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 alerts = []
 
 add_to_log("Reading h5ad files of processed libraries...")
-is_hto = len(library_ids)>1
 adata_dict = {}
 initial_n_obs = 0
 solo_genes = set()
@@ -163,7 +183,7 @@ for j in range(len(library_ids)):
         library_type, library_id, library_version))
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
-    if is_hto:
+    if is_hto[j]:
         adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
         if "min_cells_per_library" in configs and configs["min_cells_per_library"] > adata_dict[library_id].n_obs:
             # do not consider cells from this library
@@ -207,15 +227,11 @@ summary.append("Started with a total of {} cells and {} genes coming from {} lib
     initial_n_obs, adata.n_vars, len(library_ids)))
 
 add_to_log("Adding metadata...")
-add_to_log("Downloading the Donors sheet from the Google spreadsheets...")
-donors = read_immune_aging_sheet("Donors")
 donor_index = donors["Donor ID"] == donor
 add_to_log("Adding donor-level metadata...")
 for k in DONORS_FIELDS.keys():
     adata.obs[DONORS_FIELDS[k]] = donors[k][donor_index].values[0]
 
-add_to_log("Downloading the Samples sheet from the Google spreadsheets...")
-samples = read_immune_aging_sheet("Samples")
 add_to_log("Adding sample-level metadata...")
 sample_index = samples["Sample_ID"] == sample_id
 for k in SAMPLES_FIELDS.keys():
@@ -237,14 +253,14 @@ else:
 
 if not no_cells:
     try:
-        is_cite = "feature_types" in adata.var and "Antibody Capture" in np.unique(adata.var.feature_types)
+        is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
             add_to_log("Detected Antibody Capture features.")    
             rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         else:
             rna = adata.copy()
         add_to_log("Detecting highly variable genes...")
-        if is_hto:
+        if len(library_ids)>1:
             batch_key = "batch"
         else:
             batch_key = None
@@ -318,7 +334,7 @@ if not no_cells:
         zipdir(scvi_model_dir_path, zipf)
         zipf.close()
         add_to_log("Running solo for detecting doublets...")
-        if is_hto:
+        if len(library_ids)>1:
             batches = pd.unique(rna.obs["batch"])
             add_to_log("Running solo on the following batches separately: {}".format(batches))
             is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
@@ -377,21 +393,16 @@ if not no_cells:
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
             # normalize RNA
-            if is_cite:
-                # normalize RNA and protein separately
-                rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
-                sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
-                sc.pp.log1p(rna)
+            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+            sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
+            sc.pp.log1p(rna)
+            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
+            if is_adt:
+                # normalize protein separately if adt data is present
                 protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
                 sc.pp.normalize_total(protein, target_sum=configs["normalize_total_target_sum"])
                 sc.pp.log1p(protein)
-            else:
-                rna = adata.copy()
-                sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
-                sc.pp.log1p(rna)
-            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
-            if is_cite:
-                adata.X[:, (adata.var["feature_types"] == "Antibody Capture").values] = protein.X
+                adata.X[:, (adata.var["feature_types"] == "Antibody Capture").values] = protein.X    
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
