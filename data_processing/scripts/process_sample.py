@@ -149,21 +149,12 @@ donors = read_immune_aging_sheet("Donors")
 add_to_log("Downloading the Samples sheet from the Google spreadsheets...")
 samples = read_immune_aging_sheet("Samples")
 
-# check for each library whether it is hto library (i.e., used to collect more than one sample)
-is_hto = []
-lib_col = "{} lib".format(library_type)
-indices = samples[lib_col].isin(library_ids)
-library_ids2 = samples[lib_col][indices]
-for lib_id in library_ids:
-    if np.sum(library_ids2==lib_id)>1:
-        is_hto.append(True)
-    else:
-        is_hto.append(False)
-
 is_adt = False
 if library_type == "GEX":
-    is_adt = np.all(np.logical_not(pd.isnull(samples["ADT lib"][indices])))
-
+    l = np.array(pd.isnull(samples["ADT lib"][samples["Sample_ID"]==sample_id]))
+    assert(len(l)==1)
+    if np.logical_not(l[0]):
+        is_adt = True
 
 ############################################
 ###### SAMPLE PROCESSING BEGINS HERE #######
@@ -183,7 +174,7 @@ for j in range(len(library_ids)):
         library_type, library_id, library_version))
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
-    if is_hto[j]:
+    if "Classification" in adata_dict[library_id].obs.columns:
         adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
         if "min_cells_per_library" in configs and configs["min_cells_per_library"] > adata_dict[library_id].n_obs:
             # do not consider cells from this library
