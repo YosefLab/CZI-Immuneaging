@@ -365,9 +365,9 @@ def check_fastq_filenames(fastq_fns, samples, donors):
             valid_seq_run = True
         except: pass
 
-        if s_number[0] == "S" and len(s_number) == 2:
+        if s_number[0] == "S" and len(s_number) >=2 2:
             try:
-                int(s_number[1])
+                int(s_number[1:])
                 valid_s_number = True
             except: pass
             
