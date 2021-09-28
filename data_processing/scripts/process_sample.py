@@ -100,13 +100,14 @@ add_to_log("New configs version: " + str(is_new_version))
 
 h5ad_file = "{}.processed.{}.h5ad".format(prefix, version)
 if is_new_version:
-    add_to_log("Uploading new configs version to S3...")
     cp_cmd = "cp {} {}".format(configs_file, os.path.join(data_dir,output_configs_file))
     os.system(cp_cmd)
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, output_configs_file)
-    add_to_log("sync_cmd: {}".format(sync_cmd))
-    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    if not sandbox_mode:
+        add_to_log("Uploading new configs version to S3...")
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+            data_dir, prefix, version, output_configs_file)
+        add_to_log("sync_cmd: {}".format(sync_cmd))
+        add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 else:
     add_to_log("Checking if h5ad file already exists on S3...")
     h5ad_file_exists = False
