@@ -129,18 +129,17 @@ else:
 
 library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
-if not sandbox_mode:
-    add_to_log("Downloading h5ad files of processed libraries from S3...")
-    for j in range(len(library_ids)):
-        library_id = library_ids[j]
-        library_version = library_versions[j]
-        lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
-            library_type, library_id, library_version)    
-        sync_cmd = 'aws s3 sync s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
-            donor, seq_run, library_type, library_id, library_version, data_dir, lib_h5ad_file)
-        add_to_log("syncing {}...".format(lib_h5ad_file))
-        add_to_log("sync_cmd: {}".format(sync_cmd))
-        add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+add_to_log("Downloading h5ad files of processed libraries from S3...")
+for j in range(len(library_ids)):
+    library_id = library_ids[j]
+    library_version = library_versions[j]
+    lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
+        library_type, library_id, library_version)    
+    sync_cmd = 'aws s3 sync s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
+        donor, seq_run, library_type, library_id, library_version, data_dir, lib_h5ad_file)
+    add_to_log("syncing {}...".format(lib_h5ad_file))
+    add_to_log("sync_cmd: {}".format(sync_cmd))
+    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
 summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 
