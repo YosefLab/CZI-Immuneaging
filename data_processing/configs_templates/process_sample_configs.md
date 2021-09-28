@@ -1,4 +1,4 @@
-## Configurations for process_library.py
+## Configurations for process_sample.py
 
 The template for the configuration file can be found <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/configs_templates/process_library.configs_file.example.txt">here </a>.
 
