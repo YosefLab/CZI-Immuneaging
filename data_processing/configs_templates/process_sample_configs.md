@@ -1,11 +1,11 @@
 ## Configurations for process_sample.py
 
-The template for the configuration file can be found <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/configs_templates/process_library.configs_file.example.txt">here </a>.
+The template for the configuration file can be found <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/configs_templates/process_sample.configs_file.example.txt">here </a>.
 
 The configuration file is formatted as json with the following fields:
 
 * `"sandbox_mode"` - `"True"` or `"False` to indicate whether running in sandbox mode or not. Always set to `"True"` if you are not an admin. Note that execution will fail and you will be alerted by the script if setting `"sandbox_mode": "True"` without AWS permissions of an admin.
-* `"data_owner"` - name or username of the data owner (the person executing the process_library.py)
+* `"data_owner"` - name or username of the data owner (the person executing the process_sample.py)
 * `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with `"data_processing/scripts"`)
 * `"output_destination"` - Absolute path that will be used for saving outputs
 * `"s3_access_file"` - absolute path to the aws credentials file (provided by the admin)
@@ -21,7 +21,7 @@ The configuration file is formatted as json with the following fields:
 * `"n_highly_variable_genes"` - The number of highly variable genes to be used prior to applying dimensionality reduction using PCA and SCVI
 * `"highly_variable_genes_flavor"` - The flavor for identifying highly variable genes using `scanpy.pp.highly_variable_genes`
 * `"scvi_max_epochs"` - The maximum number of epochs to be used when applying SCVI
-* `"solo_filter_genes_min_cells"` - Genes that appear in less cells than this threshold will be removed when applying solo for doublet detection; in case the sample was collected by multiple libraries this filter will be applied on each batch separately. Note that this filter is applied at the sample-level processing even though it is also used at the preceding step of library-level processing since aggregating data of a given sample across multiplexed libraries may lead to genes presented by a subset oof the libraries, which could fail the execution of solo. Also, note that this filter is not applied to the final version of the processed data but only for the purpose of running solo for doublet detection.
+* `"solo_filter_genes_min_cells"` - Genes that appear in less cells than this threshold will be removed when applying solo for doublet detection; in case the sample was collected by multiple libraries this filter will be applied on each batch separately. Note that this filter is applied at the sample-level processing even though it is also used at the preceding step of library-level processing since aggregating data of a given sample across multiplexed libraries may lead to genes presented by a subset of the libraries, which could fail the execution of solo. Also, note that this filter is not applied to the final version of the processed data but only for the purpose of running solo for doublet detection.
 * `"solo_max_epochs"` - The maximum number of epochs to be used when applying solo for doublet detection
 * `"neighborhood_graph_n_neighbors"` - The number of neighbors to use for computing the neighborhood graph (using `scanpy.pp.neighbors`)
 * `"umap_min_dist"` - The `min_dist` argument for computing UMAP (using `scanpy.tl.umap`)
