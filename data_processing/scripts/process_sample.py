@@ -196,7 +196,7 @@ if len(library_ids)==0:
         sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
             data_dir, prefix, version, logger_file)
         os.system(sync_cmd)
-        sys.exit()
+    sys.exit()
 
 add_to_log("Concatenating all cells of sample {} from available libraries...".format(sample_id))
 adata = adata_dict[library_ids[0]]
