@@ -21,6 +21,8 @@ import hashlib
 import time
 import zipfile
 
+logging.getLogger('numba').setLevel(logging.WARNING)
+
 with open(configs_file) as f: 
     data = f.read()	
 
@@ -416,10 +418,11 @@ if not no_cells:
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
-        # upload log to S3
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, logger_file)
-        os.system(sync_cmd)
+        if not sandbox_mode:
+            # upload log to S3
+            sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+                data_dir, prefix, version, logger_file)
+            os.system(sync_cmd)
         print(err)
         sys.exit()
 

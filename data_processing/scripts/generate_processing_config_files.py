@@ -5,7 +5,7 @@
 ## after generating the files run the following commands to upload to aws (after setting the aws credentials as env variables):
 ## aws s3 sync config_files s3://immuneaging/job_queue/process_library/ --exclude "*" --include "process_library*.configs.txt"
 ## aws s3 sync config_files s3://immuneaging/job_queue/process_sample/ --exclude "*" --include "process_sample.configs*.txt"
-## assuming config_files is the directory containign the config files.
+## assuming config_files is the directory containing the config files.
 ## Then, the script generate_processing_scripts.py can be used to create .sh files to execute the actual processing based on the config files.
 
 import sys
