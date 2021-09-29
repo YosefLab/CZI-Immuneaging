@@ -15,6 +15,7 @@
 "n_highly_variable_genes": 3000,
 "highly_variable_genes_flavor": "seurat_v3",
 "scvi_max_epochs": 400,
+"totalvi_max_epochs": 400,
 "solo_filter_genes_min_cells": 5,
 "solo_max_epochs": 400,
 "neighborhood_graph_n_neighbors": 15,

@@ -131,6 +131,7 @@ else:
 library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
 add_to_log("Downloading h5ad files of processed libraries from S3...")
+add_to_log("*** WARNING - This can take some time. If you already have the processed libraries, feel free to halt this process and use your existing h5ad files. ***")
 for j in range(len(library_ids)):
     library_id = library_ids[j]
     library_version = library_versions[j]
@@ -237,16 +238,14 @@ if not no_cells:
     try:
         is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
-            add_to_log("Detected Antibody Capture features.")    
-            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+            add_to_log("Detected Antibody Capture features.")
             protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
-            # normalize protein counts
-            sc.pp.normalize_total(protein, target_sum=configs["normalize_total_target_sum"])
-            sc.pp.log1p(protein)
-            # move protein data out of X into adata.obsm["protein_expression"]
+            # copy protein data from X into adata.obsm["protein_expression"]
             protein_df = protein.to_df()
             protein_expression_obsm_key = "protein_expression"
             adata.obsm[protein_expression_obsm_key] = protein_df
+            # keep only the subset of X that does not have protein data, since we already moved these to obsm
+            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         else:
             rna = adata.copy()
         add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
@@ -305,7 +304,7 @@ if not no_cells:
             scvi.data.setup_anndata(rna, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
             add_to_log("Training totalvi model...")
             model = scvi.model.TOTALVI(rna)
-            model.train(max_epochs=configs["scvi_max_epochs"]) # TODO should we use a different max_epochs for totalVI?
+            model.train(max_epochs=configs["totalvi_max_epochs"])
             add_to_log("Saving totalVI latent representation...")
             latent = model.get_latent_representation()
             rna.obsm["X_totalVI"] = latent
@@ -398,10 +397,6 @@ if not no_cells:
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
-            # normalize RNA
-            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
-            sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
-            sc.pp.log1p(rna)
             adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X 
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
