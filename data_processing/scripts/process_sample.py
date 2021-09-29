@@ -1,4 +1,6 @@
 import sys
+
+from anndata._core.anndata import AnnData
 process_sample_script = sys.argv[0]
 configs_file = sys.argv[1]
 
@@ -154,6 +156,61 @@ samples = read_immune_aging_sheet("Samples")
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
 
+def run_model(
+        adata: AnnData,
+        batch_key: str,
+        protein_expression_obsm_key: str,
+        model_name: str,
+        prefix: str,
+        data_dir: str,
+    ):
+    """
+    Runs scvi or totalvi model depending on the given model_name.
+
+    Parameters
+    ----------
+    adata
+        The anndata object containing the data to train on.
+    batch_key
+        Name of the column in adata.obs containing batch information.
+    protein_expression_obsm_key
+        Name of the column in adata.obs containing protein expression information.
+    model_name
+        One of "scvi" or "totalvi". Indicates which model to run.
+    prefix
+        String containing sample id and other information, used in file/dir naming.
+    data_dir
+        Path to the local data directory where processing output is saved.
+
+    Returns
+    -------
+    A tuple containing the trained model and the name of the zip file where the model is saved.
+    """
+    assert model_name in ["scvi", "totalvi"]
+    add_to_log("Setting up {}...".format(model_name))
+    scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
+    add_to_log("Training {} model...".format(model_name))
+    model = scvi.model.SCVI(adata) if model_name=="scvi" else scvi.model.TOTALVI(adata)
+    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
+    model.train(max_epochs=configs[max_epochs_config_key])
+    add_to_log("Saving {} latent representation...".format(model_name))
+    latent = model.get_latent_representation()
+    if model_name=="scvi":
+        adata.obsm["X_scVI"] = latent
+    else:
+        adata.obsm["X_totalVI"] = latent
+    model_file = "{}.processed.{}.{}_model.zip".format(prefix, version, model_name)
+    add_to_log("Saving the model into {}...".format(model_file))
+    model_file_path = os.path.join(data_dir, model_file)
+    model_dir_path = os.path.join(data_dir,"{}.{}_model/".format(prefix, model_name))
+    if os.path.isdir(model_dir_path):
+        os.system("rm -r " + model_dir_path)
+    model.save(model_dir_path)
+    zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
+    zipdir(model_dir_path, zipf)
+    zipf.close()
+    return model, model_file
+
 alerts = []
 
 add_to_log("Reading h5ad files of processed libraries...")
@@ -298,42 +355,8 @@ if not no_cells:
         sc.pp.highly_variable_genes(adata, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         if is_cite:
-            add_to_log("Setting up totalvi...")
-            scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
-            add_to_log("Training totalvi model...")
-            model = scvi.model.TOTALVI(adata)
-            model.train(max_epochs=configs["totalvi_max_epochs"])
-            add_to_log("Saving totalVI latent representation...")
-            latent = model.get_latent_representation()
-            adata.obsm["X_totalVI"] = latent
-            totalvi_model_file = "{}.processed.{}.totalvi_model.zip".format(prefix, version)
-            add_to_log("Saving the totalVI model into {}...".format(totalvi_model_file))
-            totalvi_model_file_path = os.path.join(data_dir, totalvi_model_file)
-            totalvi_model_dir_path = os.path.join(data_dir,"{}.totalvi_model/".format(prefix))
-            if os.path.isdir(totalvi_model_dir_path):
-                os.system("rm -r " + totalvi_model_dir_path)
-            model.save(totalvi_model_dir_path)
-            zipf = zipfile.ZipFile(totalvi_model_file_path, 'w', zipfile.ZIP_DEFLATED)
-            zipdir(totalvi_model_dir_path, zipf)
-            zipf.close()
-        add_to_log("Setting up scvi...")
-        scvi.data.setup_anndata(adata, batch_key=batch_key)
-        add_to_log("Training scvi model...")
-        model = scvi.model.SCVI(adata)
-        model.train(max_epochs=configs["scvi_max_epochs"])
-        add_to_log("Saving scvi latent representation...")
-        latent = model.get_latent_representation()
-        adata.obsm["X_scVI"] = latent
-        scvi_model_file = "{}.processed.{}.scvi_model.zip".format(prefix, version)
-        add_to_log("Saving the scvi model into {}...".format(scvi_model_file))
-        scvi_model_file_path = os.path.join(data_dir, scvi_model_file)
-        scvi_model_dir_path = os.path.join(data_dir,"{}.scvi_model/".format(prefix))
-        if os.path.isdir(scvi_model_dir_path):
-            os.system("rm -r " + scvi_model_dir_path)
-        model.save(scvi_model_dir_path)
-        zipf = zipfile.ZipFile(scvi_model_file_path, 'w', zipfile.ZIP_DEFLATED)
-        zipdir(scvi_model_dir_path, zipf)
-        zipf.close()
+            totalvi_model, totalvi_model_file = run_model(adata, batch_key, protein_expression_obsm_key, "totalvi", prefix, data_dir)
+        scvi_model, scvi_model_file = run_model(adata, batch_key, None, "scvi", prefix, data_dir)
         add_to_log("Running solo for detecting doublets...")
         if len(library_ids)>1:
             batches = pd.unique(adata.obs[batch_key])
@@ -341,13 +364,13 @@ if not no_cells:
             is_solo_singlet = np.ones((adata.n_obs,), dtype=bool)
             for batch in batches:
                 add_to_log("Running solo on batch {}...".format(batch))
-                solo_batch = scvi.external.SOLO.from_scvi_model(model, restrict_to_batch=batch)
+                solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch)
                 solo_batch.train(max_epochs=configs["solo_max_epochs"])
                 is_solo_singlet[(adata.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
                 adata.obs["is_solo_singlet"] = is_solo_singlet
         else:
             add_to_log("Running solo...")
-            solo = scvi.external.SOLO.from_scvi_model(model)
+            solo = scvi.external.SOLO.from_scvi_model(scvi_model)
             solo.train(max_epochs=configs["solo_max_epochs"])
             is_solo_singlet = solo.predict(soft=False) == "singlet"
         add_to_log("Removing doublets...")
@@ -414,9 +437,9 @@ if not sandbox_mode:
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     if not no_cells:
-        add_to_log("Uploading scvi model files (a single .zip file) to S3...")
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-            data_dir, prefix, version, scvi_model_file)
+        add_to_log("Uploading model files (a single .zip file for each model) to S3...")
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {} --include {}'.format(
+            data_dir, prefix, version, scvi_model_file, totalvi_model_file)
         add_to_log("sync_cmd: {}".format(sync_cmd))
         add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))        
         add_to_log("Uploading decontx model file to S3...")
