@@ -23,6 +23,12 @@ import zipfile
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
+# This does two things:
+# 1. Makes the logger look good in a log file
+# 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
+scvi.settings.reset_logging_handler()
+scvi.settings.dl_pin_memory_gpu_training = False
+
 with open(configs_file) as f: 
     data = f.read()	
 
@@ -134,18 +140,24 @@ else:
 
 library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
-add_to_log("Downloading h5ad files of processed libraries from S3...")
-add_to_log("*** WARNING - This can take some time. If you already have the processed libraries, feel free to halt this process and use your existing h5ad files. ***")
-for j in range(len(library_ids)):
-    library_id = library_ids[j]
-    library_version = library_versions[j]
-    lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
-        library_type, library_id, library_version)    
-    sync_cmd = 'aws s3 sync s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
-        donor, seq_run, library_type, library_id, library_version, data_dir, lib_h5ad_file)
-    add_to_log("syncing {}...".format(lib_h5ad_file))
-    add_to_log("sync_cmd: {}".format(sync_cmd))
-    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+processed_libraries_dir = configs["processed_libraries_dir"]
+if len(processed_libraries_dir) > 0:
+    add_to_log("Copying h5ad files of processed libraries from {}...".format(processed_libraries_dir))
+    cp_cmd = "cp -r {}/ {}".format(processed_libraries_dir.rstrip("/"), data_dir)
+    os.system(cp_cmd)
+else:
+    add_to_log("Downloading h5ad files of processed libraries from S3...")
+    add_to_log("*** Note: This can take some time. If you already have the processed libraries, you can halt this process and provide processed_libraries_dir in the config file in order to use your existing h5ad files. ***")   
+    for j in range(len(library_ids)):
+        library_id = library_ids[j]
+        library_version = library_versions[j]
+        lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
+            library_type, library_id, library_version)
+        sync_cmd = 'aws s3 sync s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
+            donor, seq_run, library_type, library_id, library_version, data_dir, lib_h5ad_file)
+        add_to_log("syncing {}...".format(lib_h5ad_file))
+        add_to_log("sync_cmd: {}".format(sync_cmd))
+        add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
 summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 
@@ -295,6 +307,8 @@ else:
 
 if not no_cells:
     try:
+        # save raw counts
+        adata.layers["raw_counts"] = adata.X.copy()
         is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
             add_to_log("Detected Antibody Capture features.")
@@ -343,6 +357,9 @@ if not no_cells:
         decontaminated_counts.index = adata.obs.index # note that decontx replaces "-" with "." in the cell names
         adata.obs["contamination_levels"] = contamination_levels
         adata.X = np.round(decontaminated_counts)
+        # save decontaminated rna counts
+        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
+        adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
         adata = adata[:,adata.var.index.isin(solo_genes)]
         # remove empty cells after decontaminations
@@ -409,12 +426,6 @@ if not no_cells:
                 use_rep="X_totalVI", key_added=key) 
             adata.obsm["X_umap_totalvi"] = sc.tl.umap(adata, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
-        add_to_log("Gathering data...")
-        # save raw rna counts
-        adata.layers["raw_counts"] = adata.X.copy()
-        # save decontaminated counts (only applies to rna data)
-        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
-        adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")

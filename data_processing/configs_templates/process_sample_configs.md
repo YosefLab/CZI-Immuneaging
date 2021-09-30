@@ -9,6 +9,7 @@ The configuration file is formatted as json with the following fields:
 * `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with `"data_processing/scripts"`)
 * `"output_destination"` - Absolute path that will be used for saving outputs
 * `"s3_access_file"` - absolute path to the aws credentials file (provided by the admin)
+* `"processed_libraries_dir"` - absolute path to the directory, if any, containing the processed library files for this sample. This will prevent downloading those files from S3. Provide empty string if not applicable.
 * `"donor"` - Donor ID, as indicated in the Google Spreadsheet
 * `"seq_run"` - Seq run, as indicated in the Google Spreadsheet
 * `"library_type"` - Currently can only be set to `"GEX"`; this option will automatically take into account any ADT and/or HTO libraries associated with the library provided under `library_id`

@@ -3,6 +3,7 @@
 "code_path": "/path/to/data_processing/scripts/",
 "output_destination": "/path/to/output_destination/",
 "s3_access_file": "/path/to/credentials_file.sh",
+"processed_libraries_dir": "/path/to/processed_libraries_dir/",
 "donor": "591C",
 "seq_run": "003",
 "library_type": "GEX",
