@@ -404,7 +404,7 @@ if not no_cells:
             sc.pp.scale(rna)
             rna.raw = rna
             add_to_log("Calculating PCA...")
-            sc.pp.pca(adata)
+            sc.pp.pca(rna)
             add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
             key = "pca_neighbors"
             rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
