@@ -318,7 +318,7 @@ if not no_cells:
             adata.obsm[protein_expression_obsm_key] = protein_df
             rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         else:
-            adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+            rna = adata.copy()
         add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
         decontx_data_dir = os.path.join(data_dir,"decontx")
         os.system("mkdir -p " + decontx_data_dir)
@@ -434,11 +434,12 @@ if not no_cells:
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
-            add_to_log("Updating adata.X...")
-            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
+            add_to_log("Remove protein counts from adata.X...")
             # keep only the subset of X that does not have protein data, since we already moved these to obsm
-            # Issue 6 tracks doing this earlier, in the is_cite block above. We need to account for the slicing of
-            # genes when running solo, however, so for now we just do it here.
+            # Issue 6 tracks doing this earlier, in the is_cite block above, and getting rid of the rna object
+            # altogether.
+            # If we do that, we need to be careful about the slicing of genes when running solo. So for the time
+            # being, we just do it here.
             adata = adata[:, (adata.var["feature_types"] == "Gene Expression")].copy()
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
