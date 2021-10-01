@@ -58,7 +58,7 @@ if config_type in ["library", "all"]:
         filename = os.path.join(output_destination,
             "process_library.{}.{}.{}.configs.txt".format(donor_id,seq_run,library_id))
         with open(filename, 'w') as f:
-                    json.dump(lib_configs, f)
+            json.dump(lib_configs, f)
 
 if config_type in ["sample", "all"]:
     # create config files for sample processing
