@@ -6,3 +6,6 @@ __pycache__/
 
 # VS Code
 .vscode/settings.json
+
+# Local job scripts
+*_jobs.sh
