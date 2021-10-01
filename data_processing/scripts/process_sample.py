@@ -361,6 +361,7 @@ if not no_cells:
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
+        # TODO we need to make a copy here so that we don't lose the genes in the final adata copy. Issue 6 will fix this
         adata = adata[:,adata.var.index.isin(solo_genes)]
         # remove empty cells after decontaminations
         n_obs_before = adata.n_obs
