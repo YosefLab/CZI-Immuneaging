@@ -434,13 +434,14 @@ if not no_cells:
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
+            add_to_log("Normalize rna counts in adata.X...")
+            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+            sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
+            sc.pp.log1p(rna)
+            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
             add_to_log("Remove protein counts from adata.X...")
             # keep only the subset of X that does not have protein data, since we already moved these to obsm
-            # Issue 6 tracks doing this earlier, in the is_cite block above, and getting rid of the rna object
-            # altogether.
-            # If we do that, we need to be careful about the slicing of genes when running solo. So for the time
-            # being, we just do it here.
-            adata = adata[:, (adata.var["feature_types"] == "Gene Expression")].copy()
+            adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
