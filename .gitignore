@@ -9,3 +9,7 @@ __pycache__/
 
 # Local job scripts
 *_jobs.sh
+
+# Environments
+v*.zip
+envs/v*.zip
