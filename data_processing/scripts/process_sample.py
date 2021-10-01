@@ -308,7 +308,6 @@ else:
 if not no_cells:
     try:
         # save raw counts
-        adata.layers["raw_counts"] = adata.X.copy()
         is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
             add_to_log("Detected Antibody Capture features.")
@@ -317,7 +316,8 @@ if not no_cells:
             protein_df = protein.to_df()
             protein_expression_obsm_key = "protein_expression"
             adata.obsm[protein_expression_obsm_key] = protein_df
-            # keep only the subset of X that does not have protein data, since we already moved these to obsm
+            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+        else:
             adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
         decontx_data_dir = os.path.join(data_dir,"decontx")
@@ -327,14 +327,14 @@ if not no_cells:
         contamination_levels_file = os.path.join(decontx_data_dir, "{}.decontx.contamination.txt".format(prefix))
         decontx_model_file = os.path.join(decontx_data_dir, "{}.processed.{}.decontx_model.RData".format(prefix, version))
         r_script_file = os.path.join(decontx_data_dir, "{}.decontx.script.R".format(prefix))
-        df = pd.DataFrame(adata.X.todense().T)
-        df.index = adata.var.index
-        df.columns = adata.obs.index
+        df = pd.DataFrame(rna.X.todense().T)
+        df.index = rna.var.index
+        df.columns = rna.obs.index
         df.to_csv(raw_counts_file)
         if len(library_ids)>1:
             batch_key = "batch"
             batch_file = os.path.join(decontx_data_dir, "{}.batch.txt".format(prefix))
-            pd.DataFrame(adata.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
+            pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
         else:
             batch_key = None
             batch_file = None
@@ -354,79 +354,92 @@ if not no_cells:
         add_to_log("Adding decontaminated counts and contamination levels to data object...")
         contamination_levels = pd.read_csv(contamination_levels_file, index_col=0, header=None).index
         decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
-        decontaminated_counts.index = adata.obs.index # note that decontx replaces "-" with "." in the cell names
-        adata.obs["contamination_levels"] = contamination_levels
-        adata.X = np.round(decontaminated_counts)
-        # save decontaminated rna counts
-        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
-        adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
+        decontaminated_counts.index = rna.obs.index # note that decontx replaces "-" with "." in the cell names
+        rna.obs["contamination_levels"] = contamination_levels
+        rna.X = np.round(decontaminated_counts)
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
-        # TODO we need to make a copy here so that we don't lose the genes in the final adata copy. Issue 6 will fix this
-        adata = adata[:,adata.var.index.isin(solo_genes)]
+        rna = rna[:,rna.var.index.isin(solo_genes)]
         # remove empty cells after decontaminations
-        n_obs_before = adata.n_obs
-        adata = adata[adata.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:]
-        n_decon_cells_filtered = n_obs_before-adata.n_obs
+        n_obs_before = rna.n_obs
+        rna = rna[rna.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:]
+        n_decon_cells_filtered = n_obs_before-rna.n_obs
         msg = "Removed {} cells with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(
             n_decon_cells_filtered, configs["filter_decontaminated_cells_min_genes"])
         add_to_log(msg)
         summary.append(msg)
         add_to_log("Detecting highly variable genes...")
-        sc.pp.highly_variable_genes(adata, n_top_genes=configs["n_highly_variable_genes"], subset=True,
+        sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         if is_cite:
-            totalvi_model, totalvi_model_file = run_model(adata, batch_key, protein_expression_obsm_key, "totalvi", prefix, data_dir)
-        scvi_model, scvi_model_file = run_model(adata, batch_key, None, "scvi", prefix, data_dir)
+            totalvi_model, totalvi_model_file = run_model(rna, batch_key, protein_expression_obsm_key, "totalvi", prefix, data_dir)
+        scvi_model, scvi_model_file = run_model(rna, batch_key, None, "scvi", prefix, data_dir)
         add_to_log("Running solo for detecting doublets...")
         if len(library_ids)>1:
-            batches = pd.unique(adata.obs[batch_key])
+            batches = pd.unique(rna.obs[batch_key])
             add_to_log("Running solo on the following batches separately: {}".format(batches))
-            is_solo_singlet = np.ones((adata.n_obs,), dtype=bool)
+            is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
             for batch in batches:
                 add_to_log("Running solo on batch {}...".format(batch))
                 solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch)
                 solo_batch.train(max_epochs=configs["solo_max_epochs"])
-                is_solo_singlet[(adata.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
-                adata.obs["is_solo_singlet"] = is_solo_singlet
+                is_solo_singlet[(rna.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
+                rna.obs["is_solo_singlet"] = is_solo_singlet
         else:
             add_to_log("Running solo...")
             solo = scvi.external.SOLO.from_scvi_model(scvi_model)
             solo.train(max_epochs=configs["solo_max_epochs"])
             is_solo_singlet = solo.predict(soft=False) == "singlet"
         add_to_log("Removing doublets...")
-        n_obs_before = adata.n_obs
-        adata = adata[is_solo_singlet,]
-        add_to_log("Removed {} estimated doublets; {} droplets remained.".format(n_obs_before-adata.n_obs,adata.n_obs))
-        summary.append("Removed {} estimated doublets.".format(n_obs_before-adata.n_obs))
-        if adata.n_obs == 0:
+        n_obs_before = rna.n_obs
+        rna = rna[is_solo_singlet,]
+        add_to_log("Removed {} estimated doublets; {} droplets remained.".format(n_obs_before-rna.n_obs,rna.n_obs))
+        summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
+        if rna.n_obs == 0:
             add_to_log("No cells left after doublet detection. Skipping the next processing steps.")
             summary.append("No cells left after doublet detection.")
         else:
             add_to_log("Normalizing RNA...")
-            sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
-            sc.pp.log1p(adata)
-            sc.pp.scale(adata)
-            adata.raw = adata
+            sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
+            sc.pp.log1p(rna)
+            sc.pp.scale(rna)
+            rna.raw = rna
             add_to_log("Calculating PCA...")
             sc.pp.pca(adata)
             add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
             key = "pca_neighbors"
-            adata.neighbors = sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                 use_rep="X_pca", key_added=key) 
-            adata.obsm["X_umap_pca"] = sc.tl.umap(adata, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+            rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             add_to_log("Calculating neighborhood graph and UMAP based on SCVI components...")
             key = "scvi_neighbors"
-            adata.neighbors = sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                 use_rep="X_scVI", key_added=key) 
-            adata.obsm["X_umap_scvi"] = sc.tl.umap(adata, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+            rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             add_to_log("Calculating neighborhood graph and UMAP based on TOTALVI components...")
             key = "totalvi_neighbors"
-            adata.neighbors = sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                 use_rep="X_totalVI", key_added=key) 
-            adata.obsm["X_umap_totalvi"] = sc.tl.umap(adata, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+            rna.obsm["X_umap_totalvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
+        add_to_log("Gathering data...")
+        keep = adata.obs.index.isin(rna.obs.index)
+        adata = adata[keep,]
+        adata.obsm.update(rna.obsm)
+        adata.obs[rna.obs.columns] = rna.obs
+        # save raw rna counts
+        adata.layers["raw_counts"] = adata.X.copy()
+        # save decontaminated counts (only applies to rna data)
+        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
+        adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
+        if adata.n_obs>0:
+            add_to_log("Updating adata.X...")
+            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
+            # keep only the subset of X that does not have protein data, since we already moved these to obsm
+            # Issue 6 tracks doing this earlier, in the is_cite block above. We need to account for the slicing of
+            # genes when running solo, however, so for now we just do it here.
+            adata = adata[:, (adata.var["feature_types"] == "Gene Expression")].copy()
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
