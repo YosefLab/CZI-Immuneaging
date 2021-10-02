@@ -9,6 +9,7 @@ import subprocess
 s3_access_file = sys.argv[1]
 output_destination = sys.argv[2]
 code_path = sys.argv[3]
+output_path = sys.argv[4]
 
 sys.path.append("code_path")
 from utils import *
@@ -60,7 +61,7 @@ for job_type in ("process_library", "process_sample"):
     # save the commands in sh_cmds, for each donor separately
     if len(sh_cmds):
         for i in sh_cmds:
-            outfiles.append(os.path.join(code_path,"{}.{}_jobs.sh".format(i,job_type)))
+            outfiles.append(os.path.join(output_path,"{}.{}_jobs.sh".format(i,job_type)))
             with open(outfiles[-1], 'w') as f:
                 for cmd in sh_cmds[i]:
                     f.write(cmd+"\n")
