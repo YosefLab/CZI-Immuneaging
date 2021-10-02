@@ -1,7 +1,9 @@
 """
 This script creates a bash script that can be used for executing the library alignment pipeline for a single donor.
 The script gets a configuration file (for a specific donor), path to the immune aging code base, and a filename for the bash output file.
-NOTE: the path to the code base and path to the configs file must be absolute paths.
+
+**NOTE**: the path to the code base and path to the configs file must be absolute paths.
+
 Example:
 python generate_library_alignment_script.py /path/to/code /path/to/align_libraries.configs.582C_001.txt 582C_001_align_libraries.sh
 """
