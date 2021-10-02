@@ -51,7 +51,7 @@ for job_type in ("process_library", "process_sample"):
                 json.dump(configs, f)
             # add commands for running the current job
             sh_cmds[configs["donor"]].append("source activate {}".format(configs["python_env_version"])) 
-            sh_cmds[configs["donor"]].append("python {}.py {}".format(job_type,run_filename))
+            sh_cmds[configs["donor"]].append("python {}.py {}".format(os.path.join(code_path,job_type),run_filename))
             sh_cmds[configs["donor"]].append("conda deactivate")
             sh_cmds[configs["donor"]].append('echo "Execution of {}.py on job {} is complete."'.format(job_type,run_filename))
             # move the original file on S3 from the queue to the running folder
