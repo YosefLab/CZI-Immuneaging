@@ -46,7 +46,7 @@ if config_type in ["library", "all"]:
             "filter_cells_min_genes": 200,
             "filter_genes_min_cells": 0,
             "filter_cells_max_pct_counts_mt": 20,
-            "filter_cells_min_pct_counts_ribo": 5,
+            "filter_cells_min_pct_counts_ribo": 0,
             "genes_to_exclude": "MALAT1",
             "exclude_mito_genes": "True",
             "hashsolo_priors": "0.01,0.8,0.19",
