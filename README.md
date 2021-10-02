@@ -410,12 +410,14 @@ Once these jobs are generated and uploaded to AWS, we can proceed to executing t
 Once the job queue on AWS (see [Job queue](#job_queue)) has jobs to run, we need to generate processing scripts for each type of job (sample processing or library processing) and execute them. The script `generate_processing_scripts.sh` helps automate this process. It can be run as follows:
 
 ```
-python generate_processing_scripts.py <aws_credentials_file> <output_dir> <code_path>
+python generate_processing_scripts.py <aws_credentials_file> <output_dir> <code_path> <output_path>
 ```
 
 The script syncs the job queue from AWS down to the local machine. It then crawls the queued jobs (each characterized by their corresponding config files) for each type of job: process_library or process_sample. For each job (each config file), it adds the commands needed to execute that job to a list of commands keyed by donor. In the end, we end up with a set of shell script files each specific to a [donor, job_type] tuple. Each script file contains all of the commands needed to execute the jobs associated with that donor and job_type. These commands are, for example: activate the specified conda environment, execute the process_sample python script at the given code_path, deactivate the conda environment, etc. The script also updates the remote job queue on AWS to indicate which jobs are running.
 
 Once all the shell script files are generated, you can execute them in the shell to kick off the execution of each corresponding job. Make sure to execute all process_library jobs before executing any process_sample jobs.
+
+**Note:** `output_dir` specifies the location for the processing outputs and `output_path` specifies the location to which the shell file with the run commands will be saved.
 
 <!--
 install cellranger and download ref genome..
