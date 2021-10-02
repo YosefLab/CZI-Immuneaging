@@ -1,4 +1,6 @@
 import sys
+
+from anndata._core.anndata import AnnData
 process_sample_script = sys.argv[0]
 configs_file = sys.argv[1]
 
@@ -19,6 +21,14 @@ import hashlib
 import time
 import zipfile
 
+logging.getLogger('numba').setLevel(logging.WARNING)
+
+# This does two things:
+# 1. Makes the logger look good in a log file
+# 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
+scvi.settings.reset_logging_handler()
+scvi.settings.dl_pin_memory_gpu_training = False
+
 with open(configs_file) as f: 
     data = f.read()	
 
@@ -33,7 +43,7 @@ library_type = configs["library_type"]
 sys.path.append(configs["code_path"])
 from utils import *
 
-AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to run process_library and upload outputs to the server; not that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
+AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to run process_library and upload outputs to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 LOGGER_LEVEL = logging.DEBUG
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -68,7 +78,7 @@ timestamp = get_current_time()
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(configs["s3_access_file"], return_dict = True)
-assert hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sanbox mode; please set sandbox_mode to True"
+assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sanbox mode; please set sandbox_mode to True"
 set_access_keys(configs["s3_access_file"])
 
 # create a new directory for the data and outputs
@@ -100,13 +110,14 @@ add_to_log("New configs version: " + str(is_new_version))
 
 h5ad_file = "{}.processed.{}.h5ad".format(prefix, version)
 if is_new_version:
-    add_to_log("Uploading new configs version to S3...")
     cp_cmd = "cp {} {}".format(configs_file, os.path.join(data_dir,output_configs_file))
     os.system(cp_cmd)
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, output_configs_file)
-    add_to_log("sync_cmd: {}".format(sync_cmd))
-    add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    if not sandbox_mode:
+        add_to_log("Uploading new configs version to S3...")
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+            data_dir, prefix, version, output_configs_file)
+        add_to_log("sync_cmd: {}".format(sync_cmd))
+        add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 else:
     add_to_log("Checking if h5ad file already exists on S3...")
     h5ad_file_exists = False
@@ -129,13 +140,19 @@ else:
 
 library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
-if not sandbox_mode:
+processed_libraries_dir = configs["processed_libraries_dir"]
+if len(processed_libraries_dir) > 0:
+    add_to_log("Copying h5ad files of processed libraries from {}...".format(processed_libraries_dir))
+    cp_cmd = "cp -r {}/ {}".format(processed_libraries_dir.rstrip("/"), data_dir)
+    os.system(cp_cmd)
+else:
     add_to_log("Downloading h5ad files of processed libraries from S3...")
+    add_to_log("*** Note: This can take some time. If you already have the processed libraries, you can halt this process and provide processed_libraries_dir in the config file in order to use your existing h5ad files. ***")   
     for j in range(len(library_ids)):
         library_id = library_ids[j]
         library_version = library_versions[j]
         lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
-            library_type, library_id, library_version)    
+            library_type, library_id, library_version)
         sync_cmd = 'aws s3 sync s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
             donor, seq_run, library_type, library_id, library_version, data_dir, lib_h5ad_file)
         add_to_log("syncing {}...".format(lib_h5ad_file))
@@ -149,16 +166,64 @@ donors = read_immune_aging_sheet("Donors")
 add_to_log("Downloading the Samples sheet from the Google spreadsheets...")
 samples = read_immune_aging_sheet("Samples")
 
-is_adt = False
-if library_type == "GEX":
-    l = np.array(pd.isnull(samples["ADT lib"][samples["Sample_ID"]==sample_id]))
-    assert(len(l)==1)
-    if np.logical_not(l[0]):
-        is_adt = True
-
 ############################################
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
+
+def run_model(
+        adata: AnnData,
+        batch_key: str,
+        protein_expression_obsm_key: str,
+        model_name: str,
+        prefix: str,
+        data_dir: str,
+    ):
+    """
+    Runs scvi or totalvi model depending on the given model_name.
+
+    Parameters
+    ----------
+    adata
+        The anndata object containing the data to train on.
+    batch_key
+        Name of the column in adata.obs containing batch information.
+    protein_expression_obsm_key
+        Name of the column in adata.obs containing protein expression information.
+    model_name
+        One of "scvi" or "totalvi". Indicates which model to run.
+    prefix
+        String containing sample id and other information, used in file/dir naming.
+    data_dir
+        Path to the local data directory where processing output is saved.
+
+    Returns
+    -------
+    A tuple containing the trained model and the name of the zip file where the model is saved.
+    """
+    assert model_name in ["scvi", "totalvi"]
+    add_to_log("Setting up {}...".format(model_name))
+    scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
+    add_to_log("Training {} model...".format(model_name))
+    model = scvi.model.SCVI(adata) if model_name=="scvi" else scvi.model.TOTALVI(adata)
+    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
+    model.train(max_epochs=configs[max_epochs_config_key])
+    add_to_log("Saving {} latent representation...".format(model_name))
+    latent = model.get_latent_representation()
+    if model_name=="scvi":
+        adata.obsm["X_scVI"] = latent
+    else:
+        adata.obsm["X_totalVI"] = latent
+    model_file = "{}.processed.{}.{}_model.zip".format(prefix, version, model_name)
+    add_to_log("Saving the model into {}...".format(model_file))
+    model_file_path = os.path.join(data_dir, model_file)
+    model_dir_path = os.path.join(data_dir,"{}.{}_model/".format(prefix, model_name))
+    if os.path.isdir(model_dir_path):
+        os.system("rm -r " + model_dir_path)
+    model.save(model_dir_path)
+    zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
+    zipdir(model_dir_path, zipf)
+    zipf.close()
+    return model, model_file
 
 alerts = []
 
@@ -180,7 +245,6 @@ for j in range(len(library_ids)):
             # do not consider cells from this library
             msg = "Cells from library {} were not included - there are {} cells from the sample, however, min_cells_per_library was set to {}.".format(
                 library_id,adata_dict[library_id].n_obs,configs["min_cells_per_library"])
-            #add_to_log(msg)
             alerts.append(msg)
             del adata_dict[library_id]
             continue
@@ -205,10 +269,9 @@ if len(library_ids)==0:
         sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
             data_dir, prefix, version, logger_file)
         os.system(sync_cmd)
-        sys.exit()
+    sys.exit()
 
 add_to_log("Concatenating all cells of sample {} from available libraries...".format(sample_id))
-#adata = adata_dict[library_ids[0]][adata_dict[library_ids[0]].obs["Classification"] == sample_id]
 adata = adata_dict[library_ids[0]]
 if len(library_ids) > 1:
     adata = adata.concatenate([adata_dict[library_ids[j]] for j in range(1,len(library_ids))])
@@ -244,17 +307,18 @@ else:
 
 if not no_cells:
     try:
+        # save raw counts
         is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
-            add_to_log("Detected Antibody Capture features.")    
+            add_to_log("Detected Antibody Capture features.")
+            protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
+            # copy protein data from X into adata.obsm["protein_expression"]
+            protein_df = protein.to_df()
+            protein_expression_obsm_key = "protein_expression"
+            adata.obsm[protein_expression_obsm_key] = protein_df
             rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         else:
             rna = adata.copy()
-        add_to_log("Detecting highly variable genes...")
-        if len(library_ids)>1:
-            batch_key = "batch"
-        else:
-            batch_key = None
         add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
         decontx_data_dir = os.path.join(data_dir,"decontx")
         os.system("mkdir -p " + decontx_data_dir)
@@ -267,11 +331,13 @@ if not no_cells:
         df.index = rna.var.index
         df.columns = rna.obs.index
         df.to_csv(raw_counts_file)
-        if batch_key is None:
-            batch_file = None
-        else:
+        if len(library_ids)>1:
+            batch_key = "batch"
             batch_file = os.path.join(decontx_data_dir, "{}.batch.txt".format(prefix))
-            pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file,  header=False, index=False)
+            pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
+        else:
+            batch_key = None
+            batch_file = None
         # R commands for running and outputing decontx
         l = ["library('celda')",
             "x <- as.matrix(read.csv('{}', row.names=1))".format(raw_counts_file),
@@ -290,9 +356,7 @@ if not no_cells:
         decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
         decontaminated_counts.index = rna.obs.index # note that decontx replaces "-" with "." in the cell names
         rna.obs["contamination_levels"] = contamination_levels
-        # rna.layers["decontaminated_counts"] = decontaminated_counts
         rna.X = np.round(decontaminated_counts)
-        #rna.layers["decontaminated_counts.rounded"] = np.round(rna.layers["decontaminated_counts"])
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
         rna = rna[:,rna.var.index.isin(solo_genes)]
         # remove empty cells after decontaminations
@@ -306,40 +370,23 @@ if not no_cells:
         add_to_log("Detecting highly variable genes...")
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
-        add_to_log("Setting up scvi...")
-        scvi.data.setup_anndata(rna, batch_key=batch_key)
-        add_to_log("Training scvi model...")
-        model = scvi.model.SCVI(rna)
-        model.train(max_epochs=configs["scvi_max_epochs"])
-        add_to_log("Saving scvi latent representation...")
-        latent = model.get_latent_representation()
-        rna.obsm["X_scVI"] = latent
-        scvi_model_file = "{}.processed.{}.scvi_model.zip".format(prefix, version)
-        add_to_log("Saving the scvi model into {}...".format(scvi_model_file))
-        scvi_model_file_path = os.path.join(data_dir, scvi_model_file)
-        scvi_model_dir_path = os.path.join(data_dir,"{}.scvi_model/".format(prefix))
-        if os.path.isdir(scvi_model_dir_path):
-            os.system("rm -r " + scvi_model_dir_path)
-        model.save(scvi_model_dir_path)
-        zipf = zipfile.ZipFile(scvi_model_file_path, 'w', zipfile.ZIP_DEFLATED)
-        zipdir(scvi_model_dir_path, zipf)
-        zipf.close()
+        if is_cite:
+            totalvi_model, totalvi_model_file = run_model(rna, batch_key, protein_expression_obsm_key, "totalvi", prefix, data_dir)
+        scvi_model, scvi_model_file = run_model(rna, batch_key, None, "scvi", prefix, data_dir)
         add_to_log("Running solo for detecting doublets...")
         if len(library_ids)>1:
-            batches = pd.unique(rna.obs["batch"])
+            batches = pd.unique(rna.obs[batch_key])
             add_to_log("Running solo on the following batches separately: {}".format(batches))
             is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
             for batch in batches:
                 add_to_log("Running solo on batch {}...".format(batch))
-                #tmp=scvi.external.SOLO(rna)
-                #tmp.train(max_epochs=5)
-                solo_batch = scvi.external.SOLO.from_scvi_model(model, restrict_to_batch=batch)
+                solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch)
                 solo_batch.train(max_epochs=configs["solo_max_epochs"])
                 is_solo_singlet[(rna.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
                 rna.obs["is_solo_singlet"] = is_solo_singlet
         else:
             add_to_log("Running solo...")
-            solo = scvi.external.SOLO.from_scvi_model(model)
+            solo = scvi.external.SOLO.from_scvi_model(scvi_model)
             solo.train(max_epochs=configs["solo_max_epochs"])
             is_solo_singlet = solo.predict(soft=False) == "singlet"
         add_to_log("Removing doublets...")
@@ -352,7 +399,6 @@ if not no_cells:
             summary.append("No cells left after doublet detection.")
         else:
             add_to_log("Normalizing RNA...")
-            #rna.layers["decontaminated_counts"] = rna.X.copy()
             sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(rna)
             sc.pp.scale(rna)
@@ -371,36 +417,39 @@ if not no_cells:
                 use_rep="X_scVI", key_added=key) 
             rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
+            add_to_log("Calculating neighborhood graph and UMAP based on TOTALVI components...")
+            key = "totalvi_neighbors"
+            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+                use_rep="X_totalVI", key_added=key) 
+            rna.obsm["X_umap_totalvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
         add_to_log("Gathering data...")
         keep = adata.obs.index.isin(rna.obs.index)
         adata = adata[keep,]
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
-        # save raw counts
+        # save raw rna counts
         adata.layers["raw_counts"] = adata.X.copy()
-        # save decontaminated counts
+        # save decontaminated counts (only applies to rna data)
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
-        # note that for protein counts the decontaminated_counts will be set as the raw_counts
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
-            # normalize RNA
+            add_to_log("Normalize rna counts in adata.X...")
             rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
             sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(rna)
             adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
-            if is_adt:
-                # normalize protein separately if adt data is present
-                protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
-                sc.pp.normalize_total(protein, target_sum=configs["normalize_total_target_sum"])
-                sc.pp.log1p(protein)
-                adata.X[:, (adata.var["feature_types"] == "Antibody Capture").values] = protein.X    
+            add_to_log("Remove protein counts from adata.X...")
+            # keep only the subset of X that does not have protein data, since we already moved these to obsm
+            adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
-        # upload log to S3
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, logger_file)
-        os.system(sync_cmd)
+        if not sandbox_mode:
+            # upload log to S3
+            sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+                data_dir, prefix, version, logger_file)
+            os.system(sync_cmd)
         print(err)
         sys.exit()
 
@@ -418,9 +467,9 @@ if not sandbox_mode:
     add_to_log("sync_cmd: {}".format(sync_cmd))
     add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     if not no_cells:
-        add_to_log("Uploading scvi model files (a single .zip file) to S3...")
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-            data_dir, prefix, version, scvi_model_file)
+        add_to_log("Uploading model files (a single .zip file for each model) to S3...")
+        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {} --include {}'.format(
+            data_dir, prefix, version, scvi_model_file, totalvi_model_file)
         add_to_log("sync_cmd: {}".format(sync_cmd))
         add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))        
         add_to_log("Uploading decontx model file to S3...")

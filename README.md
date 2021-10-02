@@ -28,6 +28,8 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     5. [Job queue](#job_queue)
 6. [Data Hub admins](#admins)
     1. [Aligning libraries](#admins_lib_alignment)
+    2. [Executing job queue jobs](#admins_job_queue_execution)
+    3. [Generating job configs](#admins_job_configs_generation)
 
 ---
 
@@ -121,9 +123,9 @@ The structure of the `aligned_libraries` directory is as follows:
         * ...
     * ...
 
-The `configs` directory includes versioned configuration files for the alingment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alingment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log filw documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
+The `configs` directory includes versioned configuration files for the alignment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alignment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log file documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
-The `processed_libraries` directory stores data of processed libraries (i.e., beyond alingment), an intermediate product before the sample-level processing; its structure is as follows:
+The `processed_libraries` directory stores data of processed libraries (i.e., beyond alignment), an intermediate product before the sample-level processing; its structure is as follows:
 
 * processed_libraries/
     * library1/
@@ -140,7 +142,7 @@ The `processed_libraries` directory stores data of processed libraries (i.e., be
         * ...
     * ...
 
-Here, files with the prefix `process_library.configs.` incude the configurations that were used in the execution of the library processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. As in the `aligned_libraries` directory, the actual library names follow the naming convention `<donor_id>_<seq_run>_<library_type>_<library_id>`.
+Here, files with the prefix `process_library.configs.` include the configurations that were used in the execution of the library processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. As in the `aligned_libraries` directory, the actual library names follow the naming convention `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
 The `processed_samples` directory stores data of processed samples (i.e., sample-level integration across different libraries); its structure is as follows:
 
@@ -163,7 +165,7 @@ The `processed_samples` directory stores data of processed samples (i.e., sample
         * ...
     * ...
 
-Here, files with the prefix `process_sample.configs.` incude the configurations that were used in the execution of the sample processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. 
+Here, files with the prefix `process_sample.configs.` include the configurations that were used in the execution of the sample processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. 
 Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
 
@@ -317,13 +319,13 @@ For example:
 ```
 conda env create -f immune_aging.py_env.v1.yml
 ```
-This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`
+This will create a new environment under `$CONDA_PREFIX"/envs/immune_aging.py_env.v1.yml"`. This can take a while (1hr+).
 
 Activate the environment by typing:
 ```
 source activate immune_aging.py_env.v1
 ```
-and then complete the setup of the environment by openning an R session and running the commands in the latest version of the R setup script (`immune_aging.R_setup.v*.R`), which can be found <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/envs">here</a>.
+and then complete the setup of the environment by opening an R session and running the commands in the latest version of the R setup script (`immune_aging.R_setup.v*.R`), which can be found <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/envs">here</a>.
 
 Note that every time you wish to run the processing scripts you need to activate the environment. At the end of the execution you can deactivate the environment by typing
 ```
@@ -353,15 +355,15 @@ python process_sample.py configs.txt
 
 ### <a name="sandbox_envorinment"></a> Sandbox envorinment
 
-The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with differnet configurations. Once the configurations were tuned and reported by the data owner as appropriate (see next subsection), a system admin can run the processing while setting `sandbox_mode` to `"False"`.
+The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with different configurations. Once the configurations were tuned and reported by the data owner as appropriate (see next subsection), a system admin can run the processing while setting `sandbox_mode` to `"False"`.
 
-It is likely that during data curation data owners will find bugs and/or will have suggestions for implementing additional/different logics in the processing scripts. You can either post an issue or make a pull request with your suggestions. If you are suggesting any changes please bear in mind that any updates will have to maintain backwards compatibility in order to gaurantee reproducibility of previous versions of the processed data.
+It is likely that during data curation data owners will find bugs and/or will have suggestions for implementing additional/different logics in the processing scripts. You can either post an issue or make a pull request with your suggestions. If you are suggesting any changes please bear in mind that any updates will have to maintain backwards compatibility in order to guarantee reproducibility of previous versions of the processed data.
 
 ### <a name="job_queue"></a> Job queue
 
-Once a data owner makes a final decision about configurations for the processing of specific libraries and samples, the final configuration files should be uploaded to the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>. Specifically, configurations for processing libraries should be uploaded to `s3://immuneaging/job_queue/process_library/` and configurations for processing samples should be uploaded to `s3://immuneaging/job_queue/process_sample/`. Once configuration files are uploaded to these directiroes they are considered as jobs to be executed, and the outputs of the processing will be saved, stamped with a version, and become viewable via the S3 bucket to everyone with data access in the project.
+Once a data owner makes a final decision about configurations for the processing of specific libraries and samples, the final configuration files should be uploaded to the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>. Specifically, configurations for processing libraries should be uploaded to `s3://immuneaging/job_queue/process_library/` and configurations for processing samples should be uploaded to `s3://immuneaging/job_queue/process_sample/`. Once configuration files are uploaded to these directories they are considered as jobs to be executed, and the outputs of the processing will be saved, stamped with a version, and become viewable via the S3 bucket to everyone with data access in the project.
 
-Once an admin starts executing the jobs in the queue, the configuration files will be removed from their original directories and will be moved to 
+Once an admin starts executing the jobs in the queue (see [Executing job queue jobs](#admins_job_queue_execution)), the configuration files will be removed from their original directories and will be moved to 
 `s3://immuneaging/job_queue/process_library.running/` and `s3://immuneaging/job_queue/process_sample.running/` to indicate their status.
 
 **NOTE**:
@@ -381,14 +383,46 @@ Note that the script `generate_library_alignment_script.py` requires a configura
 
 Following alignment, we can now process the libraries and then the samples - see [Data processing](#processing).
 
+### <a name="admins_job_configs_generation"></a> Generating job configs
+A job can be of two types: library processing or sample processing. Each job is characterized by a config file that describes how the job needs to run. The script `generate_processing_config_files` can be used to generate config files for all process_library and process_sample jobs associated with a given donor. It can be run as follows:
+
+```
+python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run>
+```
+
+where config_type can be one of "library", "sample" or "all".
+
+After generating the config files, we can run the following commands to upload them to the job queue on AWS (after setting the AWS credentials as env variables):
+
+```
+aws s3 sync config_files s3://immuneaging/job_queue/process_library/ --exclude "*" --include "process_library*.configs.txt"
+```
+
+```
+aws s3 sync config_files s3://immuneaging/job_queue/process_sample/ --exclude "*" --include "process_sample.configs*.txt"
+```
+
+assuming config_files is the directory containing the config files.
+
+Once these jobs are generated and uploaded to AWS, we can proceed to executing them, see [Executing job queue jobs](#admins_job_queue_execution).
+
+### <a name="admins_job_queue_execution"></a> Executing job queue jobs
+Once the job queue on AWS (see [Job queue](#job_queue)) has jobs to run, we need to generate processing scripts for each type of job (sample processing or library processing) and execute them. The script `generate_processing_scripts.sh` helps automate this process. It can be run as follows:
+
+```
+python generate_processing_scripts.py <aws_credentials_file> <output_dir> <code_path>
+```
+
+The script syncs the job queue from AWS down to the local machine. It then crawls the queued jobs (each characterized by their corresponding config files) for each type of job: process_library or process_sample. Fr each job (each config file), it adds the commands needed to execute that job to a list of commands keyed by donor. In the end, we end up with a set of shell script files each specific to a [donor, job_type] tuple. Each script file contains all of the commands needed to execute the jobs associated with that donor and job_type. These commands are, for example: activate the specified conda environment, execute the process_sample python script at the given code_path, deactivate the conda environment, etc. The script also updates the remote job queue on AWS to indicate which jobs are running.
+
+Once all the shell script files are generated, you can execute them in the shell to kick off the execution of each corresponding job. Make sure to execute all process_library jobs before executing any process_sample jobs.
+
 <!--
 install cellranger and download ref genome..
 
 adding keys to the config files - (1) if adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files... (2) otherwise it will automatically generate a new version etc.. but need to make sure the script is backwards compatible...
 
 link to the configs template and description of `align_library.py`
-
-Brief explanation of the process of working with the queue - has a script for generating default configs for testing; those can then be manually uploaded to s3 and then there's a script for generating sh files for running jobs. they'll be splitted by donors and one script for samples one for libs. run the libs first and only then the samples one.
 -->
 
 ---

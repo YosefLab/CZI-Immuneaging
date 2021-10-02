@@ -1,0 +1,15 @@
+# Caches
+__pycache__/
+
+# DS_Store
+.DS_Store
+
+# VS Code
+.vscode/settings.json
+
+# Local job scripts
+*_jobs.sh
+
+# Environments
+v*.zip
+envs/v*.zip

@@ -53,14 +53,7 @@ def load_configs(filename):
     with open(filename) as f: 
         data = f.read()	
     configs = json.loads(data)
-    #validate_configs(configs)
     return configs
-
-#def validate_configs(configs):
-#	assert(configs["aligner"] == "cellranger")
-#	return
-
-#VARIABLE_CONFIG_KEYS
 
 def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_keys, data_dir):
 	ls_cmd = 'aws s3 ls {} --recursive'.format(s3_path)
@@ -92,7 +85,6 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 		is_new_version = True
 	return [is_new_version,"v"+str(version)]
 
-#variable_config_keys = VARIABLE_CONFIG_KEYS
 def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, variable_config_keys):
 	# This function checks if the configs file is using configs that were already used (while disregarding fields variable_config_keys) and are therefore documented on S3.
 	# If this is the first time these configs are used then it creates a new configs version and uploads the new configs to S3.
@@ -100,9 +92,7 @@ def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs
 	configs_dir_local = os.path.join(data_dir,"configs")
 	os.system("mkdir -p " + configs_dir_local)
 	cmd = 'aws s3 sync {0} {1} --exact-timestamps'.format(configs_dir_remote, configs_dir_local)
-	#print("get_configs_version_alignment: {0}".format(cmd))
 	os.system(cmd)
-	#print("cmd: {0}".format(os.popen(cmd).read()))
 	version = None
 	max_version = 0
 	configs_invariant = {i:configs[i] for i in configs if i not in variable_config_keys}
@@ -130,7 +120,6 @@ def zipdir(path, ziph):
         for file in files:
             ziph.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), 
                 os.path.join(path, '..')))
-
 
 def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
     url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
