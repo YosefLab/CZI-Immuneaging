@@ -407,41 +407,40 @@ if not no_cells:
             sc.pp.pca(rna)
             add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
             key = "pca_neighbors"
-            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                 use_rep="X_pca", key_added=key) 
             rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             add_to_log("Calculating neighborhood graph and UMAP based on SCVI components...")
             key = "scvi_neighbors"
-            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                 use_rep="X_scVI", key_added=key) 
             rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             add_to_log("Calculating neighborhood graph and UMAP based on TOTALVI components...")
             key = "totalvi_neighbors"
-            rna.neighbors = sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                 use_rep="X_totalVI", key_added=key) 
             rna.obsm["X_umap_totalvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
         add_to_log("Gathering data...")
+        # keep only the cells that passed all filters
         keep = adata.obs.index.isin(rna.obs.index)
         adata = adata[keep,]
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
+        add_to_log("Remove protein counts from adata.X...")
+        # keep only the subset of X that does not have protein data, since we already moved these to obsm
+        adata = adata[:, adata.var["feature_types"] == "Gene Expression"]
         # save raw rna counts
         adata.layers["raw_counts"] = adata.X.copy()
-        # save decontaminated counts (only applies to rna data)
+        # save decontaminated counts (only applies to rna data; consider only cells that we keep after filters)
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs>0:
             add_to_log("Normalize rna counts in adata.X...")
-            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
-            sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
-            sc.pp.log1p(rna)
-            adata.X[:, (adata.var["feature_types"] == "Gene Expression").values] = rna.X
-            add_to_log("Remove protein counts from adata.X...")
-            # keep only the subset of X that does not have protein data, since we already moved these to obsm
-            adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
+            sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
+            sc.pp.log1p(adata)
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
@@ -498,3 +497,4 @@ if not sandbox_mode:
     sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
     os.system(sync_cmd)
+
