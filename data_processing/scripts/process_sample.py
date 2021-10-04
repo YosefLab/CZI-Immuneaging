@@ -19,7 +19,6 @@ import scvi
 import subprocess
 import hashlib
 import time
-import zipfile
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -316,8 +315,8 @@ if not no_cells:
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         if is_cite:
-            totalvi_model, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir)
-        scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir)
+            rna, totalvi_model, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir)
+        rna, scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir)
         add_to_log("Running solo for detecting doublets...")
         if len(library_ids)>1:
             batches = pd.unique(rna.obs[batch_key])
@@ -442,4 +441,5 @@ if not sandbox_mode:
     sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
     os.system(sync_cmd)
+
 

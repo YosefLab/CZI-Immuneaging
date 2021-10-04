@@ -5,6 +5,9 @@ import logging
 import glob
 import warnings
 import pandas as pd
+import scvi
+import zipfile
+from anndata._core.anndata import AnnData
 
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
@@ -158,12 +161,12 @@ def run_model(
         protein_expression_obsm_key: str,
         model_name: str,
         prefix: str,
-        verstion: str,
+        version: str,
         data_dir: str,
+		**kwargs
     ):
     """
     Runs scvi or totalvi model depending on the given model_name.
-
     Parameters
     ----------
     adata
@@ -182,24 +185,30 @@ def run_model(
         String indicating a version number for the execution.
     data_dir
         Path to the local data directory where processing output is saved.
-
+	latent_key
+		key to be used for saving the latent representation in adata.obsm.
     Returns
     -------
-    A tuple containing the trained model and the name of the zip file where the model is saved.
+    A tuple containing the updated adata, trained model, and the name of the zip file where the model is saved.
     """
     assert model_name in ["scvi", "totalvi"]
     add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
+    params = dict()
+    if "use_layer_norm" in configs:
+        params["use_layer_norm"] = configs["use_layer_norm"]
+    if "use_batch_norm" in configs:
+        params["use_batch_norm"] = configs["use_batch_norm"]
     add_to_log("Training {} model...".format(model_name))
-    model = scvi.model.SCVI(adata) if model_name=="scvi" else scvi.model.TOTALVI(adata)
+    model = scvi.model.SCVI(adata, **params) if model_name=="scvi" else scvi.model.TOTALVI(adata, **params)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     model.train(max_epochs=configs[max_epochs_config_key])
     add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()
-    if model_name=="scvi":
-        adata.obsm["X_scVI"] = latent
-    else:
-        adata.obsm["X_totalVI"] = latent
+    latent_key = kwargs.get("latent_key", None)
+    if latent_key is None:
+        latent_key = "X_scVI" if model_name=="scvi" else "X_totalVI"
+    adata.obsm[latent_key] = latent
     model_file = "{}.{}.{}_model.zip".format(prefix, version, model_name)
     add_to_log("Saving the model into {}...".format(model_file))
     model_file_path = os.path.join(data_dir, model_file)
@@ -210,6 +219,6 @@ def run_model(
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
     zipf.close()
-    return model, model_file
+    return adata, model, model_file
 
-	
+
