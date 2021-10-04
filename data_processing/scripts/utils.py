@@ -150,3 +150,66 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
     data = pd.read_csv(output_fn)
     os.remove(output_fn)
     return data
+
+def run_model(
+        adata: AnnData,
+        configs: dict,
+        batch_key: str,
+        protein_expression_obsm_key: str,
+        model_name: str,
+        prefix: str,
+        verstion: str,
+        data_dir: str,
+    ):
+    """
+    Runs scvi or totalvi model depending on the given model_name.
+
+    Parameters
+    ----------
+    adata
+        The anndata object containing the data to train on.
+    configs
+        The configs dictionary which includes model parameters.
+    batch_key
+        Name of the column in adata.obs containing batch information.
+    protein_expression_obsm_key
+        Name of the column in adata.obs containing protein expression information.
+    model_name
+        One of "scvi" or "totalvi". Indicates which model to run.
+    prefix
+        String containing sample id and other information, used in file/dir naming.
+    version
+        String indicating a version number for the execution.
+    data_dir
+        Path to the local data directory where processing output is saved.
+
+    Returns
+    -------
+    A tuple containing the trained model and the name of the zip file where the model is saved.
+    """
+    assert model_name in ["scvi", "totalvi"]
+    add_to_log("Setting up {}...".format(model_name))
+    scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
+    add_to_log("Training {} model...".format(model_name))
+    model = scvi.model.SCVI(adata) if model_name=="scvi" else scvi.model.TOTALVI(adata)
+    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
+    model.train(max_epochs=configs[max_epochs_config_key])
+    add_to_log("Saving {} latent representation...".format(model_name))
+    latent = model.get_latent_representation()
+    if model_name=="scvi":
+        adata.obsm["X_scVI"] = latent
+    else:
+        adata.obsm["X_totalVI"] = latent
+    model_file = "{}.{}.{}_model.zip".format(prefix, version, model_name)
+    add_to_log("Saving the model into {}...".format(model_file))
+    model_file_path = os.path.join(data_dir, model_file)
+    model_dir_path = os.path.join(data_dir,"{}.{}_model/".format(prefix, model_name))
+    if os.path.isdir(model_dir_path):
+        os.system("rm -r " + model_dir_path)
+    model.save(model_dir_path)
+    zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
+    zipdir(model_dir_path, zipf)
+    zipf.close()
+    return model, model_file
+
+	
