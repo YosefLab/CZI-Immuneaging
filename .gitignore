@@ -13,3 +13,7 @@ __pycache__/
 # Environments
 v*.zip
 envs/v*.zip
+
+# test data for the upload script
+data_management/test_data/good/*
+data_management/test_data/bad/*

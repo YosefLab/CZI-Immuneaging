@@ -52,7 +52,7 @@ if config_type in ["library", "all"]:
             "hashsolo_priors": "0.01,0.8,0.19",
             "hashsolo_number_of_noise_barcodes": 2,
             "aligned_library_configs_version": "v1",
-            "python_env_version": "immune_aging.py_env.v2",
+            "python_env_version": "immune_aging.py_env.v3",
             "r_setup_version": "immune_aging.R_setup.v2"
         }
         filename = os.path.join(output_destination,
@@ -63,7 +63,6 @@ if config_type in ["library", "all"]:
 if config_type in ["sample", "all"]:
     # create config files for sample processing
     sample_ids = samples[indices]["Sample_ID"]
-
     for sample_id in sample_ids:
         library_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["GEX lib"].iloc[0].split(",")]
         processed_library_configs_version = ["v1" for i in range(len(library_ids))]
@@ -93,7 +92,7 @@ if config_type in ["sample", "all"]:
             "umap_min_dist": 0.5,
             "umap_spread": 1.0,
             "umap_n_components": 2,
-            "python_env_version": "immune_aging.py_env.v2",
+            "python_env_version": "immune_aging.py_env.v3",
             "r_setup_version": "immune_aging.R_setup.v2"
         }
         filename = os.path.join(output_destination,"process_sample.configs.{}.txt".format(sample_id))
