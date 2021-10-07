@@ -11,14 +11,11 @@ configs_file = sys.argv[1]
 import logging
 import os
 import json
-import anndata
 import scanpy as sc
 import numpy as np
 import pandas as pd
 import scvi
-import subprocess
 import hashlib
-import time
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -255,7 +252,9 @@ if not no_cells:
         is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
         if is_cite:
             add_to_log("Detected Antibody Capture features.")
-            protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
+            # Get the CITE data. Only keep the subset of proteins that are not HTO tags. We already store these in an obs column
+            hto_tag = configs["donor"]+"-"
+            protein = adata[:, (adata.var["feature_types"] == "Antibody Capture") & ~(adata.var_names.str.startswith(hto_tag))].copy()
             # copy protein data from X into adata.obsm["protein_expression"]
             protein_df = protein.to_df()
             protein_expression_obsm_key = "protein_expression"
@@ -441,5 +440,3 @@ if not sandbox_mode:
     sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
     os.system(sync_cmd)
-
-
