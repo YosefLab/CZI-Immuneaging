@@ -23,5 +23,5 @@
 "umap_min_dist": 0.5,
 "umap_spread": 1.0,
 "umap_n_components": 2,
-"python_env_version": "immune_aging.py_env.v1",
+"python_env_version": "immune_aging.py_env.v3",
 "r_setup_version": "immune_aging.R_setup.v2"}

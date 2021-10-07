@@ -8,7 +8,7 @@
 "alignment_ref_genome_path": "/path/to/ref_genome_dir/",
 "berkeley_user": "username",
 "s3_access_file": "/path/to/credentials_file.sh",
-"python_env_version": "immune_aging.py_env.v2",
+"python_env_version": "immune_aging.py_env.v3",
 "r_env_version": "immune_aging.r_env.v1",
 "r_setup_version": "immune_aging.R_setup.v2",
 "code_path": "/path/to/data_processing/scripts/"}
