@@ -202,7 +202,11 @@ def run_model(
     add_to_log("Training {} model...".format(model_name))
     model = scvi.model.SCVI(adata, **params) if model_name=="scvi" else scvi.model.TOTALVI(adata, **params)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
-    model.train(max_epochs=configs[max_epochs_config_key])
+    params = dict()
+    if "lr" in configs:
+        model.train(max_epochs=configs[max_epochs_config_key], lr=float(configs["learning_rate"])) 
+    else:
+        model.train(max_epochs=configs[max_epochs_config_key])
     add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()
     latent_key = kwargs.get("latent_key", None)
@@ -220,5 +224,4 @@ def run_model(
     zipdir(model_dir_path, zipf)
     zipf.close()
     return adata, model, model_file
-
 
