@@ -16,6 +16,10 @@ import numpy as np
 import pandas as pd
 import scvi
 import hashlib
+import time
+import celltypist
+import urllib.request
+import pickle
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -361,11 +365,12 @@ if not no_cells:
             rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             add_to_log("Calculating neighborhood graph and UMAP based on TOTALVI components...")
-            key = "totalvi_neighbors"
-            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-                use_rep="X_totalVI", key_added=key) 
-            rna.obsm["X_umap_totalvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-                n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
+            if is_cite:
+                key = "totalvi_neighbors"
+                sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+                    use_rep="X_totalVI", key_added=key) 
+                rna.obsm["X_umap_totalvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                    n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
         add_to_log("Gathering data...")
         # keep only the cells that passed all filters
         keep = adata.obs.index.isin(rna.obs.index)
@@ -380,10 +385,33 @@ if not no_cells:
         # save decontaminated counts (only applies to rna data; consider only cells that we keep after filters)
         adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
-        if adata.n_obs>0:
+        if adata.n_obs > 0:
             add_to_log("Normalize rna counts in adata.X...")
             sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(adata)
+            add_to_log("Predict cell type labels using celltypist...")
+            model_urls = configs["celltypist_model_urls"].split(",")
+            # run prediction using every specified model (url)
+            for i in range(len(model_urls)):
+                model_file = model_urls[i].split("/")[-1]
+                model_path = os.path.join(data_dir,model_file)
+                # download reference data
+                urllib.request.urlretrieve(model_urls[i], model_path)
+                model = celltypist.models.Model.load(model = model_path)
+                # for some reason celltypist changes adata in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of adata.
+                adata_copy = adata.copy()
+                if configs["normalize_total_target_sum"] != 10000:
+                    # renormalize the data in the copy of adata in case configs["normalize_total_target_sum"] != 10000 (which is the scale required by celltypist)
+                    add_to_log("normalizing data for celltypist...")
+                    adata_copy.X = adata.layers["raw_counts"]
+                    sc.pp.normalize_total(adata_copy, target_sum=10000)
+                    sc.pp.log1p(adata_copy)
+                predictions = celltypist.annotate(adata_copy, model = model, majority_voting = True)
+                add_to_log("Saving celltypist annotations for model {}...".format(model_file))
+                adata.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
+                adata.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
+                adata.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
+                adata.obs["celltypist_model."+str(i+1)] = model_urls[i]
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")
