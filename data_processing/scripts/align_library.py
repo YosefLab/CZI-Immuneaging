@@ -159,6 +159,7 @@ add_to_log("Running align_library.py...")
 add_to_log("Starting time: {}".format(timestamp))
 with open(align_lib_script, "r") as f:
 	add_to_log("align_library.py md5 checksum: {}".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
+
 add_to_log("donor: {}\nSeq run: {}\nlib_type: {}\nlib_ids: {}".format(donor_id, seq_run, lib_type, lib_ids))
 add_to_log("using the following configurations:\n{}".format(str(configs)))
 
@@ -186,7 +187,7 @@ if lib_ids[1] != "none":
 
 if lib_ids[2] != "none":
 	fields.append("HTO chem")
-	
+
 libs_chem = samples[fields]
 lib_chems = []
 for i in range(libs_chem.shape[0]):
@@ -247,23 +248,33 @@ if lib_type == "BCR":
 	pass
 
 alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
-
+prefix = "_".join([donor_id, seq_run, lib_type, GEX_lib])
 if alignment_exists:
 	add_to_log("Alignment outputs for the following command already exist:")
 	add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
 	add_to_log("Skipping alignment.")
 else:
 	add_to_log("Running the following alignment command:\n{}".format(alignment_cmd))
-	add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
-
-alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
+	alignment_output = os.popen(alignment_cmd).read()
+	alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
+	if not alignment_exists:
+		# remove the output directory, which is required in order to prevent errors in a following execution of cellranger		
+		os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
+		if "We detected an unsupported chemistry combination (SC5P-R2, SC5P-PE)" in alignment_output:
+			add_to_log("Alignment faild due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).")
+			add_to_log("Rerunning after changing chemistry argument...")
+			alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
+			add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
+			add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
+			alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
+		else:
+			add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output))
 
 if not alignment_exists:
 	print("Not all alignment outputs were generated. Terminating execution.")
 	sys.exit()
 
 add_to_log("Uploading aligner outputs to S3...")
-prefix = "_".join([donor_id, seq_run, lib_type, GEX_lib])
 for out in aligner_outputs_to_save:
 	l = out.split('/')
 	out_file = "{0}.{1}.{2}".format(prefix,aligner,l[-1])
