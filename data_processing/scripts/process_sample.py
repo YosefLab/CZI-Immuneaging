@@ -140,8 +140,7 @@ else:
 
 library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
-processed_libraries_dir = configs["processed_libraries_dir"]
-if len(processed_libraries_dir) > 0:
+if ("processed_libraries_dir" in configs) and (len(configs.get("processed_libraries_dir")) > 0):
     add_to_log("Copying h5ad files of processed libraries from {}...".format(processed_libraries_dir))
     cp_cmd = "cp -r {}/ {}".format(processed_libraries_dir.rstrip("/"), data_dir)
     os.system(cp_cmd)
