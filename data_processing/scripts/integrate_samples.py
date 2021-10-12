@@ -82,7 +82,7 @@ start_logger(level = LOGGER_LEVEL, filename = logger_file_path)
 add_to_log("Running integrate_samples.py...")
 add_to_log("Starting time: {}".format(timestamp))
 with open(integrate_samples_script, "r") as f:
-    add_to_log("process_sample.py md5 checksum: {}\n".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
+    add_to_log("integrate_samples.py md5 checksum: {}\n".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
 
 add_to_log("using the following configurations:\n{}".format(str(configs)))
 add_to_log("Configs version: " + version)
