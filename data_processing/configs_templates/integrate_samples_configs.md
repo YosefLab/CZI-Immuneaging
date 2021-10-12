@@ -4,7 +4,7 @@ The template for the configuration file can be found <a href="https://github.com
 
 The configuration file is formatted as json with the following fields:
 
-* `"sandbox_mode"` - `"True"` or `"False` to indicate whether running in sandbox mode or not. Always set to `"True"` if you are not an admin. Note that execution will fail and you will be alerted by the script if setting `"sandbox_mode": "True"` without AWS permissions of an admin.
+* `"sandbox_mode"` - `"True"` or `"False` to indicate whether running in sandbox mode or not. Always set to `"True"` if you are not an admin. Note that execution will fail and you will be alerted by the script if setting `"sandbox_mode": "False"` without AWS permissions of an admin.
 * `"data_owner"` - name or username of the data owner (the person executing integrate_samples.py)
 * `"code_path"` - Absolute path to the data processing scripts (if cloning the repository then should end with `"data_processing/scripts"`)
 * `"output_destination"` - Absolute path that will be used for saving outputs
