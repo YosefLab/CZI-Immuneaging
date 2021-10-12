@@ -149,7 +149,7 @@ for j in range(len(h5ad_files)):
     adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
     adata_dict[sample_id].obs["sample_id"] = sample_id
 
-add_to_log("Concatenating all cells from all samples...".format(sample_id))
+add_to_log("Concatenating all cells from all samples...")
 adata = adata_dict[sample_ids[0]]
 if len(sample_ids) > 1:
     adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer")
