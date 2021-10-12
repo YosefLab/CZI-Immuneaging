@@ -49,7 +49,7 @@ configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_
 
 assert(len(sample_ids)>1)
     
-AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to run process_library and upload outputs to the server; not that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
+AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to run process_library and upload outputs to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 VARIABLE_CONFIG_KEYS = ["berkeley_user","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 LOGGER_LEVEL = logging.DEBUG
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
