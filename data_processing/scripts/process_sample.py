@@ -74,8 +74,6 @@ SAMPLES_FIELDS = {"Sample_ID": "sample_id",
     "Sorting": "sorting",
     "Stimulation": "stimulation"}
 
-timestamp = get_current_time()
-
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(configs["s3_access_file"], return_dict = True)
 assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sanbox mode; please set sandbox_mode to True"
@@ -100,7 +98,7 @@ if os.path.isfile(logger_file_path):
 
 start_logger(level = LOGGER_LEVEL, filename = logger_file_path)
 add_to_log("Running process_sample.py...")
-add_to_log("Starting time: {}".format(timestamp))
+add_to_log("Starting time: {}".format(get_current_time()))
 with open(process_sample_script, "r") as f:
     add_to_log("process_sample.py md5 checksum: {}\n".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
 

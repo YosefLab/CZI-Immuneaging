@@ -54,10 +54,9 @@ class SimpleLogger(BaseLogger):
             datefmt = "[%Y-%m-%d %H:%M:%S]",
             filename = filename,
         )
-        self.logger = logging.getLogger("rich")
+        self.logger = logging.getLogger()
 
     def _start_stream_logger(self):
-        # TBD
         raise NotImplementedError
 
 
@@ -66,7 +65,6 @@ class RichLogger(BaseLogger):
         super().__init__(filename)
 
     def _start_file_logger(self, filename):
-        # TBD
         raise NotImplementedError
 
     def _start_stream_logger(self):

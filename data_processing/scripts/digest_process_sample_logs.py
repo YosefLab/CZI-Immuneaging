@@ -1,5 +1,5 @@
 ## This script can be used to digest a set of logs from the proess_sample.py script for a given donor,seq_run pair.
-## Run as follows: TODO
+## Run as follows: python digest_process_sample_logs.py <donor_id> <seq_run> <logs_location> <version> <working_dir>
 
 import sys
 import os
@@ -34,7 +34,7 @@ if version == "latest":
 # for each sample id, parse its process_sample logs and report any noteworthy log events
 log_lines_to_print = {}
 for sample_id in sample_ids:
-    library_type = "GEX" # TODO Can we assume this? If not, pass it as a command arg
+    library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
     filename = os.path.join(logs_location, "process_sample.{}.{}.log".format("{}_{}".format(sample_id, library_type), version))
     lines = []
     with open(filename, 'r') as f:

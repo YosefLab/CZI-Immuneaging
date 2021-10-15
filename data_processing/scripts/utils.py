@@ -12,7 +12,6 @@ from anndata._core.anndata import AnnData
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
 
-# TODO remove the two calls below and use SimpleLogger at call sites
 def start_logger(level, filename):
 	for handler in logging.root.handlers:
 		logging.root.removeHandler(handler)
