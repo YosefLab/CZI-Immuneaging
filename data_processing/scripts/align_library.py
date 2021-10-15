@@ -12,6 +12,9 @@ import numpy as np
 import re
 import hashlib
 
+from logger import SimpleLogger
+from utils import *
+
 timestamp = time.strftime("%H:%M, %m-%d-%Y")
 
 align_lib_script = sys.argv[0]
@@ -21,10 +24,8 @@ lib_type = sys.argv[3]
 lib_ids = sys.argv[4]
 
 sys.path.append(code_path)
-from utils import *
 
 spreadsheet_id = "1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY"
-LOGGER_LEVEL = logging.DEBUG
 VARIABLE_CONFIG_KEYS = ["donor",
 "seq_run",
 "output_destination",
@@ -33,7 +34,6 @@ VARIABLE_CONFIG_KEYS = ["donor",
 "berkeley_user",
 "s3_access_file",
 "code_path"]
-
 
 def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
 	assert aligner == "cellranger" # no other option is currently implemented
@@ -154,21 +154,21 @@ logger_file_path = os.path.join(data_dir, logger_file)
 if os.path.isfile(logger_file_path):
 	os.remove(logger_file_path)
 
-start_logger(level = LOGGER_LEVEL, filename = logger_file_path)
-add_to_log("Running align_library.py...")
-add_to_log("Starting time: {}".format(timestamp))
+logger = SimpleLogger(filename = logger_file_path)
+logger.add_to_log("Running align_library.py...")
+logger.add_to_log("Starting time: {}".format(timestamp))
 with open(align_lib_script, "r") as f:
-	add_to_log("align_library.py md5 checksum: {}".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
+	logger.add_to_log("align_library.py md5 checksum: {}".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
 
-add_to_log("donor: {}\nSeq run: {}\nlib_type: {}\nlib_ids: {}".format(donor_id, seq_run, lib_type, lib_ids))
-add_to_log("using the following configurations:\n{}".format(str(configs)))
+logger.add_to_log("donor: {}\nSeq run: {}\nlib_type: {}\nlib_ids: {}".format(donor_id, seq_run, lib_type, lib_ids))
+logger.add_to_log("using the following configurations:\n{}".format(str(configs)))
 
-add_to_log("Loading metadata from the Google spreadsheet...")
+logger.add_to_log("Loading metadata from the Google spreadsheet...")
 samples = read_immune_aging_sheet("Samples")
 donors = read_immune_aging_sheet("Donors")
 cite_key = read_immune_aging_sheet("CITE key")
 
-add_to_log("Extracting site information...")
+logger.add_to_log("Extracting site information...")
 sites = samples["Site"][(samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))].values
 assert all(sites == "UK") or all(sites == "NY")
 site = sites[0]
@@ -178,9 +178,9 @@ if site == "UK":
 else:
 	site_s3_dir = site_s3_dir+"columbia/"
 
-add_to_log("detected site_s3_dir = {}".format(site_s3_dir))
+logger.add_to_log("detected site_s3_dir = {}".format(site_s3_dir))
 
-add_to_log("Extracting chemistry information...")
+logger.add_to_log("Extracting chemistry information...")
 fields = [lib_type+" lib",lib_type+" chem"]
 if lib_ids[1] != "none":
 	fields.append("CITE chem")
@@ -196,9 +196,9 @@ for i in range(libs_chem.shape[0]):
 
 assert(all(np.array(lib_chems).flatten() == np.array(lib_chems).flatten()[0]))
 chemistry = np.array(lib_chems).flatten()[0]
-add_to_log("detected chemistry = {}".format(chemistry))
+logger.add_to_log("detected chemistry = {}".format(chemistry))
 
-add_to_log("Downloading fastq files from S3...")
+logger.add_to_log("Downloading fastq files from S3...")
 # don't rely on 'aws s3 sync' commands which seem to be buggy in some cases; copy file if it doesn't exist on local.
 ls_cmd = 'aws s3 ls {0}'.format(site_s3_dir)
 ls = os.popen(ls_cmd).read()
@@ -206,7 +206,7 @@ data_dir_fastq = os.path.join(data_dir, "fastq")
 os.system("mkdir -p " + data_dir_fastq)
 for lib_id in lib_ids:
 	if lib_id != "none":
-		add_to_log("Downloading fastq files from S3 for lib {}...".format(lib_id))
+		logger.add_to_log("Downloading fastq files from S3 for lib {}...".format(lib_id))
 		data_dir_lib = os.path.join(data_dir_fastq, lib_id)
 		os.system("mkdir -p " + data_dir_lib)
 		lib_pattern = "{}_{}.*{}.*.fastq.gz".format(donor_id, seq_run, lib_id)
@@ -214,13 +214,13 @@ for lib_id in lib_ids:
 			if re.search(lib_pattern, i):
 				f = os.path.join(data_dir_lib,i)
 				if os.path.isfile(f):
-					add_to_log("file {} is already in local.".format(f))
+					logger.add_to_log("file {} is already in local.".format(f))
 				else:
 					cp_cmd = 'aws s3 cp {0} {1}'.format(os.path.join(site_s3_dir,i), data_dir_lib)
-					add_to_log("cp_cmd: {}".format(cp_cmd))
-					add_to_log("aws response: {}".format(os.popen(cp_cmd).read()))
+					logger.add_to_log("cp_cmd: {}".format(cp_cmd))
+					logger.add_to_log("aws response: {}".format(os.popen(cp_cmd).read()))
 
-add_to_log("Preparing alignment command...")
+logger.add_to_log("Preparing alignment command...")
 if lib_type == "GEX":
 	TCR_lib = None
 	BCR_lib = None
@@ -250,31 +250,31 @@ if lib_type == "BCR":
 alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
 prefix = "_".join([donor_id, seq_run, lib_type, GEX_lib])
 if alignment_exists:
-	add_to_log("Alignment outputs for the following command already exist:")
-	add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
-	add_to_log("Skipping alignment.")
+	logger.add_to_log("Alignment outputs for the following command already exist:")
+	logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
+	logger.add_to_log("Skipping alignment.")
 else:
-	add_to_log("Running the following alignment command:\n{}".format(alignment_cmd))
+	logger.add_to_log("Running the following alignment command:\n{}".format(alignment_cmd))
 	alignment_output = os.popen(alignment_cmd).read()
 	alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
 	if not alignment_exists:
 		# remove the output directory, which is required in order to prevent errors in a following execution of cellranger		
 		os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
 		if "We detected an unsupported chemistry combination (SC5P-R2, SC5P-PE)" in alignment_output:
-			add_to_log("Alignment faild due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).")
-			add_to_log("Rerunning after changing chemistry argument...")
+			logger.add_to_log("Alignment faild due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).")
+			logger.add_to_log("Rerunning after changing chemistry argument...")
 			alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
-			add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
-			add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
+			logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
+			logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
 			alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
 		else:
-			add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output))
+			logger.add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output))
 
 if not alignment_exists:
 	print("Not all alignment outputs were generated. Terminating execution.")
 	sys.exit()
 
-add_to_log("Uploading aligner outputs to S3...")
+logger.add_to_log("Uploading aligner outputs to S3...")
 for out in aligner_outputs_to_save:
 	l = out.split('/')
 	out_file = "{0}.{1}.{2}".format(prefix,aligner,l[-1])
@@ -283,26 +283,26 @@ for out in aligner_outputs_to_save:
 	else:
 		out_dir = "/".join(l[0:-1])
 	cp_cmd = "cp {0} {1}".format(out, os.path.join(data_dir, out_file))
-	add_to_log("copying file in local...")
-	add_to_log("cp_cmd: {}".format(cp_cmd))
-	add_to_log("cp_cmd result: {}".format(os.popen(cp_cmd).read()))
+	logger.add_to_log("copying file in local...")
+	logger.add_to_log("cp_cmd: {}".format(cp_cmd))
+	logger.add_to_log("cp_cmd result: {}".format(os.popen(cp_cmd).read()))
 	sync_cmd = 'aws s3 sync {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, out_file)
-	add_to_log("Uploading aligner output {}...".format(out_file))
-	add_to_log("sync_cmd: {}".format(sync_cmd))
-	add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
+	logger.add_to_log("Uploading aligner output {}...".format(out_file))
+	logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+	logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
 
-add_to_log("Converting aligned data to h5ad...")
+logger.add_to_log("Converting aligned data to h5ad...")
 adata = sc.read_10x_mtx(aligned_data_dir, gex_only = False)
-add_to_log("Saving file as {}...".format(os.path.join(data_dir, h5ad_file)))
+logger.add_to_log("Saving file as {}...".format(os.path.join(data_dir, h5ad_file)))
 adata.write(os.path.join(data_dir, h5ad_file))
 
-add_to_log("Uploading h5ad file to S3...")
+logger.add_to_log("Uploading h5ad file to S3...")
 sync_cmd = 'aws s3 sync {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, h5ad_file)
-add_to_log("sync_cmd: {}".format(sync_cmd))
-add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
+logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
 
 msg = "Done aligning library {}".format(GEX_lib)
-add_to_log(msg)
+logger.add_to_log(msg)
 print(msg)
 
 # upload log file to S3

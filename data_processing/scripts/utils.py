@@ -9,21 +9,11 @@ import scvi
 import zipfile
 from anndata._core.anndata import AnnData
 
+from data_processing.scripts.logger import BaseLogger
+
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
 
-def start_logger(level, filename):
-	for handler in logging.root.handlers:
-		logging.root.removeHandler(handler)
-	logging.basicConfig(level = level, filename = filename)
-
-def add_to_log(s, level = "info"):
-	toprint = time.strftime("%H:%M,%m-%d-%Y:") + s
-	if level == "info":
-		logging.info(toprint)
-	elif level == "debug":
-		logging.debug(toprint)
-		
 def set_access_keys(filepath, return_dict = False):
 	"""
 	Sets the user's access keys to the AWS S3 bucket.
@@ -163,6 +153,7 @@ def run_model(
         prefix: str,
         version: str,
         data_dir: str,
+        logger: BaseLogger,
 		**kwargs
     ):
     """
@@ -192,14 +183,14 @@ def run_model(
     A tuple containing the updated adata, trained model, and the name of the zip file where the model is saved.
     """
     assert model_name in ["scvi", "totalvi"]
-    add_to_log("Setting up {}...".format(model_name))
+    logger.add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
     params = dict()
     if "use_layer_norm" in configs:
         params["use_layer_norm"] = configs["use_layer_norm"]
     if "use_batch_norm" in configs:
         params["use_batch_norm"] = configs["use_batch_norm"]
-    add_to_log("Training {} model...".format(model_name))
+    logger.add_to_log("Training {} model...".format(model_name))
     model = scvi.model.SCVI(adata, **params) if model_name=="scvi" else scvi.model.TOTALVI(adata, **params)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     params = dict()
@@ -207,14 +198,14 @@ def run_model(
         model.train(max_epochs=configs[max_epochs_config_key], lr=float(configs["learning_rate"])) 
     else:
         model.train(max_epochs=configs[max_epochs_config_key])
-    add_to_log("Saving {} latent representation...".format(model_name))
+    logger.add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()
     latent_key = kwargs.get("latent_key", None)
     if latent_key is None:
         latent_key = "X_scVI" if model_name=="scvi" else "X_totalVI"
     adata.obsm[latent_key] = latent
     model_file = "{}.{}.{}_model.zip".format(prefix, version, model_name)
-    add_to_log("Saving the model into {}...".format(model_file))
+    logger.add_to_log("Saving the model into {}...".format(model_file))
     model_file_path = os.path.join(data_dir, model_file)
     model_dir_path = os.path.join(data_dir,"{}.{}_model/".format(prefix, model_name))
     if os.path.isdir(model_dir_path):
