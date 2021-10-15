@@ -26,7 +26,7 @@ class BaseLogger(ABC):
     def _start_stream_logger(self):
         pass
 
-    def add_to_log(self, s, level):
+    def add_to_log(self, s, level="info"):
         if level not in _level_to_sign:
             raise ValueError("Unrecognized level value: {}. Must be one of: {}".format(level, _level_to_sign))
         message = _level_to_sign[level] + "  " + s
