@@ -15,10 +15,10 @@ working_dir = sys.argv[5] # must be either "" or the path to the local directory
 
 # sanity check command input
 assert(logs_location=="aws" or os.path.isdir(logs_location))
-assert(os.path.isdir(working_dir))
+assert(working_dir == "" or os.path.isdir(working_dir))
 
 # gather the full set of sample id's we are interested in
-samples = utils.read_immune_aging_sheet("Samples")
+samples = utils.read_immune_aging_sheet("Samples", quiet=True)
 indices = samples["Donor ID"] == donor_id
 sample_ids = samples[indices]["Sample_ID"]
 
@@ -34,7 +34,8 @@ if version == "latest":
 # for each sample id, parse its process_sample logs and report any noteworthy log events
 log_lines_to_print = {}
 for sample_id in sample_ids:
-    filename = os.path.join(logs_location, "process_sample.{}.{}.log".format(sample_id, version))
+    library_type = "GEX" # TODO Can we assume this? If not, pass it as a command arg
+    filename = os.path.join(logs_location, "process_sample.{}.{}.log".format("{}_{}".format(sample_id, library_type), version))
     lines = []
     with open(filename, 'r') as f:
         lines = f.readlines()
@@ -53,12 +54,13 @@ if len(log_lines_to_print) == 0:
 else:
     rich_logger.add_to_log("Found the following relevant log lines.", "info")
     first_item = True
-    for item in log_lines_to_print:
+    for key,value in log_lines_to_print.items():
         if not first_item:
             # draw a separator line between files
             width = os.get_terminal_size().columns / 5
-            print(" " * math.floor(width)  + "\u2014" * 3 * math.floor(width) + " " * math.floor(width))
-        print(item.key + ":\n")
-        for line in item.value:
-            print("\t\t" + line)
+            print(" " * math.floor(width)  + "\u2014" * 3 * math.floor(width) + " " * math.floor(width) + "\n")
+        file_name = key.split("/")[-1]
+        print(file_name + ":\n")
+        for line in value:
+            print("\t" + line)
         first_item = False

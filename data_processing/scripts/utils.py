@@ -125,7 +125,7 @@ def zipdir(path, ziph):
             ziph.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), 
                 os.path.join(path, '..')))
 
-def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
+def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False):
     url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
         sheet
     )
@@ -144,7 +144,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None):
 
     with warnings.catch_warnings(record=True) as w:
         warnings.filterwarnings("error")
-        output_fn = gdown.download(url, output_fn, quiet=False)
+        output_fn = gdown.download(url, output_fn, quiet=quiet)
 
         if len(w) == 1:
             warnings.showwarning(
