@@ -9,8 +9,6 @@ import scvi
 import zipfile
 from anndata._core.anndata import AnnData
 
-from data_processing.scripts.logger import BaseLogger
-
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
 
@@ -153,8 +151,8 @@ def run_model(
         prefix: str,
         version: str,
         data_dir: str,
-        logger: BaseLogger,
-		**kwargs
+        logger,
+        **kwargs
     ):
     """
     Runs scvi or totalvi model depending on the given model_name.
