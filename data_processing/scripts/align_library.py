@@ -25,7 +25,6 @@ lib_ids = sys.argv[4]
 
 sys.path.append(code_path)
 
-spreadsheet_id = "1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY"
 VARIABLE_CONFIG_KEYS = ["donor",
 "seq_run",
 "output_destination",
@@ -261,14 +260,14 @@ else:
 		# remove the output directory, which is required in order to prevent errors in a following execution of cellranger		
 		os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
 		if "We detected an unsupported chemistry combination (SC5P-R2, SC5P-PE)" in alignment_output:
-			logger.add_to_log("Alignment faild due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).")
+			logger.add_to_log("Alignment failed due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).", level="error")
 			logger.add_to_log("Rerunning after changing chemistry argument...")
 			alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
 			logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
 			logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
 			alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
 		else:
-			logger.add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output))
+			logger.add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output), level="error")
 
 if not alignment_exists:
 	print("Not all alignment outputs were generated. Terminating execution.")

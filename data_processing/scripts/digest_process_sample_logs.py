@@ -7,6 +7,10 @@ import math
 import utils
 import logger
 
+def get_process_sample_log_file_name(sample_id: str, library_type: str, version: str):
+    prefix = "{}_{}".format(sample_id, library_type)
+    return "process_sample.{}.{}.log".format(prefix, version)
+
 donor_id = sys.argv[1]
 seq_run = sys.argv[2]
 logs_location = sys.argv[3] # must be one of "aws" or path to the logs location on the local disk
@@ -15,17 +19,26 @@ working_dir = sys.argv[5] # must be either "" or the path to the local directory
 
 # sanity check command input
 assert(logs_location=="aws" or os.path.isdir(logs_location))
-assert(working_dir == "" or os.path.isdir(working_dir))
+assert(working_dir == "" if logs_location!="aws" else os.path.isdir(working_dir))
 
 # gather the full set of sample id's we are interested in
 samples = utils.read_immune_aging_sheet("Samples", quiet=True)
 indices = samples["Donor ID"] == donor_id
 sample_ids = samples[indices]["Sample_ID"]
 
+library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
+
 # if the logs location is aws, download all log files to the local working directory
 if logs_location == "aws":
-    # TODO download logs from aws to a local working directory
-    raise NotImplementedError
+    for sample_id in sample_ids:
+        prefix = "{}_{}".format(sample_id, library_type)
+        filename = get_process_sample_log_file_name(sample_id, library_type, version)
+        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}/{} {} --exclude "*" --include {}'.format(
+            prefix, version, working_dir, filename)
+        logger.add_to_log("syncing {}...".format(filename))
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    logs_location = working_dir
 
 if version == "latest":
     # TODO
@@ -34,19 +47,19 @@ if version == "latest":
 # for each sample id, parse its process_sample logs and report any noteworthy log events
 log_lines_to_print = {}
 for sample_id in sample_ids:
-    library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
-    filename = os.path.join(logs_location, "process_sample.{}.{}.log".format("{}_{}".format(sample_id, library_type), version))
+    filename = get_process_sample_log_file_name(sample_id, library_type, version)
+    filepath = os.path.join(logs_location, filename)
     lines = []
-    with open(filename, 'r') as f:
+    with open(filepath, 'r') as f:
         lines = f.readlines()
     for line in lines:
         # for now, we only print logs above a hard coded level threshold (ERROR),
         # but we can extend this script to take a user-provided threshold 
         if logger.is_alertable_log_line(line):
-            if filename not in log_lines_to_print:
-                log_lines_to_print[filename] = [line]
+            if filepath not in log_lines_to_print:
+                log_lines_to_print[filepath] = [line]
             else:
-                log_lines_to_print[filename].append(line)
+                log_lines_to_print[filepath].append(line)
 
 rich_logger = logger.RichLogger()
 if len(log_lines_to_print) == 0:
