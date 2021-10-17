@@ -261,7 +261,11 @@ if not no_cells:
             # copy protein data from X into adata.obsm["protein_expression"]
             protein_df = protein.to_df()
             protein_expression_obsm_key = "protein_expression"
-            adata.obsm[protein_expression_obsm_key] = protein_df
+            if not protein_df.empty:
+                adata.obsm[protein_expression_obsm_key] = protein_df
+            else:
+                add_to_log("All detected Antibody Capture features were due to HTO, no proteins of interest to analyze.")
+                is_cite = False
             rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         else:
             rna = adata.copy()
