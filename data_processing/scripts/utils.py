@@ -152,7 +152,8 @@ def run_model(
         version: str,
         data_dir: str,
         logger,
-        **kwargs
+        latent_key: str = None,
+        **kwargs,
     ):
     """
     Runs scvi or totalvi model depending on the given model_name.
@@ -174,6 +175,8 @@ def run_model(
         String indicating a version number for the execution.
     data_dir
         Path to the local data directory where processing output is saved.
+    logger
+        Logger object to use when adding logs.
 	latent_key
 		key to be used for saving the latent representation in adata.obsm.
     Returns
@@ -183,22 +186,23 @@ def run_model(
     assert model_name in ["scvi", "totalvi"]
     logger.add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
-    params = dict()
-    if "use_layer_norm" in configs:
-        params["use_layer_norm"] = configs["use_layer_norm"]
-    if "use_batch_norm" in configs:
-        params["use_batch_norm"] = configs["use_batch_norm"]
+    model_params_keys = ["use_layer_norm", "use_batch_norm"]
+    model_params = dict()
+    for i in model_params_keys:
+        if i in configs:
+            model_params[i] = configs[i]
     logger.add_to_log("Training {} model...".format(model_name))
-    model = scvi.model.SCVI(adata, **params) if model_name=="scvi" else scvi.model.TOTALVI(adata, **params)
+    model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, **model_params)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
-    params = dict()
-    if "lr" in configs:
-        model.train(max_epochs=configs[max_epochs_config_key], lr=float(configs["learning_rate"])) 
-    else:
-        model.train(max_epochs=configs[max_epochs_config_key])
+    train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
+    train_params = dict()
+    train_params["max_epochs"] = configs[max_epochs_config_key]
+    for i in train_params_keys:
+        if i in configs:
+            train_params[i] = configs[i]
+    model.train(**train_params)
     logger.add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()
-    latent_key = kwargs.get("latent_key", None)
     if latent_key is None:
         latent_key = "X_scVI" if model_name=="scvi" else "X_totalVI"
     adata.obsm[latent_key] = latent
@@ -213,4 +217,3 @@ def run_model(
     zipdir(model_dir_path, zipf)
     zipf.close()
     return adata, model, model_file
-
