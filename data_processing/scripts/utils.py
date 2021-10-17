@@ -9,6 +9,8 @@ import scvi
 import zipfile
 from anndata._core.anndata import AnnData
 
+AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
+
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
 
