@@ -48,7 +48,7 @@ if logs_location == "aws":
     logs_location = working_dir
 
 if version == "latest":
-    # TODO
+    # TODO issue #15
     raise NotImplementedError
 
 # for each sample id, parse its process_sample logs and report any noteworthy log events
