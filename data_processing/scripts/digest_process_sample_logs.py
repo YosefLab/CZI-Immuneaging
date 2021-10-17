@@ -5,7 +5,7 @@ import sys
 import os
 import math
 import utils
-import logger
+from logger import RichLogger, is_alertable_log_line
 
 def get_process_sample_log_file_name(sample_id: str, library_type: str, version: str):
     prefix = "{}_{}".format(sample_id, library_type)
@@ -29,6 +29,7 @@ sample_ids = samples[indices]["Sample_ID"]
 library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
 
 # if the logs location is aws, download all log files to the local working directory
+logger = RichLogger()
 if logs_location == "aws":
     for sample_id in sample_ids:
         prefix = "{}_{}".format(sample_id, library_type)
@@ -55,17 +56,16 @@ for sample_id in sample_ids:
     for line in lines:
         # for now, we only print logs above a hard coded level threshold (ERROR),
         # but we can extend this script to take a user-provided threshold 
-        if logger.is_alertable_log_line(line):
+        if is_alertable_log_line(line):
             if filepath not in log_lines_to_print:
                 log_lines_to_print[filepath] = [line]
             else:
                 log_lines_to_print[filepath].append(line)
 
-rich_logger = logger.RichLogger()
 if len(log_lines_to_print) == 0:
-    rich_logger.add_to_log("No relevant log lines were found.", "info")
+    logger.add_to_log("No relevant log lines were found.", "info")
 else:
-    rich_logger.add_to_log("Found the following relevant log lines.", "info")
+    logger.add_to_log("Found the following relevant log lines.", "info")
     first_item = True
     for key,value in log_lines_to_print.items():
         if not first_item:
