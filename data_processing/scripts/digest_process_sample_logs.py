@@ -60,7 +60,7 @@ for sample_id in sample_ids:
     with open(filepath, 'r') as f:
         lines = f.readlines()
     for line in lines:
-        # for now, we only print logs above a hard coded level threshold (ERROR),
+        # for now, we only print logs above a hard coded severity threshold (see `is_alertable_log_line`),
         # but we can extend this script to take a user-provided threshold 
         if is_alertable_log_line(line):
             if filepath not in log_lines_to_print:

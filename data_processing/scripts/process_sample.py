@@ -304,8 +304,10 @@ if not no_cells:
         n_obs_before = rna.n_obs
         rna = rna[rna.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:]
         n_decon_cells_filtered = n_obs_before-rna.n_obs
-        msg = "Removed {} cells with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(
-            n_decon_cells_filtered, configs["filter_decontaminated_cells_min_genes"])
+        percent_removed = 100*n_decon_cells_filtered/n_obs_before
+        level = "error" if percent_removed > 40 else "info"
+        msg = "Removed {} cells (percent removed: {:.2f}%) with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(
+            n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"], level=level)
         logger.add_to_log(msg)
         summary.append(msg)
         logger.add_to_log("Detecting highly variable genes...")
@@ -333,7 +335,9 @@ if not no_cells:
         logger.add_to_log("Removing doublets...")
         n_obs_before = rna.n_obs
         rna = rna[is_solo_singlet,]
-        logger.add_to_log("Removed {} estimated doublets; {} droplets remained.".format(n_obs_before-rna.n_obs,rna.n_obs))
+        percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
+        level = "error" if percent_removed > 40 else "info"
+        logger.add_to_log("Removed {} estimated doublets (percent removed: {:.2f}%); {} droplets remained.".format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
         summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
             logger.add_to_log("No cells left after doublet detection. Skipping the next processing steps.", "error")

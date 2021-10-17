@@ -161,7 +161,7 @@ if len(cell_hashing)>1:
         number_of_noise_barcodes = min(len(cell_hashing)-1,configs["hashsolo_number_of_noise_barcodes"]))
     num_doublets = sum(adata.obs["Classification"] == "Doublet")
     percent_doublets = 100*num_doublets/adata.n_obs
-    level = "warning" if percent_doublets > 40 else "info"
+    level = "error" if percent_doublets > 40 else "info"
     logger.add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(percent_doublets, num_doublets, adata.n_obs), level=level)
     adata = adata[adata.obs["Classification"] != "Doublet"]
     logger.add_to_log("Adding the library ID to the cell barcode name (will allow to distinguish between differnet cells with the same barcode when integrating differnet libraries that were used to collect the same samples)...")
