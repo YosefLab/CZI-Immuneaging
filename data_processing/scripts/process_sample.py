@@ -113,7 +113,7 @@ if is_new_version:
     os.system(cp_cmd)
     if not sandbox_mode:
         logger.add_to_log("Uploading new configs version to S3...")
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
             data_dir, prefix, version, output_configs_file)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
@@ -152,7 +152,7 @@ else:
         library_version = library_versions[j]
         lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version)
-        sync_cmd = 'aws s3 sync s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
+        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_libraries/{}_{}_{}_{}/{}/ {} --exclude "*" --include {}'.format(
             donor, seq_run, library_type, library_id, library_version, data_dir, lib_h5ad_file)
         logger.add_to_log("syncing {}...".format(lib_h5ad_file))
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -206,7 +206,7 @@ if len(library_ids)==0:
     logging.shutdown()
     if not sandbox_mode:
         # Uploading log file to S3...
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
             data_dir, prefix, version, logger_file)
         os.system(sync_cmd)
     sys.exit()
@@ -412,7 +412,7 @@ if not no_cells:
         logger.add_to_log("Terminating execution prematurely.", "critical")
         if not sandbox_mode:
             # upload log to S3
-            sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+            sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
                 data_dir, prefix, version, logger_file)
             os.system(sync_cmd)
         print(err)
@@ -427,18 +427,18 @@ adata.write(os.path.join(data_dir,h5ad_file))
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, h5ad_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     if not no_cells:
         logger.add_to_log("Uploading model files (a single .zip file for each model) to S3...")
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {} --include {}'.format(
+        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {} --include {}'.format(
             data_dir, prefix, version, scvi_model_file, totalvi_model_file)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))        
         logger.add_to_log("Uploading decontx model file to S3...")
-        sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
             decontx_data_dir, prefix, version, decontx_model_file.split("/")[-1])
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
@@ -453,6 +453,6 @@ for i in summary:
 logging.shutdown()
 if not sandbox_mode:
     # Uploading log file to S3...
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
     os.system(sync_cmd)

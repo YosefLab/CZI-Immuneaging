@@ -73,7 +73,7 @@ if is_new_version:
     logger.add_to_log("Uploading new configs version to S3...")
     cp_cmd = "cp {} {}".format(configs_file, os.path.join(data_dir,output_configs_file))
     os.system(cp_cmd)
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, output_configs_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
@@ -106,7 +106,7 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 logger.add_to_log("Downloading h5ad file of aligned library from S3...")
 aligned_h5ad_file = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
     configs["library_id"], configs["aligned_library_configs_version"])
-sync_cmd = 'aws s3 sync s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
+sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
     configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
     configs["library_id"], data_dir, aligned_h5ad_file)
 logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -173,7 +173,7 @@ adata.write(os.path.join(data_dir,h5ad_file))
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, h5ad_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
@@ -187,7 +187,7 @@ for i in summary:
 
 logging.shutdown()
 if not sandbox_mode:
-    sync_cmd = 'aws s3 sync {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, prefix, version, logger_file)
     os.system(sync_cmd)
     #logger.add_to_log("sync_cmd: {}".format(sync_cmd))

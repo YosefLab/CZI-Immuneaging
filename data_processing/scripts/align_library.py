@@ -285,7 +285,7 @@ for out in aligner_outputs_to_save:
 	logger.add_to_log("copying file in local...")
 	logger.add_to_log("cp_cmd: {}".format(cp_cmd))
 	logger.add_to_log("cp_cmd result: {}".format(os.popen(cp_cmd).read()))
-	sync_cmd = 'aws s3 sync {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, out_file)
+	sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, out_file)
 	logger.add_to_log("Uploading aligner output {}...".format(out_file))
 	logger.add_to_log("sync_cmd: {}".format(sync_cmd))
 	logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
@@ -296,7 +296,7 @@ logger.add_to_log("Saving file as {}...".format(os.path.join(data_dir, h5ad_file
 adata.write(os.path.join(data_dir, h5ad_file))
 
 logger.add_to_log("Uploading h5ad file to S3...")
-sync_cmd = 'aws s3 sync {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, h5ad_file)
+sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, h5ad_file)
 logger.add_to_log("sync_cmd: {}".format(sync_cmd))
 logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
 
@@ -305,7 +305,7 @@ logger.add_to_log(msg)
 print(msg)
 
 # upload log file to S3
-cmd = 'aws s3 sync {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, logger_file.split('/')[-1])
+cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, logger_file.split('/')[-1])
 os.system(cmd)
 
 ## remove fastq files
