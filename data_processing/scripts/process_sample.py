@@ -330,7 +330,7 @@ if not no_cells:
             model_path = os.path.join(data_dir,model_file)
             # download reference data
             if model_urls[i].startswith("s3://"):
-                model_folder = model_urls[i].removesuffix(model_file)
+                model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
                 sync_cmd = "aws s3 sync --no-progress {} {} --exclude "*" --include {}".format(model_folder, data_dir, model_file)
                 logger.add_to_log("syncing {}...".format(model_file))
                 logger.add_to_log("sync_cmd: {}".format(sync_cmd))
