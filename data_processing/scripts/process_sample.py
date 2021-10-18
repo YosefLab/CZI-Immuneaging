@@ -320,9 +320,44 @@ if not no_cells:
         add_to_log("Detecting highly variable genes...")
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
+        add_to_log("Predict cell type labels using celltypist...")
+        model_urls = configs["celltypist_model_urls"].split(",")
+        # run prediction using every specified model (url)
+        for i in range(len(model_urls)):
+            model_file = model_urls[i].split("/")[-1]
+            model_path = os.path.join(data_dir,model_file)
+            # download reference data
+            if model_urls[i].startswith("s3://"):
+                model_folder = model_urls[i].removesuffix(model_file)
+                sync_cmd = "aws s3 sync --no-progress {} {} --exclude "*" --include {}".format(model_folder, data_dir, model_file)
+                add_to_log("syncing {}...".format(model_file))
+                add_to_log("sync_cmd: {}".format(sync_cmd))
+                aws_response = os.popen(sync_cmd).read()
+                add_to_log("aws response: {}\n".format(aws_response))
+            else:
+                urllib.request.urlretrieve(model_urls[i], model_path)
+            model = celltypist.models.Model.load(model = model_path)
+            # for some reason celltypist changes adata in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of adata.
+            rna_copy = rna.copy()
+            if configs["normalize_total_target_sum"] != 10000:
+                # normalize the copied data with a scale of 10000 (which is the scale required by celltypist)
+                add_to_log("normalizing data for celltypist...")
+                sc.pp.normalize_total(rna_copy, target_sum=10000)
+                sc.pp.log1p(rna_copy)
+            predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
+            # save the index for the RBC model if one exists, since we will need it further below
+            rbc_model_index = i if model_file.startswith("RBC_model") else -1
+            add_to_log("Saving celltypist annotations for model {}...".format(model_file))
+            adata.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
+            adata.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
+            adata.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
+            adata.obs["celltypist_model."+str(i+1)] = model_urls[i]
+        # filter out RBC cells
+        rna = rna[adata.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC"]
+        # TODO log percentage removed with warning level if above a certain threshold
         if is_cite:
-            rna, totalvi_model, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir)
-        rna, scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir)
+            _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir)
+        scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir)
         add_to_log("Running solo for detecting doublets...")
         if len(library_ids)>1:
             batches = pd.unique(rna.obs[batch_key])
@@ -392,29 +427,6 @@ if not no_cells:
             add_to_log("Normalize rna counts in adata.X...")
             sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(adata)
-            add_to_log("Predict cell type labels using celltypist...")
-            model_urls = configs["celltypist_model_urls"].split(",")
-            # run prediction using every specified model (url)
-            for i in range(len(model_urls)):
-                model_file = model_urls[i].split("/")[-1]
-                model_path = os.path.join(data_dir,model_file)
-                # download reference data
-                urllib.request.urlretrieve(model_urls[i], model_path)
-                model = celltypist.models.Model.load(model = model_path)
-                # for some reason celltypist changes adata in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of adata.
-                adata_copy = adata.copy()
-                if configs["normalize_total_target_sum"] != 10000:
-                    # renormalize the data in the copy of adata in case configs["normalize_total_target_sum"] != 10000 (which is the scale required by celltypist)
-                    add_to_log("normalizing data for celltypist...")
-                    adata_copy.X = adata.layers["raw_counts"]
-                    sc.pp.normalize_total(adata_copy, target_sum=10000)
-                    sc.pp.log1p(adata_copy)
-                predictions = celltypist.annotate(adata_copy, model = model, majority_voting = True)
-                add_to_log("Saving celltypist annotations for model {}...".format(model_file))
-                adata.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
-                adata.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
-                adata.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
-                adata.obs["celltypist_model."+str(i+1)] = model_urls[i]
     except Exception as err:
         add_to_log("Execution failed with the following error:\n{}".format(err))
         add_to_log("Terminating execution prematurely.")

@@ -189,7 +189,7 @@ def run_model(
 		key to be used for saving the latent representation in adata.obsm.
     Returns
     -------
-    A tuple containing the updated adata, trained model, and the name of the zip file where the model is saved.
+    A tuple containing the trained model, and the name of the zip file where the model is saved.
     """
     assert model_name in ["scvi", "totalvi"]
     add_to_log("Setting up {}...".format(model_name))
@@ -224,4 +224,4 @@ def run_model(
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
     zipf.close()
-    return adata, model, model_file
+    return model, model_file
