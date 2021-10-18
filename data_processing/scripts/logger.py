@@ -2,6 +2,7 @@ import logging
 from abc import abstractmethod, ABC
 from typing import Union
 from rich.logging import RichHandler
+import inspect
 
 _level_to_sign = {
     "info": "ℹ️",
@@ -29,7 +30,9 @@ class BaseLogger(ABC):
     def add_to_log(self, s, level="info"):
         if level not in _level_to_sign:
             raise ValueError("Unrecognized level value: {}. Must be one of: {}".format(level, _level_to_sign))
-        message = _level_to_sign[level] + "  " + s
+        # append the file name and line number of the caller
+        caller_frame = inspect.getframeinfo(inspect.currentframe().f_back)
+        message = _level_to_sign[level] + "  " + s + " ({}:{})".format(caller_frame.filename, caller_frame.lineno)
         if level == "info":
             self.logger.info(message)
         elif level == "debug":
@@ -50,7 +53,7 @@ class SimpleLogger(BaseLogger):
             logging.root.removeHandler(handler)
         logging.basicConfig(
             level = logging.NOTSET,
-            format = "%(asctime)s %(levelname)-8s %(message)s (%(filename)s:%(lineno)d)",
+            format = "%(asctime)s %(levelname)-8s %(message)s",
             datefmt = "[%Y-%m-%d %H:%M:%S]",
             filename = filename,
         )
