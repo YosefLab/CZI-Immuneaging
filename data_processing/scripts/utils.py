@@ -40,7 +40,6 @@ def set_access_keys(filepath, return_dict = False):
 		return(keys)
 	for k in keys:
 		os.environ[k] = keys[k]
-	return
 
 def load_configs(filename):
     with open(filename) as f: 

@@ -145,16 +145,14 @@ for f in aligned_files.rstrip().split('\n'):
 	if j == logger_file:
 		logger_file_exists = True
 
+if logger_file_exists and h5ad_file_exists:
+	print("Files {0} and {1} already exist on the S3 bucket; exiting align_library.py".format(h5ad_file, logger_file))
+	sys.exit()
+
 logger_file_path = os.path.join(data_dir, logger_file)
 if os.path.isfile(logger_file_path):
 	os.remove(logger_file_path)
 logger = SimpleLogger(filename = logger_file_path)
-
-if logger_file_exists and h5ad_file_exists:
-	msg = "Files {0} and {1} already exist on the S3 bucket; exiting align_library.py".format(h5ad_file, logger_file)
-	logger.add_to_log(msg)
-	print(msg)
-	sys.exit()
 
 logger.add_to_log("Running align_library.py...")
 logger.add_to_log("Starting time: {}".format(timestamp))

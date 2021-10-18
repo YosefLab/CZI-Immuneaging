@@ -77,4 +77,4 @@ class RichLogger(BaseLogger):
         self.logger = logging.getLogger("rich")
 
 def is_alertable_log_line(line: str) -> bool:
-    return "ERROR" in line or "CRITICAL" in line
+    return "WARNING" in line or "ERROR" in line or "CRITICAL" in line
