@@ -11,7 +11,6 @@ __pycache__/
 *_jobs.sh
 
 # Environments
-v*.zip
 envs/v*.zip
 
 # test data for the upload script

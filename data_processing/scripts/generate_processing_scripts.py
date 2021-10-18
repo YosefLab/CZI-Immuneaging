@@ -28,7 +28,7 @@ for job_type in ("process_library", "process_sample"):
     ls_cmd = 'aws s3 ls s3://immuneaging/job_queue/{}/'.format(job_type)
     aws_response = os.popen(ls_cmd).read()
     if len(aws_response):
-        sync_cmd = 'aws s3 sync s3://immuneaging/job_queue/{}/ {}'.format(job_type, jobs_queue_destination)
+        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/job_queue/{}/ {}'.format(job_type, jobs_queue_destination)
         print("Running aws command: " + sync_cmd)
         print("output:\n" + os.popen(sync_cmd).read())
     else:
