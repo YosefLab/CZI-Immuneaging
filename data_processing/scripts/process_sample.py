@@ -323,6 +323,7 @@ if not no_cells:
         add_to_log("Predict cell type labels using celltypist...")
         model_urls = configs["celltypist_model_urls"].split(",")
         # run prediction using every specified model (url)
+        rbc_model_index = -1
         for i in range(len(model_urls)):
             model_file = model_urls[i].split("/")[-1]
             model_path = os.path.join(data_dir,model_file)
@@ -346,15 +347,17 @@ if not no_cells:
                 sc.pp.log1p(rna_copy)
             predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
             # save the index for the RBC model if one exists, since we will need it further below
-            rbc_model_index = i if model_file.startswith("RBC_model") else -1
+            if model_file.startswith("RBC_model"):
+                rbc_model_index = i
             add_to_log("Saving celltypist annotations for model {}...".format(model_file))
             adata.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
             adata.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
             adata.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
             adata.obs["celltypist_model."+str(i+1)] = model_urls[i]
         # filter out RBC cells
-        rna = rna[adata.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC"]
-        # TODO log percentage removed with warning level if above a certain threshold
+        if rbc_model_index != -1:
+            rna = rna[adata.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC"]
+            # TODO log percentage removed with warning level if above a certain threshold
         if is_cite:
             _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir)
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir)
