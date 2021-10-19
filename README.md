@@ -38,7 +38,7 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
 
 Here is an overview of the various components involved in this project:
 
-<center><img src="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/master/figures/project_overview.svg?raw=true" width="100%;" alt="IA project overview"></center>
+<center><img src="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/watiss/misc_minor_changes/figures/project_overview.svg?raw=true" width="100%;" alt="IA project overview"></center>
 
 ## <a name="preliminaries"></a> Preliminaries
 
