@@ -180,7 +180,7 @@ try:
         # if there is no protein information for some of the cells set them to zero (instead of NaN)
         rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
         key = "X_totalVI_integrated"
-        rna, totalvi_model, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
+        run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
         logger.add_to_log("Calculate neighbors graph and UMAP...")
         neighbors_key = "totalvi_integrated_neighbors"
         sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
