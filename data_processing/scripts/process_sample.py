@@ -1,4 +1,5 @@
 import sys
+import traceback
 
 from anndata._core.anndata import AnnData
 
@@ -331,7 +332,7 @@ if not no_cells:
             # download reference data
             if model_urls[i].startswith("s3://"):
                 model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
-                sync_cmd = "aws s3 sync --no-progress {} {} --exclude "*" --include {}".format(model_folder, data_dir, model_file)
+                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
                 logger.add_to_log("syncing {}...".format(model_file))
                 logger.add_to_log("sync_cmd: {}".format(sync_cmd))
                 aws_response = os.popen(sync_cmd).read()
@@ -357,7 +358,7 @@ if not no_cells:
         # filter out RBC's
         if rbc_model_index != -1:
             n_obs_before = rna.n_obs
-            rna = rna[rna.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC"]
+            rna = rna[rna.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC", :].copy()
             percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
             level = "warning" if percent_removed > 10 else "info" # TODO is 10 a good threshold?
             logger.add_to_log("Removed {} red blood cells (percent removed: {:.2f}%); {} droplets remained.".format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
@@ -436,7 +437,7 @@ if not no_cells:
             sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(adata)
     except Exception as err:
-        logger.add_to_log("Execution failed with the following error:\n{}".format(err), "critical")
+        logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "critical")
         logger.add_to_log("Terminating execution prematurely.", "critical")
         if not sandbox_mode:
             # upload log to S3
