@@ -75,9 +75,6 @@ SAMPLES_FIELDS = {"Sample_ID": "sample_id",
     "Sorting": "sorting",
     "Stimulation": "stimulation"}
 
-# path to the celltypist RBC model on s3
-RBC_MODEL_URL = "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl"
-
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(configs["s3_access_file"], return_dict = True)
 assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sanbox mode; please set sandbox_mode to True"
@@ -322,8 +319,8 @@ if not no_cells:
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         logger.add_to_log("Predict cell type labels using celltypist...")
         model_urls = configs["celltypist_model_urls"].split(",")
-        if configs["filter_rbc"] == "True":
-            model_urls.append(RBC_MODEL_URL)
+        if configs["rbc_model_url"] != "":
+            model_urls.append(configs["rbc_model_url"])
         # run prediction using every specified model (url)
         rbc_model_index = -1
         for i in range(len(model_urls)):
