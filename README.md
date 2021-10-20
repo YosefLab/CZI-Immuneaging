@@ -38,7 +38,7 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
 
 Here is an overview of the various components involved in this project:
 
-<center><img src="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/figures/project_overview.svg?raw=true" width="100%;" alt="IA project overview"></center>
+<center><img src="figures/project_overview.svg?raw=true" width="100%;" alt="IA project overview"></center>
 
 ## <a name="preliminaries"></a> Preliminaries
 
@@ -439,7 +439,7 @@ link to the configs template and description of `align_library.py`
 ## Admins of the Immune Aging Data Hub
 
 Elior Rahmani <erahmani@berkeley.edu>
-Valeh Valiollah Pour Amiri <valehvpa@berkeley.edu >
+Valeh Valiollah Pour Amiri <valehvpa@berkeley.edu>
 
 ## Authors of the Immune Aging Data Hub
 
