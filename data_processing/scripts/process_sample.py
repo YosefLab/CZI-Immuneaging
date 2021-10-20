@@ -453,8 +453,10 @@ adata.write(os.path.join(data_dir,h5ad_file))
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, h5ad_file)
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(data_dir, prefix, version, scvi_model_file)
+    if is_cite:
+        # also upload the totalvi file if we had CITE data
+        sync_cmd += ' --include {}'.format(totalvi_model_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     if not no_cells:
