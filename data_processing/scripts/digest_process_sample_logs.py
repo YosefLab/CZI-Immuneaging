@@ -56,6 +56,9 @@ log_lines_to_print = {}
 for sample_id in sample_ids:
     filename = get_process_sample_log_file_name(sample_id, library_type, version)
     filepath = os.path.join(logs_location, filename)
+    if not os.path.isfile(filepath):
+        logger.add_to_log("File not found: {}. Skipping.".format(filepath))
+        continue
     lines = []
     with open(filepath, 'r') as f:
         lines = f.readlines()
