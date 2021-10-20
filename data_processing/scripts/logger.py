@@ -32,7 +32,8 @@ class BaseLogger(ABC):
             raise ValueError("Unrecognized level value: {}. Must be one of: {}".format(level, _level_to_sign))
         # append the file name and line number of the caller
         caller_frame = inspect.getframeinfo(inspect.currentframe().f_back)
-        message = _level_to_sign[level] + "  " + s + " ({}:{})".format(caller_frame.filename, caller_frame.lineno)
+        caller_filename = caller_frame.filename.split("/")[-1]
+        message = _level_to_sign[level] + "  " + s + " ({}:{})".format(caller_filename, caller_frame.lineno)
         if level == "info":
             self.logger.info(message)
         elif level == "debug":

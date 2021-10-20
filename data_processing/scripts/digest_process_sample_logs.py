@@ -36,6 +36,7 @@ library_type = "GEX" # we assume this for now, if this changes we can have it be
 
 # if the logs location is aws, download all log files to the local working directory
 logger = RichLogger()
+downloaded_from_aws = False
 if logs_location == "aws":
     for sample_id in sample_ids:
         prefix = "{}_{}".format(sample_id, library_type)
@@ -46,6 +47,7 @@ if logs_location == "aws":
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     logs_location = working_dir
+    downloaded_from_aws = True
 
 if version == "latest":
     # TODO issue #15
@@ -83,3 +85,7 @@ else:
         for line in value:
             print("\t" + line)
         first_item = False
+
+# clean up the logs we downloaded from aws if any
+if downloaded_from_aws:
+    os.system("rm {}/*".format(logs_location))
