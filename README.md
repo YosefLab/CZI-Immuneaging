@@ -6,32 +6,39 @@ Here you can find all the resources and information needed for accessing the cur
 This page did not answer your question? Please <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/issues">open an issue</a> and label it as a 'question'.
 
 ## Table of contents
-1. [Preliminaries](#preliminaries)
+1. [Overview](#overview)
+2. [Preliminaries](#preliminaries)
     1. [Setting up data access](#preliminaries_access)
     2. [List of donors and samples](#preliminaries_spreadsheet)
-2. [Data Download](#download)
+3. [Data Download](#download)
     1. [Directory structure on S3](#download_structure)
     2. [Downloading data via the AWS console](#download_console)
     3. [Downloading data via terminal](#download_terminal)
-3. [Data upload](#upload)
+4. [Data upload](#upload)
     1. [File naming conventions](#upload_naming)
     2. [Upload to S3](#upload_upload)
-4. [Data visualization](#visualization)
+5. [Data visualization](#visualization)
     1. [Visualization using cellxgene](#visualization_cellxgene)
     2. [Live VISION Sessions](#visualization_live)
     3. [Local VISION Sessions](#visualization_local)
-5. [Data Processing](#processing)
+6. [Data Processing](#processing)
     1. [Prerequisites](#processing_prerequisites)
     2. [Processing libraries](#processing_libraries)
     3. [Processing samples](#processing_samples)
     4. [Sandbox envorinment](#sandbox_envorinment)
     5. [Job queue](#job_queue)
-6. [Data Hub admins](#admins)
+7. [Data Hub admins](#admins)
     1. [Aligning libraries](#admins_lib_alignment)
     2. [Executing job queue jobs](#admins_job_queue_execution)
     3. [Generating job configs](#admins_job_configs_generation)
 
 ---
+
+## <a name="overview"></a> Overview
+
+Here is an overview of the various components involved in this project:
+
+<center><img src="figures/project_overview.svg?raw=true" width="100%;" alt="IA project overview"></center>
 
 ## <a name="preliminaries"></a> Preliminaries
 
@@ -432,7 +439,7 @@ link to the configs template and description of `align_library.py`
 ## Admins of the Immune Aging Data Hub
 
 Elior Rahmani <erahmani@berkeley.edu>
-Valeh Valiollah Pour Amiri <valehvpa@berkeley.edu >
+Valeh Valiollah Pour Amiri <valehvpa@berkeley.edu>
 
 ## Authors of the Immune Aging Data Hub
 
