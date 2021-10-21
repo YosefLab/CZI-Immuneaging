@@ -382,7 +382,7 @@ if not no_cells:
         n_obs_before = rna.n_obs
         rna = rna[is_solo_singlet,]
         percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
-        level = "warning" if percent_removed > 10 else "info"
+        level = "warning" if percent_removed > 40 else "info"
         logger.add_to_log("Removed {} estimated doublets (percent removed: {:.2f}%); {} droplets remained.".format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
         summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
