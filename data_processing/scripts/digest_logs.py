@@ -27,13 +27,13 @@ class BaseDigestClass(ABC):
             utils.set_access_keys(self.s3_access_file)
 
     def ingest_and_sanity_check_input(self, args):
-        assert(len(args) == 7)
-        self.donor_id = args[1]
-        self.seq_run = args[2]
-        self.logs_location = args[3] # must be either "aws" or the absolute path to the logs location on the local disk
-        self.version = args[4] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest")
-        self.working_dir = args[5] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
-        self.s3_access_file = args[6] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
+        assert(len(args) == 8)
+        self.donor_id = args[2]
+        self.seq_run = args[3]
+        self.logs_location = args[4] # must be either "aws" or the absolute path to the logs location on the local disk
+        self.version = args[5] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest")
+        self.working_dir = args[6] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
+        self.s3_access_file = args[7] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
 
         assert(self.logs_location == "aws" or os.path.isdir(self.logs_location))
         assert(self.working_dir == "" if self.logs_location != "aws" else os.path.isdir(self.working_dir))
@@ -71,14 +71,16 @@ class BaseDigestClass(ABC):
     def digest_logs(self):
         logger = RichLogger()
         try:
+            #self.object_ids = []
+            object_ids = self.get_object_ids()
+            
             # if the logs location is aws, download all log files to the local working directory
             if self.logs_location == "aws":
                 logs_location = self.working_dir
-                object_ids = self.get_object_ids()
                 for object_id in object_ids:
                     prefix = self.get_object_prefix(object_id)
                     filename = self.get_log_file_name(object_id)
-                    aws_dir_name = self.get_aws_dir_name(object_id)
+                    aws_dir_name = self.get_aws_dir_name()
                     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, self.version, self.working_dir, filename)
                     logger.add_to_log("syncing {}...".format(filename))
                     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -142,7 +144,8 @@ class DigestSampleProcessingLogs(BaseDigestClass):
     def get_object_ids(self):
         samples = utils.read_immune_aging_sheet("Samples", quiet=True)
         indices = samples["Donor ID"] == self.donor_id
-        self.object_ids = samples[indices]["Sample_ID"]
+        object_ids = samples[indices]["Sample_ID"]
+        return object_ids
 
     def get_object_prefix(self, object_id: str):
         return "{}_{}".format(object_id, self.library_type)
@@ -162,10 +165,11 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def get_object_ids(self):
         samples = utils.read_immune_aging_sheet("Samples", quiet=True)
         indices = samples["Donor ID"] == self.donor_id
-        self.object_ids = set()
+        object_ids = set()
         for i in samples[indices][self.library_type + " lib"]:
             for j in i.split(","):
-                self.object_ids.add(j)
+                object_ids.add(j)
+        return object_ids
 
     def get_object_prefix(self, object_id: str):
         return "{}_{}_{}_{}".format(self.donor, self.seq_run, self.library_type, object_id)
