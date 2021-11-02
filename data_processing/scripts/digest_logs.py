@@ -171,10 +171,10 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
         return object_ids
 
     def _get_object_prefix(self, object_id: str):
-        return "{}_{}_{}_{}".format(self.donor, self.seq_run, self.library_type, object_id)
+        return "{}_{}_{}_{}".format(self.donor_id, self.seq_run, self.library_type, object_id)
 
     def _get_log_file_name(self, object_id: str):
-        prefix = self._get_object_prefix()
+        prefix = self._get_object_prefix(object_id)
         return "process_library.{}.{}.log".format(prefix, self.version)
 
     def _get_aws_dir_name(self):
