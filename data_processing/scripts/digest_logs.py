@@ -6,12 +6,9 @@
 
 import sys
 import os
-import math
 import traceback
 from abc import ABC, abstractmethod
 from typing import List
-
-from numpy import digitize
 import pandas as pd
 
 import utils
@@ -77,12 +74,11 @@ class BaseDigestClass(ABC):
     def digest_logs(self):
         logger = RichLogger()
         try:
-            #self.object_ids = []
             object_ids = self.get_object_ids()
             
             # if the logs location is aws, download all log files to the local working directory
             if self.logs_location == "aws":
-                logs_location = self.working_dir
+                self.logs_location = self.working_dir
                 for object_id in object_ids:
                     prefix = self._get_object_prefix(object_id)
                     filename = self._get_log_file_name(object_id)
@@ -100,7 +96,7 @@ class BaseDigestClass(ABC):
             log_lines_to_print = {}
             for object_id in object_ids:
                 filename = self._get_log_file_name(object_id)
-                filepath = os.path.join(logs_location, filename)
+                filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
                     logger.add_to_log("File not found: {}. Skipping.".format(filepath))
                     continue
@@ -124,8 +120,7 @@ class BaseDigestClass(ABC):
                 for key,value in log_lines_to_print.items():
                     if not first_item:
                         # draw a separator line between files
-                        width = os.get_terminal_size().columns / 5
-                        print(" " * math.floor(width)  + "\u2014" * 3 * math.floor(width) + " " * math.floor(width) + "\n")
+                        utils.draw_separator_line()
                     file_name = key.split("/")[-1]
                     print(file_name + ":\n")
                     for line in value:
@@ -134,12 +129,12 @@ class BaseDigestClass(ABC):
 
             # clean up the logs we downloaded from aws if any
             if self.downloaded_from_aws:
-                self._remove_logs(logs_location)
+                self._remove_logs(self.logs_location)
         except Exception as err:
             logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "critical")
             # clean up the logs we downloaded from aws if any
             if self.downloaded_from_aws:
-                self._remove_logs(logs_location)
+                self._remove_logs(self.logs_location)
             sys.exit()
 
 

@@ -8,6 +8,7 @@ import pandas as pd
 import scvi
 import zipfile
 from anndata._core.anndata import AnnData
+from math import floor
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
@@ -142,6 +143,16 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
     data = pd.read_csv(output_fn)
     os.remove(output_fn)
     return data
+
+def draw_separator_line():
+    try:
+        width = os.get_terminal_size().columns / 5
+        print(" " * floor(width)  + "\u2014" * 3 * floor(width) + " " * floor(width) + "\n")
+    except:
+        # we might end up here if we can't get the terminal size. In this case, just draw a line
+        # with a hard-coded length
+        width = 20
+        print("\u2014" * width + "\n")
 
 def run_model(
         adata: AnnData,
