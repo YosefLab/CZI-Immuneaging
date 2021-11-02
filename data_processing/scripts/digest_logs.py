@@ -18,15 +18,7 @@ from logger import RichLogger
 
 class BaseDigestClass(ABC):
     def __init__(self, args: List[str]):
-        self.donor_id = args[1]
-        self.seq_run = args[2]
-        self.logs_location = args[3] # must be either "aws" or the absolute path to the logs location on the local disk
-        self.version = args[4] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest")
-        self.working_dir = args[5] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
-        self.s3_access_file = args[6] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
-        
-        self.sanity_check_input(self)
-
+        self.ingest_and_sanity_check_input(args)
         self.library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
         self.downloaded_from_aws = self.logs_location == "aws"
 
@@ -34,7 +26,15 @@ class BaseDigestClass(ABC):
         if self.logs_location == "aws":
             utils.set_access_keys(self.s3_access_file)
 
-    def sanity_check_input(self):
+    def ingest_and_sanity_check_input(self, args):
+        assert(len(args) == 7)
+        self.donor_id = args[1]
+        self.seq_run = args[2]
+        self.logs_location = args[3] # must be either "aws" or the absolute path to the logs location on the local disk
+        self.version = args[4] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest")
+        self.working_dir = args[5] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
+        self.s3_access_file = args[6] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
+
         assert(self.logs_location == "aws" or os.path.isdir(self.logs_location))
         assert(self.working_dir == "" if self.logs_location != "aws" else os.path.isdir(self.working_dir))
         assert(self.s3_access_file == "" if self.logs_location != "aws" else os.path.isfile(self.s3_access_file))
