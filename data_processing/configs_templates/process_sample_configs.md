@@ -29,7 +29,7 @@ The configuration file is formatted as json with the following fields:
 * `"umap_min_dist"` - The `min_dist` argument for computing UMAP (using `scanpy.tl.umap`)
 * `"umap_spread"` - The `spread` argument for computing UMAP (using `scanpy.tl.umap`)
 * `"umap_n_components"` - The number of UMAP components to compute (using `scanpy.tl.umap`)
-* `"celltypist_model_urls"` - One or more URLs for downloading data to be used as reference for cell type annotation using CellTypist.
+* `"celltypist_model_names"` - List of one or more names of CellTypist models to used for cell type annotation.
 * `"rbc_model_url"` - URL of the model to use to annotate RBC's (red blood cells) which we then filter out. Pass "" to skip RBC filtering.
 * `"python_env_version"` - The environment name to be used when running process_sample.py
 * `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`

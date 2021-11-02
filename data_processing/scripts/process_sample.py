@@ -19,18 +19,13 @@ import numpy as np
 import pandas as pd
 import scvi
 import hashlib
-import time
-import celltypist
-import urllib.request
-import pickle
+
+from utils import *
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
-# This does two things:
-# 1. Makes the logger look good in a log file
-# 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
-scvi.settings.reset_logging_handler()
-scvi.settings.dl_pin_memory_gpu_training = False
+init_scvi_settings()
+init_scanpy_settings()
 
 with open(configs_file) as f: 
     data = f.read()	
@@ -44,10 +39,9 @@ sample_id = configs["sample_id"]
 library_type = configs["library_type"]
 
 sys.path.append(configs["code_path"])
-from utils import *
 
-VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
-sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
+# config changes only to these fields will not initialize a new configs version
+VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] 
 
 # a map between fields in the Donors sheet of the Google Spreadsheet to metadata fields
 DONORS_FIELDS = {"Donor ID": "donor_id",
@@ -318,40 +312,18 @@ if not no_cells:
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         logger.add_to_log("Predict cell type labels using celltypist...")
-        model_urls = configs["celltypist_model_urls"].split(",")
+        model_names = configs["celltypist_model_names"].split(",")
+        # run prediction using every specified model
+        for model_name in model_names:
+            run_celltypist_model(model_name, rna)
         if configs["rbc_model_url"] != "":
-            model_urls.append(configs["rbc_model_url"])
-        # run prediction using every specified model (url)
-        rbc_model_index = -1
-        for i in range(len(model_urls)):
-            model_file = model_urls[i].split("/")[-1]
-            model_path = os.path.join(data_dir,model_file)
-            # download reference data
-            if model_urls[i].startswith("s3://"):
-                model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
-                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
-                logger.add_to_log("syncing {}...".format(model_file))
-                logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-                aws_response = os.popen(sync_cmd).read()
-                logger.add_to_log("aws response: {}\n".format(aws_response))
-            else:
-                urllib.request.urlretrieve(model_urls[i], model_path)
-            model = celltypist.models.Model.load(model = model_path)
-            # for some reason celltypist changes the anndata object in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of the anndata object.
-            rna_copy = rna.copy()
-            # normalize the copied data with a scale of 10000 (which is the scale required by celltypist)
-            logger.add_to_log("normalizing data for celltypist...")
-            sc.pp.normalize_total(rna_copy, target_sum=10000)
-            sc.pp.log1p(rna_copy)
-            predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
-            # save the index for the RBC model if one exists, since we will need it further below
-            if model_file.startswith("RBC_model"):
-                rbc_model_index = i
-            logger.add_to_log("Saving celltypist annotations for model {}, model description:\n{}".format(model_file, json.dumps(model.description, indent=2)))
-            rna.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
-            rna.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
-            rna.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
-            rna.obs["celltypist_model."+str(i+1)] = model_urls[i]
+            rbc_model_url = configs["rbc_model_url"]
+            model_folder = model_file[:-len(model_file)] # remove the model_file suffix
+            sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
+            logger.add_to_log("syncing {}...".format(model_file))
+            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+            aws_response = os.popen(sync_cmd).read()
+            logger.add_to_log("aws response: {}\n".format(aws_response))
         # filter out RBC's
         if rbc_model_index != -1:
             n_obs_before = rna.n_obs
