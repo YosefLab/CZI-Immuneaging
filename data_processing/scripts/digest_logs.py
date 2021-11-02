@@ -1,8 +1,8 @@
-# This script can be used to digest a set of logs from the proess_sample.py script or the process_library.py script for a given donor,seq_run pair.
+# This script can be used to digest a set of logs from different processing scripts (currently supported: process_sample logs and process_library logs) for a given donor,seq_run pair.
 # - For sample processing logs, run as follows:
-#   python digest_processing_logs.py sample <donor_id> <seq_run> <logs_location> <version> <working_dir> <s3_access_file>
+#   python digest_logs.py sample <donor_id> <seq_run> <logs_location> <version> <working_dir> <s3_access_file>
 # - For library processing logs, run as follows:
-#   python digest_processing_logs.py library <donor_id> <seq_run> <logs_location> <version> <working_dir> <s3_access_file>
+#   python digest_logs.py library <donor_id> <seq_run> <logs_location> <version> <working_dir> <s3_access_file>
 
 import sys
 import os
@@ -78,6 +78,8 @@ class BaseDigestClass(ABC):
             
             # if the logs location is aws, download all log files to the local working directory
             if self.logs_location == "aws":
+                # set this first so that if we hit an exception mid-way through the loop below
+                # we can still attempt to clean up the downloaded logs
                 self.logs_location = self.working_dir
                 for object_id in object_ids:
                     prefix = self._get_object_prefix(object_id)
@@ -130,7 +132,7 @@ class BaseDigestClass(ABC):
             # clean up the logs we downloaded from aws if any
             if self.downloaded_from_aws:
                 self._remove_logs(self.logs_location)
-        except Exception as err:
+        except Exception:
             logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "critical")
             # clean up the logs we downloaded from aws if any
             if self.downloaded_from_aws:
@@ -144,8 +146,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
 
     def _get_object_ids(self):
         samples_df = self._get_all_samples()
-        object_ids = samples_df["Sample_ID"]
-        return object_ids
+        return samples_df["Sample_ID"]
 
     def _get_object_prefix(self, object_id: str):
         return "{}_{}".format(object_id, self.library_type)
