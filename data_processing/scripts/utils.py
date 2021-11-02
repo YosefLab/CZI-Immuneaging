@@ -151,7 +151,7 @@ def draw_separator_line():
     except:
         # we might end up here if we can't get the terminal size. In this case, just draw a line
         # with a hard-coded length
-        width = 20
+        width = 50
         print("\u2014" * width + "\n")
 
 def run_model(

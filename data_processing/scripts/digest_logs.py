@@ -74,7 +74,7 @@ class BaseDigestClass(ABC):
     def digest_logs(self):
         logger = RichLogger()
         try:
-            object_ids = self.get_object_ids()
+            object_ids = self._get_object_ids()
             
             # if the logs location is aws, download all log files to the local working directory
             if self.logs_location == "aws":
