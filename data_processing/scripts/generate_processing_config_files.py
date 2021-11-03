@@ -92,7 +92,7 @@ if config_type in ["sample", "all"]:
             "umap_min_dist": 0.5,
             "umap_spread": 1.0,
             "umap_n_components": 2,
-            "celltypist_model_names": "Immune_All_High.pkl,Immune_All_Low.pkl",
+            "celltypist_model_urls": "https://celltypist.cog.sanger.ac.uk/models/v6/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/v6/Immune_All_Low.pkl",
             "rbc_model_url": "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl",
             "python_env_version": "immune_aging.py_env.v3",
             "r_setup_version": "immune_aging.R_setup.v2",

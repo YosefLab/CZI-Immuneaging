@@ -19,6 +19,8 @@ import numpy as np
 import pandas as pd
 import scvi
 import hashlib
+import celltypist
+import urllib.request
 
 from utils import *
 
@@ -41,7 +43,7 @@ library_type = configs["library_type"]
 sys.path.append(configs["code_path"])
 
 # config changes only to these fields will not initialize a new configs version
-VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] 
+VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"]
 
 # a map between fields in the Donors sheet of the Google Spreadsheet to metadata fields
 DONORS_FIELDS = {"Donor ID": "donor_id",
@@ -312,18 +314,40 @@ if not no_cells:
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         logger.add_to_log("Predict cell type labels using celltypist...")
-        model_names = configs["celltypist_model_names"].split(",")
-        # run prediction using every specified model
-        for model_name in model_names:
-            run_celltypist_model(model_name, rna)
+        model_urls = configs["celltypist_model_urls"].split(",")
         if configs["rbc_model_url"] != "":
-            rbc_model_url = configs["rbc_model_url"]
-            model_folder = model_file[:-len(model_file)] # remove the model_file suffix
-            sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
-            logger.add_to_log("syncing {}...".format(model_file))
-            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-            aws_response = os.popen(sync_cmd).read()
-            logger.add_to_log("aws response: {}\n".format(aws_response))
+            model_urls.append(configs["rbc_model_url"])
+        # run prediction using every specified model (url)
+        rbc_model_index = -1
+        for i in range(len(model_urls)):
+            model_file = model_urls[i].split("/")[-1]
+            model_path = os.path.join(data_dir,model_file)
+            # download reference data
+            if model_urls[i].startswith("s3://"):
+                model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
+                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
+                logger.add_to_log("syncing {}...".format(model_file))
+                logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+                aws_response = os.popen(sync_cmd).read()
+                logger.add_to_log("aws response: {}\n".format(aws_response))
+            else:
+                urllib.request.urlretrieve(model_urls[i], model_path)
+            model = celltypist.models.Model.load(model = model_path)
+            # for some reason celltypist changes the anndata object in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of the anndata object.
+            rna_copy = rna.copy()
+            # normalize the copied data with a scale of 10000 (which is the scale required by celltypist)
+            logger.add_to_log("normalizing data for celltypist...")
+            sc.pp.normalize_total(rna_copy, target_sum=10000)
+            sc.pp.log1p(rna_copy)
+            predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
+            # save the index for the RBC model if one exists, since we will need it further below
+            if model_file.startswith("RBC_model"):
+                rbc_model_index = i
+            logger.add_to_log("Saving celltypist annotations for model {}...".format(model_file))
+            rna.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
+            rna.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
+            rna.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
+            rna.obs["celltypist_model."+str(i+1)] = model_urls[i]
         # filter out RBC's
         if rbc_model_index != -1:
             n_obs_before = rna.n_obs

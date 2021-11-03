@@ -8,8 +8,6 @@ import scvi
 import zipfile
 from anndata._core.anndata import AnnData
 from math import floor
-import celltypist
-import scanpy as sc
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
@@ -20,11 +18,7 @@ def init_scvi_settings():
     scvi.settings.reset_logging_handler()
     scvi.settings.dl_pin_memory_gpu_training = False
 
-def init_scanpy_settings():
-    sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
-
 init_scvi_settings()
-init_scanpy_settings()
 
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
@@ -242,18 +236,3 @@ def run_model(
     zipdir(model_dir_path, zipf)
     zipf.close()
     return model, model_file
-
-def run_celltypist_model(model_name: str, rna: AnnData, logger):
-    model = celltypist.models.Model.load(model = model_name)
-    # for some reason celltypist changes the anndata object in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of the anndata object.
-    rna_copy = rna.copy()
-    # normalize the copied data with a scale of 10000 (which is the scale required by celltypist)
-    logger.add_to_log("normalizing data for celltypist...")
-    sc.pp.normalize_total(rna_copy, target_sum=10000)
-    sc.pp.log1p(rna_copy)
-    predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
-    logger.add_to_log("Saving celltypist annotations for model {}, model description:\n{}".format(model_name, json.dumps(model.description, indent=2)))
-    model_name_no_ext = model_name.split(".")[0]
-    rna.obs["celltypist_predicted_labels."+model_name_no_ext] = predictions.predicted_labels["predicted_labels"]
-    rna.obs["celltypist_over_clustering."+model_name_no_ext] = predictions.predicted_labels["over_clustering"]
-    rna.obs["celltypist_majority_voting."+model_name_no_ext] = predictions.predicted_labels["majority_voting"]
