@@ -27,7 +27,7 @@ from utils import *
 logging.getLogger('numba').setLevel(logging.WARNING)
 
 init_scvi_settings()
-init_scanpy_settings()
+sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
 
 with open(configs_file) as f: 
     data = f.read()	
