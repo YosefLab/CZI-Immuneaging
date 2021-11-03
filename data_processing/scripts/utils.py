@@ -1,7 +1,6 @@
 import json
 import os
 import time
-import logging
 import glob
 import warnings
 import pandas as pd
@@ -11,6 +10,15 @@ from anndata._core.anndata import AnnData
 from math import floor
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
+
+def init_scvi_settings():
+    # This does two things:
+    # 1. Makes the logger look good in a log file
+    # 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
+    scvi.settings.reset_logging_handler()
+    scvi.settings.dl_pin_memory_gpu_training = False
+
+init_scvi_settings()
 
 def get_current_time():
 	return time.strftime("%H:%M, %m-%d-%Y")
@@ -165,7 +173,6 @@ def run_model(
         data_dir: str,
         logger,
         latent_key: str = None,
-        **kwargs,
     ):
     """
     Runs scvi or totalvi model depending on the given model_name.
