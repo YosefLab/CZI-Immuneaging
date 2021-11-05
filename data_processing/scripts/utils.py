@@ -8,6 +8,10 @@ import scvi
 import zipfile
 from anndata._core.anndata import AnnData
 from math import floor
+import csv
+from typing import Type
+
+from data_processing.scripts.logger import BaseLogger
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
@@ -176,6 +180,7 @@ def run_model(
     ):
     """
     Runs scvi or totalvi model depending on the given model_name.
+
     Parameters
     ----------
     adata
@@ -198,6 +203,7 @@ def run_model(
         Logger object to use when adding logs.
 	latent_key
 		key to be used for saving the latent representation in adata.obsm.
+
     Returns
     -------
     A tuple containing the trained model and the name of the zip file where the model is saved.
@@ -236,3 +242,25 @@ def run_model(
     zipdir(model_dir_path, zipf)
     zipf.close()
     return model, model_file
+
+def aws_sync(source: str, target: str, include: str, logger:Type[BaseLogger]):
+    sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(source, target, include)
+    logger.add_to_log("syncing {}...".format(include))
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    aws_response = os.popen(sync_cmd).read()
+    logger.add_to_log("aws response: {}\n".format(aws_response))
+
+def filter_vdj_genes(rna, aws_file_path, data_dir, logger):
+    file_path_components = aws_file_path.split("/")
+    file = file_path_components[-1]
+    aws_dir_path = "/".join(file_path_components[:-1])
+    aws_sync(aws_dir_path, data_dir, file)
+    local_file_path = os.path.join(data_dir, file)
+    with open(local_file_path) as csvfile:
+        reader = csv.reader(csvfile)
+        genes = [row[0] for row in reader]
+    n_var_before = rna.n_var
+    rna = rna[:, ~rna.var.index.isin(genes)]
+    percent_removed = 100*(n_var_before-rna.n_var)/n_var_before
+    level = "warning" if percent_removed > 50 else "info" # TODO adjust threshold if needed
+    logger.add_to_log("Removed {} vdj genes (percent removed: {:.2f}%); {} genes remained.".format(n_var_before-rna.n_var, percent_removed, rna.n_var), level=level)
