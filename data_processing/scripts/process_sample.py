@@ -325,11 +325,7 @@ if not no_cells:
             # download reference data
             if model_urls[i].startswith("s3://"):
                 model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
-                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
-                logger.add_to_log("syncing {}...".format(model_file))
-                logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-                aws_response = os.popen(sync_cmd).read()
-                logger.add_to_log("aws response: {}\n".format(aws_response))
+                aws_sync(model_folder, data_dir, model_file, logger)
             else:
                 urllib.request.urlretrieve(model_urls[i], model_path)
             model = celltypist.models.Model.load(model = model_path)
