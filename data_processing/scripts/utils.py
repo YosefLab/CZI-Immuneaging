@@ -243,14 +243,14 @@ def run_model(
     zipf.close()
     return model, model_file
 
-def aws_sync(source: str, target: str, include: str, logger:Type[BaseLogger]):
+def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger]) -> None:
     sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(source, target, include)
     logger.add_to_log("syncing {}...".format(include))
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     aws_response = os.popen(sync_cmd).read()
     logger.add_to_log("aws response: {}\n".format(aws_response))
 
-def filter_vdj_genes(rna, aws_file_path, data_dir, logger):
+def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Type[BaseLogger]) -> None:
     file_path_components = aws_file_path.split("/")
     file = file_path_components[-1]
     aws_dir_path = "/".join(file_path_components[:-1])
