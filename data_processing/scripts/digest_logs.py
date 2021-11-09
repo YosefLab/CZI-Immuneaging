@@ -73,7 +73,7 @@ class BaseDigestClass(ABC):
     def _is_alertable_log_line(line: str) -> bool:
         return "WARNING" in line or "ERROR" in line or "CRITICAL" in line
 
-    def digest_logs(self, print: bool = True):
+    def digest_logs(self, print_lines: bool = True):
         logger = RichLogger()
         try:
             object_ids = self._get_object_ids()
@@ -118,12 +118,14 @@ class BaseDigestClass(ABC):
                         else:
                             log_lines_to_print[filepath].append(line)
                     # TODO refactor the below
-                    if "ERROR" in line or "WARNING" in line:
+                    if "ERROR" in line:
                         csv_row["Failed?"] = True
                         csv_row["Failure Reason"] = line
                     if "WARNING" in line:
                         csv_row["Warning?"] = True
-                    parsed = parse(utils.QC_STRING_DOUBLETS, line)
+                    # TODO update env with parse
+                    # TODO figure out how to quiet parse verbose logging
+                    parsed = search(utils.QC_STRING_DOUBLETS, line)
                     if parsed:
                         csv_row["{{%}} doublets"] = parsed[1]
                 csv_rows.append(csv_row)
@@ -146,10 +148,11 @@ class BaseDigestClass(ABC):
 
             # create the csv file
             # TODO re-use fieldnames so we don't duplicate it above
-            field_names = ["Sample ID", "Failed?", "Warning?", "{{%}} doublets", "Failure Reason"]
-            writer = csv.DictWriter("test.csv", fieldnames=field_names) # TODO pass filename in params
-            writer.writeheader()
-            writer.writerows(csv_rows)
+            with open('test.csv', 'w', newline='') as csvfile:
+                field_names = ["Sample ID", "Failed?", "Warning?", "{{%}} doublets", "Failure Reason"]
+                writer = csv.DictWriter(csvfile, fieldnames=field_names) # TODO pass filename in params
+                writer.writeheader()
+                writer.writerows(csv_rows)
 
             # clean up the logs we downloaded from aws if any
             if self.downloaded_from_aws:
