@@ -8,8 +8,9 @@ import sys
 import os
 import traceback
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Union
 import pandas as pd
+import csv
 
 import utils
 from logger import RichLogger
@@ -71,7 +72,8 @@ class BaseDigestClass(ABC):
     def _is_alertable_log_line(line: str) -> bool:
         return "WARNING" in line or "ERROR" in line or "CRITICAL" in line
 
-    def digest_logs(self):
+    def digest_logs(self, print: bool = True):
+
         logger = RichLogger()
         try:
             object_ids = self._get_object_ids()
@@ -96,7 +98,9 @@ class BaseDigestClass(ABC):
 
             # for each object id, parse its logs and report any noteworthy log events
             log_lines_to_print = {}
+            csv_rows = []
             for object_id in object_ids:
+                csv_row = {"Sample ID": object_id, "Failed?": False, "Warning?": False, "{{%}} doublets": 0, "Failure Reason": ""}
                 filename = self._get_log_file_name(object_id)
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
@@ -113,7 +117,15 @@ class BaseDigestClass(ABC):
                             log_lines_to_print[filepath] = [line]
                         else:
                             log_lines_to_print[filepath].append(line)
+                    # TODO refactor the below
+                    if "ERROR" in line or "WARNING" in line:
+                        csv_row["Failed?"] = True
+                        csv_row["Failure Reason"] = line
+                    if "WARNING" in line:
+                        csv_row["Warning?"] = True
+                csv_rows.append(csv_row)
 
+            # print digested log lines
             if len(log_lines_to_print) == 0:
                 logger.add_to_log("No relevant log lines were found.", "info")
             else:
@@ -129,6 +141,13 @@ class BaseDigestClass(ABC):
                         print("\t" + line)
                     first_item = False
 
+            # create the csv file
+            # TODO re-use fieldnames so we don't duplicate it above
+            field_names = ["Sample ID", "Failed?", "Warning?", "{{%}} doublets", "Failure Reason"]
+            writer = csv.DictWriter("test.csv", fieldnames=field_names) # TODO pass filename in params
+            writer.writeheader()
+            writer.writerows(csv_rows)
+
             # clean up the logs we downloaded from aws if any
             if self.downloaded_from_aws:
                 self._remove_logs(self.logs_location)
@@ -138,7 +157,6 @@ class BaseDigestClass(ABC):
             if self.downloaded_from_aws:
                 self._remove_logs(self.logs_location)
             sys.exit()
-
 
 class DigestSampleProcessingLogs(BaseDigestClass):
     def __init__(self, args: List[str]):
