@@ -100,7 +100,7 @@ class BaseDigestClass(ABC):
             log_lines_to_print = {}
             csv_rows = []
             for object_id in object_ids:
-                csv_row = {"Sample ID": object_id, "Failed?": False, "Warning?": False, "{{%}} doublets": 0, "Failure Reason": ""}
+                csv_row = {"Sample ID": object_id, "Failed?": "No", "Warning?": "No", "% doublets": -1, "Failure Reason": "", "Warning Reason": ""}
                 filename = self._get_log_file_name(object_id)
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
@@ -118,16 +118,20 @@ class BaseDigestClass(ABC):
                         else:
                             log_lines_to_print[filepath].append(line)
                     # TODO refactor the below
-                    if "ERROR" in line:
-                        csv_row["Failed?"] = True
-                        csv_row["Failure Reason"] = line
+                    if "ERROR" in line or "CRITICAL" in line:
+                        csv_row["Failed?"] = "Yes"
+                        csv_row["Failure Reason"] = line.strip('"').strip()
                     if "WARNING" in line:
-                        csv_row["Warning?"] = True
+                        csv_row["Warning?"] = "Yes"
+                        if csv_row["Warning Reason"] == "": # first one
+                            csv_row["Warning Reason"] += line.strip('"').strip()
+                        else:
+                            csv_row["Warning Reason"] += " --- " + line.strip('"').strip()
                     # TODO update env with parse
                     # TODO figure out how to quiet parse verbose logging
                     parsed = search(utils.QC_STRING_DOUBLETS, line)
                     if parsed:
-                        csv_row["{{%}} doublets"] = parsed[1]
+                        csv_row["% doublets"] = parsed[1]
                 csv_rows.append(csv_row)
 
             # print digested log lines
@@ -149,7 +153,7 @@ class BaseDigestClass(ABC):
             # create the csv file
             # TODO re-use fieldnames so we don't duplicate it above
             with open('test.csv', 'w', newline='') as csvfile:
-                field_names = ["Sample ID", "Failed?", "Warning?", "{{%}} doublets", "Failure Reason"]
+                field_names = ["Sample ID", "Failed?", "Warning?", "% doublets", "Failure Reason", "Warning Reason"]
                 writer = csv.DictWriter(csvfile, fieldnames=field_names) # TODO pass filename in params
                 writer.writeheader()
                 writer.writerows(csv_rows)
