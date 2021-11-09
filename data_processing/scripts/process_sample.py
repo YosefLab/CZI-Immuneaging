@@ -379,7 +379,7 @@ if not no_cells:
         rna = rna[is_solo_singlet,]
         percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
         level = "warning" if percent_removed > 40 else "info"
-        logger.add_to_log("Removed {} estimated doublets (percent removed: {:.2f}%); {} droplets remained.".format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
+        logger.add_to_log(QC_STRING_DOUBLETS.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
         summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
             logger.add_to_log("No cells left after doublet detection. Skipping the next processing steps.", "error")

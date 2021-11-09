@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import List, Union
 import pandas as pd
 import csv
+from parse import *
 
 import utils
 from logger import RichLogger
@@ -73,7 +74,6 @@ class BaseDigestClass(ABC):
         return "WARNING" in line or "ERROR" in line or "CRITICAL" in line
 
     def digest_logs(self, print: bool = True):
-
         logger = RichLogger()
         try:
             object_ids = self._get_object_ids()
@@ -123,6 +123,9 @@ class BaseDigestClass(ABC):
                         csv_row["Failure Reason"] = line
                     if "WARNING" in line:
                         csv_row["Warning?"] = True
+                    parsed = parse(utils.QC_STRING_DOUBLETS, line)
+                    if parsed:
+                        csv_row["{{%}} doublets"] = parsed[1]
                 csv_rows.append(csv_row)
 
             # print digested log lines
