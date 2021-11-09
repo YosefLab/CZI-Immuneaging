@@ -11,7 +11,7 @@
 "filter_genes_min_cells": 0,
 "filter_cells_max_pct_counts_mt": 20,
 "filter_cells_min_pct_counts_ribo": 0,
-"genes_to_excldue": "MALAT1",
+"genes_to_exclude": "MALAT1",
 "exclude_mito_genes": "True",
 "hashsolo_priors": "0.01,0.8,0.19",
 "hashsolo_number_of_noise_barcodes": 1,

@@ -1,16 +1,8 @@
-import sys
-import traceback
-
-from anndata._core.anndata import AnnData
-
-from logger import SimpleLogger
-process_sample_script = sys.argv[0]
-configs_file = sys.argv[1]
-
 #########################################################
 ###### INITIALIZATIONS AND PREPARATIONS BEGIN HERE ######
 #########################################################
 
+import sys
 import logging
 import os
 import json
@@ -21,10 +13,16 @@ import scvi
 import hashlib
 import celltypist
 import urllib.request
+import csv
+import traceback
 
 from utils import *
+from logger import SimpleLogger
 
 logging.getLogger('numba').setLevel(logging.WARNING)
+
+process_sample_script = sys.argv[0]
+configs_file = sys.argv[1]
 
 init_scvi_settings()
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -310,6 +308,8 @@ if not no_cells:
         msg = "Removed {} cells (percent removed: {:.2f}%) with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
         logger.add_to_log(msg, level=level)
         summary.append(msg)
+        logger.add_to_log("Filtering out vdj genes...")
+        filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
         logger.add_to_log("Detecting highly variable genes...")
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
@@ -325,11 +325,7 @@ if not no_cells:
             # download reference data
             if model_urls[i].startswith("s3://"):
                 model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
-                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(model_folder, data_dir, model_file)
-                logger.add_to_log("syncing {}...".format(model_file))
-                logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-                aws_response = os.popen(sync_cmd).read()
-                logger.add_to_log("aws response: {}\n".format(aws_response))
+                aws_sync(model_folder, data_dir, model_file, logger)
             else:
                 urllib.request.urlretrieve(model_urls[i], model_path)
             model = celltypist.models.Model.load(model = model_path)
