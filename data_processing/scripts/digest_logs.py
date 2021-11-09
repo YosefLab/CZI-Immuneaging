@@ -12,9 +12,12 @@ from typing import List, Union
 import pandas as pd
 import csv
 from parse import *
+import logging
 
 import utils
 from logger import RichLogger
+
+logging.getLogger('parse').setLevel(logging.WARNING)
 
 class BaseDigestClass(ABC):
     def __init__(self, args: List[str]):
