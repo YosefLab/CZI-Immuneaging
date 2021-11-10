@@ -10,9 +10,6 @@ import subprocess
 import hashlib
 import time
 
-from logger import SimpleLogger
-from utils import *
-
 process_lib_script = sys.argv[0]
 configs_file = sys.argv[1]
 
@@ -26,6 +23,9 @@ with open(configs_file) as f:
 configs = json.loads(data)
 
 sys.path.append(configs["code_path"])
+
+from logger import SimpleLogger
+from utils import *
 
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -158,7 +158,7 @@ if len(cell_hashing)>1:
     adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
     hashsolo_priors = [float(i) for i in configs["hashsolo_priors"].split(',')]
     sc.external.pp.hashsolo(adata, cell_hashing_columns = cell_hashing, priors = hashsolo_priors, inplace = True,
-        number_of_noise_barcodes = min(len(cell_hashing)-1,configs["hashsolo_number_of_noise_barcodes"]))
+        number_of_noise_barcodes = len(cell_hashing)-1)
     num_doublets = sum(adata.obs["Classification"] == "Doublet")
     percent_doublets = 100*num_doublets/adata.n_obs
     level = "error" if percent_doublets > 40 else "info"
