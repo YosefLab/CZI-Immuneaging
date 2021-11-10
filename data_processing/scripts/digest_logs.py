@@ -208,7 +208,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
 
             # for each file, parse its logs and add digest info to csv
             csv_rows = []
-            for filepath,lines in files_to_lines:
+            for filepath,lines in files_to_lines.items():
                 csv_row = {
                     CSV_HEADER_SAMPLE_ID: self._get_object_id(filepath),
                     CSV_HEADER_FAILED: "No",
