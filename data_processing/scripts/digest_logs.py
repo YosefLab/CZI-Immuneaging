@@ -203,6 +203,8 @@ class DigestSampleProcessingLogs(BaseDigestClass):
             CSV_HEADER_WARNING_REASON: str = "Warning Reason"
             CSV_HEADER_DOUBLETS: str = "% doublets"
             CSV_HEADER_AMBIENT_RNA: str = "% ambient RNA"
+            CSV_HEADER_VDJ: str = "% vdj genes"
+            CSV_HEADER_RBC: str = "% RBC"
 
             # for each file, parse its logs and add digest info to csv
             csv_rows = []
@@ -215,6 +217,8 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     CSV_HEADER_WARNING_REASON: "",
                     CSV_HEADER_DOUBLETS: -1,
                     CSV_HEADER_AMBIENT_RNA: -1,
+                    CSV_HEADER_VDJ: -1,
+                    CSV_HEADER_RBC: -1,
                 }
                 for line in lines:
                     if "ERROR" in line or "CRITICAL" in line:
@@ -226,13 +230,23 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                             csv_row[CSV_HEADER_WARNING_REASON] += line.strip('"').strip()
                         else:
                             csv_row[CSV_HEADER_WARNING_REASON] += " --- " + line.strip('"').strip()
+                    # doublets
                     # TODO update env with parse
                     doublets_qc_parsed = search(utils.QC_STRING_DOUBLETS, line)
                     if doublets_qc_parsed:
                         csv_row[CSV_HEADER_DOUBLETS] = doublets_qc_parsed[1]
+                    # ambient rna
                     ambient_rna_qc_parsed = search(utils.QC_STRING_AMBIENT_RNA, line)
                     if ambient_rna_qc_parsed:
                         csv_row[CSV_HEADER_AMBIENT_RNA] = ambient_rna_qc_parsed[1]
+                    # vdj genes
+                    vdj_qc_parsed = search(utils.QC_STRING_VDJ, line)
+                    if vdj_qc_parsed:
+                        csv_row[CSV_HEADER_VDJ] = vdj_qc_parsed[1]
+                    # red blood cells
+                    rbc_qc_parsed = search(utils.QC_STRING_RBC, line)
+                    if rbc_qc_parsed:
+                        csv_row[CSV_HEADER_RBC] = rbc_qc_parsed[1]
                 csv_rows.append(csv_row)
 
             # create the csv file
@@ -245,6 +259,8 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     CSV_HEADER_WARNING_REASON,
                     CSV_HEADER_DOUBLETS,
                     CSV_HEADER_AMBIENT_RNA,
+                    CSV_HEADER_VDJ,
+                    CSV_HEADER_RBC,
                 ]
                 writer = csv.DictWriter(csvfile, fieldnames=field_names)
                 writer.writeheader()
