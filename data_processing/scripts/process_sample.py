@@ -307,7 +307,7 @@ if not no_cells:
         n_decon_cells_filtered = n_obs_before-rna.n_obs
         percent_removed = 100*n_decon_cells_filtered/n_obs_before
         level = "warning" if percent_removed > 10 else "info"
-        msg = "Removed {} cells (percent removed: {:.2f}%) with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
+        msg = QC_STRING_AMBIENT_RNA.format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
         logger.add_to_log(msg, level=level)
         summary.append(msg)
         logger.add_to_log("Detecting highly variable genes...")
