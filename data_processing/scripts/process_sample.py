@@ -16,15 +16,11 @@ import urllib.request
 import csv
 import traceback
 
-from utils import *
-from logger import SimpleLogger
-
 logging.getLogger('numba').setLevel(logging.WARNING)
 
 process_sample_script = sys.argv[0]
 configs_file = sys.argv[1]
 
-init_scvi_settings()
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
 
 with open(configs_file) as f: 
@@ -39,6 +35,10 @@ sample_id = configs["sample_id"]
 library_type = configs["library_type"]
 
 sys.path.append(configs["code_path"])
+
+from utils import *
+from logger import SimpleLogger
+init_scvi_settings()
 
 # config changes only to these fields will not initialize a new configs version
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"]
