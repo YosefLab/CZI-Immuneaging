@@ -16,8 +16,6 @@ import pandas as pd
 import scvi
 import hashlib
 
-from logger import SimpleLogger
-
 # This does two things:
 # 1. Makes the logger look good in a log file
 # 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
@@ -31,6 +29,7 @@ configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
 sys.path.append(configs["code_path"])
 from utils import *
+from logger import SimpleLogger
 
 output_destination = configs["output_destination"]
 prefix = configs["output_prefix"]
@@ -46,7 +45,7 @@ configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_
 
 assert(len(sample_ids)>1)
 
-VARIABLE_CONFIG_KEYS = ["berkeley_user","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
+VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
@@ -143,6 +142,24 @@ for j in range(len(h5ad_files)):
     sample_id = sample_ids[j]
     adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
     adata_dict[sample_id].obs["sample_id"] = sample_id
+    for field in ('X_pca', 'X_scVI', 'X_totalVI', 'X_umap_pca', 'X_umap_scvi', 'X_umap_totalvi'):
+        if field in adata_dict[sample_id].obsm:
+            del adata_dict[sample_id].obsm[field]
+
+# get the names of all proteins across all samples
+proteins = set()
+for j in range(len(sample_ids)):
+    if "protein_expression" in adata_dict[sample_ids[j]].obsm:
+        proteins.update(adata_dict[sample_ids[j]].obsm["protein_expression"].columns)
+
+# each sample should include all proteins; missing values are set as NaN
+if len(proteins):
+    proteins = [i for i in proteins]
+    for j in range(len(sample_ids)):
+        df = pd.DataFrame(columns = proteins, index = adata_dict[sample_ids[j]].obs.index)
+        if "protein_expression" in adata_dict[sample_ids[j]].obsm:
+            df[adata_dict[sample_ids[j]].obsm["protein_expression"].columns] = adata_dict[sample_ids[j]].obsm["protein_expression"]
+        adata_dict[sample_ids[j]].obsm["protein_expression"] = df
 
 logger.add_to_log("Concatenating all cells from all samples...")
 adata = adata_dict[sample_ids[0]]
@@ -162,32 +179,52 @@ if 0.1 * adata.n_obs < 20000:
     train_size = 0.9
 else:
     train_size = 1-(20000/adata.n_obs)
+
 configs["train_size"] = train_size
 
 try:
     is_cite = "protein_expression" in adata.obsm
-    assert is_cite ## TODO remove after adding the case of no cite data
     if is_cite:
-        logger.add_to_log("Detected Antibody Capture features.")    
+        logger.add_to_log("Detected Antibody Capture features.")
     rna = adata.copy()
     batch_key = "batch"
+    logger.add_to_log("Filtering out vdj genes...")
+    filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
     logger.add_to_log("Detecting highly variable genes...")
     sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
         flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
     # use the decontaminated counts as the input for scvi and totalvi
     rna.X = np.round(rna.layers["decontaminated_counts"])
+    # scvi
+    key = "X_scvi_integrated"
+    _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
+    logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
+    neighbors_key = "scvi_integrated_neighbors"
+    sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
+    rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+            n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
     if is_cite:
+        # totalVI
+        key = "X_totalVI_integrated"
         # if there is no protein information for some of the cells set them to zero (instead of NaN)
         rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
-        key = "X_totalVI_integrated"
-        run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
-        logger.add_to_log("Calculate neighbors graph and UMAP...")
+        _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
+        logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
         neighbors_key = "totalvi_integrated_neighbors"
         sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
             use_rep=key, key_added=neighbors_key) 
         rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
             n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-        adata.obsm.update(rna.obsm)
+    # pca
+    logger.add_to_log("Calculating PCA...")
+    sc.pp.pca(rna)
+    logger.add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
+    key = "pca_neighbors"
+    sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+        use_rep="X_pca", key_added=key) 
+    rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+        n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
+    adata.obsm.update(rna.obsm) 
 except Exception as err:
     logger.add_to_log("Execution failed with the following error:\n{}".format(err), "critical")
     logger.add_to_log("Terminating execution prematurely.", "critical")
@@ -214,6 +251,12 @@ if not sandbox_mode:
         data_dir, prefix, version, output_h5ad_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    logger.add_to_log("Uploading model files (a single .zip file for each model) to S3...")
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(data_dir, prefix, version, scvi_model_file)
+    if is_cite:
+        sync_cmd += ' --include {}'.format(totalvi_model_file)
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))    
 
 logger.add_to_log("Execution of integrate_samples.py is complete.")
 
