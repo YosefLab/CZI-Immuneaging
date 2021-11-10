@@ -8,7 +8,7 @@ import sys
 import os
 import traceback
 from abc import ABC, abstractmethod
-from typing import List, Dict, NamedTuple
+from typing import List, Dict
 import pandas as pd
 import csv
 from parse import *
