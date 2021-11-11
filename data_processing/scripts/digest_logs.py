@@ -232,7 +232,6 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                         else:
                             csv_row[CSV_HEADER_WARNING_REASON] += " --- " + line.strip('"').strip()
                     # doublets
-                    # TODO update env with parse
                     doublets_qc_parsed = search(utils.QC_STRING_DOUBLETS, line)
                     if doublets_qc_parsed:
                         csv_row[CSV_HEADER_DOUBLETS] = doublets_qc_parsed[1]
