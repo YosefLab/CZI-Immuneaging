@@ -252,7 +252,11 @@ if not no_cells:
             protein_df = protein.to_df()
             protein_expression_obsm_key = "protein_expression"
             if not protein_df.empty:
-                adata.obsm[protein_expression_obsm_key] = protein_df
+                if np.median(protein_df.fillna(0).sum(axis=1)) == 0:
+                    logger.add_to_log("median coverage (total number of protein reads per cell) across cells is 0. Removing protein information from data.", level = "warning")
+                    is_cite = False
+                else:
+                    adata.obsm[protein_expression_obsm_key] = protein_df
             else:
                 logger.add_to_log("All detected Antibody Capture features were due to HTO, no proteins of interest to analyze.")
                 is_cite = False

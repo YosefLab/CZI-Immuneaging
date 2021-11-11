@@ -31,5 +31,6 @@ The configuration file is formatted as json with the following fields:
 * `"umap_n_components"` - The number of UMAP components to compute (using `scanpy.tl.umap`)
 * `"celltypist_model_urls"` - One or more URLs for downloading data to be used as reference for cell type annotation using CellTypist.
 * `"rbc_model_url"` - URL of the model to use to annotate RBC's (red blood cells) which we then filter out. Pass "" to skip RBC filtering.
+* `"vdj_genes"` - URL of a csv file on AWS that contains a list of VDJ genes to exclude before applying dimensionality reduction (SCVI, TOTALVI, and PCA)
 * `"python_env_version"` - The environment name to be used when running process_sample.py
 * `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
