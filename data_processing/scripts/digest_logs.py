@@ -13,6 +13,7 @@ import pandas as pd
 import csv
 from parse import *
 import logging
+import io
 
 import utils
 from logger import RichLogger
@@ -249,22 +250,24 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                         csv_row[CSV_HEADER_RBC] = rbc_qc_parsed[1]
                 csv_rows.append(csv_row)
 
-            # create the csv file
-            with open('test.csv', 'w', newline='') as csvfile: # TODO pass filename in params
-                field_names = [
-                    CSV_HEADER_SAMPLE_ID,
-                    CSV_HEADER_FAILED,
-                    CSV_HEADER_WARNING,
-                    CSV_HEADER_FAILURE_REASON,
-                    CSV_HEADER_WARNING_REASON,
-                    CSV_HEADER_DOUBLETS,
-                    CSV_HEADER_AMBIENT_RNA,
-                    CSV_HEADER_VDJ,
-                    CSV_HEADER_RBC,
-                ]
-                writer = csv.DictWriter(csvfile, fieldnames=field_names)
-                writer.writeheader()
-                writer.writerows(csv_rows)
+            # write the csv
+            csv_file = io.StringIO()
+            field_names = [
+                CSV_HEADER_SAMPLE_ID,
+                CSV_HEADER_FAILED,
+                CSV_HEADER_WARNING,
+                CSV_HEADER_FAILURE_REASON,
+                CSV_HEADER_WARNING_REASON,
+                CSV_HEADER_DOUBLETS,
+                CSV_HEADER_AMBIENT_RNA,
+                CSV_HEADER_VDJ,
+                CSV_HEADER_RBC,
+            ]
+            writer = csv.DictWriter(csv_file, fieldnames=field_names)
+            writer.writeheader()
+            writer.writerows(csv_rows)
+            print(csv_file.getvalue())
+            csv_file.close()
         except Exception:
             logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "critical")
             sys.exit()
