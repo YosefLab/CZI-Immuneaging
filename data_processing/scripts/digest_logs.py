@@ -298,7 +298,7 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
 
 
 process_type = sys.argv[2] # must be one of "sample" or "library"
-action = sys.argv[1] # must be one of "sample" or "library"
+action = sys.argv[1] # must be one of "print_digest" or "get_csv"
 assert(process_type in ["sample", "library"])
 assert(action in ["print_digest", "get_csv"])
 if process_type == "sample":
