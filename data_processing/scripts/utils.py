@@ -132,16 +132,15 @@ def zipdir(path, ziph):
             ziph.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), 
                 os.path.join(path, '..')))
 
-def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False):
-    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
-        sheet
-    )
+def read_immune_aging_sheet(sheet, output_fn=None, quiet=False):
+    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
+    download_from_google_drive(url, output_fn, quiet)
+    
+def read_immune_aging_dashboard_sheet(sheet, output_fn=None, quiet=False):
+    url = "https://docs.google.com/spreadsheets/d/1v1TT1uJHTAxemnPmORX8XvSDZCXWq27ZK0Nbfugjts0/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
+    download_from_google_drive(url, output_fn, quiet)
 
-    # testing url of bad sample sheet
-    # url = "https://docs.google.com/spreadsheets/d/1YO1HLGLnO3PPUiK1vKZd52yoCInwpLl60zoi4zxkOrE/gviz/tq?tqx=out:csv&sheet={}".format(
-    #     sheet
-    # )
-
+def download_from_google_drive(url, output_fn=None, quiet=False):
     try:
         import gdown
     except ImportError as e:
@@ -154,6 +153,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
         output_fn = gdown.download(url, output_fn, quiet=quiet)
 
         if len(w) == 1:
+            msg = w[0]
             warnings.showwarning(
                 msg.message, msg.category, msg.filename, msg.lineno, msg.line
             )

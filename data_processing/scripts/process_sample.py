@@ -13,7 +13,6 @@ import scvi
 import hashlib
 import celltypist
 import urllib.request
-import csv
 import traceback
 
 logging.getLogger('numba').setLevel(logging.WARNING)
