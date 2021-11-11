@@ -309,7 +309,7 @@ if not no_cells:
         n_decon_cells_filtered = n_obs_before-rna.n_obs
         percent_removed = 100*n_decon_cells_filtered/n_obs_before
         level = "warning" if percent_removed > 10 else "info"
-        msg = "Removed {} cells (percent removed: {:.2f}%) with total decontaminated counts below filter_decontaminated_cells_min_genes={}".format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
+        msg = QC_STRING_AMBIENT_RNA.format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
         logger.add_to_log(msg, level=level)
         summary.append(msg)
         logger.add_to_log("Filtering out vdj genes...")
@@ -354,7 +354,7 @@ if not no_cells:
             rna = rna[rna.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC", :].copy()
             percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
             level = "warning" if percent_removed > 20 else "info"
-            logger.add_to_log("Removed {} red blood cells (percent removed: {:.2f}%); {} droplets remained.".format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
+            logger.add_to_log(QC_STRING_RBC.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
         if is_cite:
             _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir, logger)
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
@@ -379,7 +379,7 @@ if not no_cells:
         rna = rna[is_solo_singlet,]
         percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
         level = "warning" if percent_removed > 40 else "info"
-        logger.add_to_log("Removed {} estimated doublets (percent removed: {:.2f}%); {} droplets remained.".format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
+        logger.add_to_log(QC_STRING_DOUBLETS.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
         summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
             logger.add_to_log("No cells left after doublet detection. Skipping the next processing steps.", "error")
