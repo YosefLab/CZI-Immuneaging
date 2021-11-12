@@ -224,7 +224,10 @@ try:
         use_rep="X_pca", key_added=key) 
     rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
         n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
-    adata.obsm.update(rna.obsm) 
+    # update the adata with the components of the dim reductions and umap coordinates
+    adata.obsm.update(rna.obsm)
+    # save the identify of the most variable genes used
+    adata.var["is_highly_variable_gene"] = adata.var.index.isin(rna.var.index)
 except Exception as err:
     logger.add_to_log("Execution failed with the following error:\n{}".format(err), "critical")
     logger.add_to_log("Terminating execution prematurely.", "critical")
@@ -237,9 +240,10 @@ except Exception as err:
     sys.exit()
 
 logger.add_to_log("Saving h5ad files...")
+adata.obs["age"] = adata.obs["age"].astype(str)
+adata.obs["BMI"] = adata.obs["BMI"].astype(str)
+adata.obs["height"] = adata.obs["height"].astype(str)
 adata.write(os.path.join(data_dir,output_h5ad_file))
-# TODO: save also the version of the data that was used for the model fitting (after feature selection etc.); can be useful for reference-based integration
-# rna.write(os.path.join(data_dir,"{}.totalvi_model".format(prefix),output_h5ad_model_file))
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
@@ -247,12 +251,14 @@ adata.write(os.path.join(data_dir,output_h5ad_file))
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/integrated_samples/{}/{} --exclude "*" --include {}'.format(
-        data_dir, prefix, version, output_h5ad_file)
+    s3_url = "s3://immuneaging/integrated_samples/{}_level".format(configs["integration_level"])
+    sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
+        data_dir, s3_url, prefix, version, output_h5ad_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     logger.add_to_log("Uploading model files (a single .zip file for each model) to S3...")
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(data_dir, prefix, version, scvi_model_file)
+    sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" --include {}'.format(
+        data_dir, s3_url, prefix, version, scvi_model_file)
     if is_cite:
         sync_cmd += ' --include {}'.format(totalvi_model_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -265,6 +271,6 @@ logger.add_to_log("Number of cells: {}, number of genes: {}.".format(adata.n_obs
 logging.shutdown()
 if not sandbox_mode:
     # Uploading log file to S3.
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/integrated_samples/{}/{} --exclude "*" --include {}'.format(
-        data_dir, prefix, version, logger_file)
+    sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
+        data_dir, s3_url, prefix, version, logger_file)
     os.system(sync_cmd)

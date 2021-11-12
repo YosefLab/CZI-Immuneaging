@@ -10,6 +10,7 @@ The configuration file is formatted as json with the following fields:
 * `"output_destination"` - Absolute path that will be used for saving outputs
 * `"s3_access_file"` - absolute path to the aws credentials file (provided by the admin)
 * `"output_prefix"` - prefix for the output files
+* `"integration_level"` - The level of integration, which determines the output directory on aws; for example, `"tissue"`.
 * `"sample_ids"` - A comma-separated (no spaces) list of the sample IDs (`Sample_ID` field in the Google spreadsheet) to integrate
 * `"processed_sample_configs_version"` - A comma-separated (no spaces) list of the versions of the processed sample files for the samples specified by `"sample_ids"` - these versions are determined by the configs version that was used to process the samples; the latest version of each processed sample can be found on the S3 bucket under `s3://immuneaging/processed_samples/`
 * `"n_highly_variable_genes"` - The number of highly variable genes to be used prior to applying dimensionality reduction using PCA and SCVI
