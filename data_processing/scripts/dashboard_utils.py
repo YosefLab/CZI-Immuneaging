@@ -39,14 +39,12 @@ def get_tissue_coverage_csv():
                 stim_status.append(stimulations[idx])
             tissue_stimulation[organs[idx]] = stim_status
 
-        print(tissue_stimulation)
-
         # fill in the row and add it to the list of rows
         csv_row = {}
         for tissue in tissues:
             tissue_stimulation[tissue].sort()
             stim_status = tissue_stimulation[tissue]
-            csv_row[tissue] = "No Data" if stim_status == [] else " ➕ ".join(stim_status)
+            csv_row[tissue] = "No Data" if stim_status == [] else ";".join(stim_status)
         csv_rows.append(csv_row)
 
     # write the csv
