@@ -132,7 +132,16 @@ def zipdir(path, ziph):
             ziph.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), 
                 os.path.join(path, '..')))
 
-def download_from_google_drive(url, output_fn=None, quiet=False):
+def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False):
+    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
+        sheet
+    )
+
+    # testing url of bad sample sheet
+    # url = "https://docs.google.com/spreadsheets/d/1YO1HLGLnO3PPUiK1vKZd52yoCInwpLl60zoi4zxkOrE/gviz/tq?tqx=out:csv&sheet={}".format(
+    #     sheet
+    # )
+
     try:
         import gdown
     except ImportError as e:
@@ -154,10 +163,6 @@ def download_from_google_drive(url, output_fn=None, quiet=False):
     os.remove(output_fn)
     return data
 
-def read_immune_aging_sheet(sheet, output_fn=None, quiet=False):
-    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
-    download_from_google_drive(url, output_fn, quiet)
-    
 def draw_separator_line():
     try:
         width = os.get_terminal_size().columns / 5
