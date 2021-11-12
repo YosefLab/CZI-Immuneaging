@@ -17,7 +17,7 @@ def get_tissue_coverage_csv():
     donors = utils.read_immune_aging_sheet("Donors")
     logger.add_to_log("Downloading the Samples sheet from Google drive...")
     samples = utils.read_immune_aging_sheet("Samples")
-    tissues = np.unique(samples["Organs"])
+    tissues = np.unique(samples["Organ"])
 
     csv_rows = []
     for donor in donors:
