@@ -64,6 +64,7 @@ def get_tissue_integration_results_csv():
 
     # define the csv headers
     CSV_HEADER_TISSUE: str = "Tissue"
+    CSV_HEADER_DONOR_COUNT: str = "# Donors"
     CSV_HEADER_DONORS: str = "Donors"
     CSV_HEADER_CELL_COUNT: str = "# Cells"
 
@@ -73,6 +74,7 @@ def get_tissue_integration_results_csv():
         csv_row[CSV_HEADER_TISSUE] = tissue
         index = samples["Organ"] == tissue
         donors = samples["Donor ID"][index]
+        csv_row[CSV_HEADER_DONOR_COUNT] = donors.size()
         csv_row[CSV_HEADER_DONORS] = donors.tolist()
         csv_row[CSV_HEADER_CELL_COUNT] = -1 # TODO download the anndata and get the cell count from it
         csv_rows.append(csv_row)
@@ -81,6 +83,7 @@ def get_tissue_integration_results_csv():
     csv_file = io.StringIO()
     field_names = [
         CSV_HEADER_TISSUE,
+        CSV_HEADER_DONOR_COUNT,
         CSV_HEADER_DONORS,
         CSV_HEADER_CELL_COUNT,
     ]

@@ -253,7 +253,7 @@ if not sandbox_mode:
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     logger.add_to_log("Uploading model files (a single .zip file for each model) to S3...")
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(data_dir, prefix, version, scvi_model_file)
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/integrated_samples/{}/{}/ --exclude "*" --include {}'.format(data_dir, prefix, version, scvi_model_file)
     if is_cite:
         sync_cmd += ' --include {}'.format(totalvi_model_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
