@@ -132,14 +132,6 @@ def zipdir(path, ziph):
             ziph.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), 
                 os.path.join(path, '..')))
 
-def read_immune_aging_sheet(sheet, output_fn=None, quiet=False):
-    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
-    download_from_google_drive(url, output_fn, quiet)
-    
-def read_immune_aging_dashboard_sheet(sheet, output_fn=None, quiet=False):
-    url = "https://docs.google.com/spreadsheets/d/1v1TT1uJHTAxemnPmORX8XvSDZCXWq27ZK0Nbfugjts0/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
-    download_from_google_drive(url, output_fn, quiet)
-
 def download_from_google_drive(url, output_fn=None, quiet=False):
     try:
         import gdown
@@ -162,6 +154,10 @@ def download_from_google_drive(url, output_fn=None, quiet=False):
     os.remove(output_fn)
     return data
 
+def read_immune_aging_sheet(sheet, output_fn=None, quiet=False):
+    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
+    download_from_google_drive(url, output_fn, quiet)
+    
 def draw_separator_line():
     try:
         width = os.get_terminal_size().columns / 5
