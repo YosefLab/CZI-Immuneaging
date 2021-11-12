@@ -21,22 +21,28 @@ def get_tissue_coverage_csv():
 
     csv_rows = []
     for donor in donors:
-        csv_row = {tissue: "No Data" for tissue in tissues}
+        index = samples["Donor ID"] == donor
+        organs = samples["Organ"][index] # organ and tissue are synonym
+        stimulations = samples["Stimulation"][index]
+
+        # build the dictionary of tissue to a list of tissue stim status
+        # a tissue can have more than one stim status (e.g. it can be nonstim and stim)
+        tissue_stimulation = {tissue: [] for tissue in tissues}
+        for i in range(len(organs)):
+            stim_status = tissue_stimulation[organs[i]]
+            # if for this donor, this tissue was so far found to have no data then set it to
+            # stimulations[i]. If it was already reported to be stimulated with stimulations[i]
+            # then no need to do anything. Otherwise, append stimulations[i] to whatever we have
+            # so far
+            if stim_status == [] or stimulations[i] not in stim_status:
+                stim_status.append(stimulations[i])
+            tissue_stimulation[organs[i]] = stim_status
+
+        # fill in the row and add it to the list of rows
+        csv_row = {}
         for tissue in tissues:
-            index = samples["Donor ID"] == donor
-            organs = samples["Organ"][index] # organ and tissue are synonym
-            stimulations = samples["Stimulation"][index]
-            for i in range(len(organs)):
-                tissue_stimulation = []
-                # if for this donor, this tissue was found to have no data then set it to
-                # stimulations[i]. If it was already reported to be stimulated with
-                # stimulations[i] then no need to do anything. Otherwise, append
-                # stimulations[i] to whatever was reported before
-                if tissue_stimulation == []:
-                    tissue_stimulation = stimulations[i]
-                elif stimulations[i] not in tissue_stimulation:
-                    tissue_stimulation.append(stimulations[i])
-                csv_row[tissue] = tissue_stimulation.sort().join(" ➕ ")
+            stim_status = tissue_stimulation[tissue]
+            csv_row[tissue] = "No Data" if stim_status == [] else stim_status.sort().join(" ➕ ")
         csv_rows.append(csv_row)
 
     # write the csv
