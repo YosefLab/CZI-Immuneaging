@@ -59,5 +59,5 @@ def get_tissue_coverage_csv():
 
 
 action = sys.argv[1]
-assert(action in ["tissue_coverage"])
+assert(action == "tissue_coverage")
 get_tissue_coverage_csv()
