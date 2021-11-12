@@ -46,7 +46,7 @@ def get_tissue_coverage_csv():
         for tissue in tissues:
             tissue_stimulation[tissue].sort()
             stim_status = tissue_stimulation[tissue]
-            csv_row[tissue] = "No Data" if stim_status == [] else " ➕  ")join(stim_status)
+            csv_row[tissue] = "No Data" if stim_status == [] else " ➕ ".join(stim_status)
         csv_rows.append(csv_row)
 
     # write the csv
