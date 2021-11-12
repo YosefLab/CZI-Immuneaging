@@ -67,6 +67,7 @@ def get_tissue_integration_results_csv():
     CSV_HEADER_DONOR_COUNT: str = "# Donors"
     CSV_HEADER_DONORS: str = "Donors"
     CSV_HEADER_CELL_COUNT: str = "# Cells"
+    CSV_HEADER_ANNDATA: str = "Anndata URL"
 
     csv_rows = []
     for tissue in tissues:
@@ -74,9 +75,10 @@ def get_tissue_integration_results_csv():
         csv_row[CSV_HEADER_TISSUE] = tissue
         index = samples["Organ"] == tissue
         donors = samples["Donor ID"][index]
-        csv_row[CSV_HEADER_DONOR_COUNT] = donors.size()
+        csv_row[CSV_HEADER_DONOR_COUNT] = donors.size
         csv_row[CSV_HEADER_DONORS] = donors.tolist()
         csv_row[CSV_HEADER_CELL_COUNT] = -1 # TODO download the anndata and get the cell count from it
+        csv_row[CSV_HEADER_ANNDATA] = "Pending processing"
         csv_rows.append(csv_row)
 
     # write the csv
@@ -86,6 +88,7 @@ def get_tissue_integration_results_csv():
         CSV_HEADER_DONOR_COUNT,
         CSV_HEADER_DONORS,
         CSV_HEADER_CELL_COUNT,
+        CSV_HEADER_ANNDATA,
     ]
     writer = csv.DictWriter(csv_file, fieldnames=field_names)
     writer.writeheader()
