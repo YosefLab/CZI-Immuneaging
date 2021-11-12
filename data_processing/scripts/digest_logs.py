@@ -16,7 +16,7 @@ import logging
 import io
 
 import utils
-from logger import RichLogger
+from logger import RichLogger, not_found_sign
 
 logging.getLogger('parse').setLevel(logging.WARNING)
 
@@ -75,7 +75,15 @@ class BaseDigestClass(ABC):
 
     @staticmethod
     def _is_alertable_log_line(line: str) -> bool:
-        return "WARNING" in line or "ERROR" in line or "CRITICAL" in line
+        return BaseDigestClass._is_failure_line(line) or BaseDigestClass._is_warning_line(line)
+
+    @staticmethod
+    def _is_failure_line(line: str) -> bool:
+        return "ERROR" in line or "CRITICAL" in line or "NOT FOUND" in line
+
+    @staticmethod
+    def _is_warning_line(line: str) -> bool:
+        return "WARNING" in line
 
     def _get_log_lines(self) -> Dict[str, List]:
         files_to_lines = {}
@@ -106,7 +114,8 @@ class BaseDigestClass(ABC):
                 filename = self._get_log_file_name(object_id)
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
-                    logger.add_to_log("File not found: {}. Skipping.".format(filepath))
+                    logger.add_to_log("File not found: {}. Skipping.".format(filepath), level="error")
+                    files_to_lines[filepath] = ["NOT FOUND {} No logs were found. Either processing failed or logs are unavailable.\n".format(not_found_sign)]
                     continue
                 lines = []
                 with open(filepath, 'r') as f:
@@ -222,10 +231,10 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     CSV_HEADER_RBC: -1,
                 }
                 for line in lines:
-                    if "ERROR" in line or "CRITICAL" in line:
+                    if self._is_failure_line(line):
                         csv_row[CSV_HEADER_FAILED] = "Yes"
                         csv_row[CSV_HEADER_FAILURE_REASON] = line.strip('"').strip()
-                    if "WARNING" in line:
+                    if self._is_warning_line(line):
                         csv_row[CSV_HEADER_WARNING] = "Yes"
                         if csv_row[CSV_HEADER_WARNING_REASON] == "": # first one
                             csv_row[CSV_HEADER_WARNING_REASON] += line.strip('"').strip()

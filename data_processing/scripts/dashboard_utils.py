@@ -1,6 +1,8 @@
 # This script can be used to generate various metrics that can be used to produce our data dashboard.
 # - To get tissue coverage csv, run as follows:
 #   python dashboard_utils.py tissue_coverage
+# - To get tissue integration results csv, run as follows:
+#   python dashboard_utils.py tissue_integration_results
 
 import sys
 import io
@@ -55,7 +57,50 @@ def get_tissue_coverage_csv():
     print(csv_file.getvalue())
     csv_file.close()
 
+def get_tissue_integration_results_csv():
+    logger.add_to_log("Downloading the Samples sheet from Google drive...")
+    samples = utils.read_immune_aging_sheet("Samples")
+    tissues = np.unique(samples["Organ"])
+
+    # define the csv headers
+    CSV_HEADER_TISSUE: str = "Tissue"
+    CSV_HEADER_DONOR_COUNT: str = "# Donors"
+    CSV_HEADER_DONORS: str = "Donors"
+    CSV_HEADER_CELL_COUNT: str = "# Cells"
+    CSV_HEADER_ANNDATA: str = "Anndata URL"
+
+    csv_rows = []
+    for tissue in tissues:
+        csv_row = {}
+        csv_row[CSV_HEADER_TISSUE] = tissue
+        index = samples["Organ"] == tissue
+        donors = samples["Donor ID"][index]
+        csv_row[CSV_HEADER_DONOR_COUNT] = donors.size
+        csv_row[CSV_HEADER_DONORS] = donors.tolist()
+        csv_row[CSV_HEADER_CELL_COUNT] = -1 # TODO download the anndata and get the cell count from it
+        csv_row[CSV_HEADER_ANNDATA] = "Pending processing"
+        csv_rows.append(csv_row)
+
+    # write the csv
+    csv_file = io.StringIO()
+    field_names = [
+        CSV_HEADER_TISSUE,
+        CSV_HEADER_DONOR_COUNT,
+        CSV_HEADER_DONORS,
+        CSV_HEADER_CELL_COUNT,
+        CSV_HEADER_ANNDATA,
+    ]
+    writer = csv.DictWriter(csv_file, fieldnames=field_names)
+    writer.writeheader()
+    writer.writerows(csv_rows)
+    print(csv_file.getvalue())
+    csv_file.close()
+
 
 action = sys.argv[1]
-assert(action == "tissue_coverage")
-get_tissue_coverage_csv()
+assert(action in ["tissue_coverage", "tissue_integration_results"])
+if action == "tissue_coverage":
+    get_tissue_coverage_csv()
+else:
+    get_tissue_integration_results_csv()
+

@@ -429,8 +429,8 @@ if not no_cells:
             sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(adata)
     except Exception as err:
-        logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "critical")
-        logger.add_to_log("Terminating execution prematurely.", "critical")
+        logger.add_to_log("Execution failed with the following error: {}.\n{}".format(err, traceback.format_exc()), "critical")
+        logger.add_to_log("Terminating execution prematurely.")
         if not sandbox_mode:
             # upload log to S3
             sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_samples/{}/{}/ --exclude "*" --include {}'.format(

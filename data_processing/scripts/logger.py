@@ -12,6 +12,8 @@ _level_to_sign = {
     "critical": "💣",
 }
 
+not_found_sign = "❗️❓"
+
 class BaseLogger(ABC):
     def __init__(self, filename: Union[str,None] = None):
         if filename is None:
@@ -79,6 +81,3 @@ class RichLogger(BaseLogger):
             handlers=[RichHandler(omit_repeated_times=False)],
         )
         self.logger = logging.getLogger("rich")
-
-def is_alertable_log_line(line: str) -> bool:
-    return "WARNING" in line or "ERROR" in line or "CRITICAL" in line
