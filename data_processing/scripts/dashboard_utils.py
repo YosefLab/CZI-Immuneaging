@@ -87,5 +87,9 @@ def get_tissue_integration_results_csv():
 
 
 action = sys.argv[1]
-assert(action == "tissue_coverage")
-get_tissue_coverage_csv()
+assert(action in ["tissue_coverage", "tissue_integration_results"])
+if action == "tissue_coverage":
+    get_tissue_coverage_csv()
+else:
+    get_tissue_integration_results_csv()
+
