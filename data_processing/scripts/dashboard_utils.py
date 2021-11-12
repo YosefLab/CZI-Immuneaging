@@ -75,19 +75,18 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
     CSV_HEADER_SAMPLES: str = "Samples"
     CSV_HEADER_ANNDATA: str = "Anndata URL"
 
-    # prepare the needful for downloading data fro aws
+    # prepare the needful for downloading data from aws
     utils.set_access_keys(s3_access_file)
-    # BASE_AWS_URL = "https://immuneaging.s3.us-west-1.amazonaws.com/integrated_samples/tissue_level"
+    BASE_AWS_URL = "https://immuneaging.s3.us-west-1.amazonaws.com"
+    BASE_S3_URL = "s3://immuneaging"
+    BASE_S3_DIR = "integrated_samples/tissue_level"
+    version = "v1" # TODO add ability to get the latest version (github issue #32)
 
     csv_rows = []
     for tissue in tissues:
         # create a csv row and initialize it
         csv_row = {}
         csv_row[CSV_HEADER_TISSUE] = tissue
-        # index = samples["Organ"] == tissue
-        # donors = samples["Donor ID"][index]
-        # csv_row[CSV_HEADER_DONOR_COUNT] = donors.size
-        # csv_row[CSV_HEADER_DONORS] = donors.tolist()
         csv_row[CSV_HEADER_DONOR_COUNT] = -1
         csv_row[CSV_HEADER_DONORS] = []
         csv_row[CSV_HEADER_CELL_COUNT] = -1
@@ -97,16 +96,30 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
 
         # download the integrated anndata from aws
         try:
+            file_name = "{}.{}.h5ad".format(tissue, version)
+
+            # first check to see if we have an anndata for this tissue
+            ls_cmd = "aws s3 ls {}/{}/{}/{}".format(BASE_S3_URL, BASE_S3_DIR, tissue, version)
+            files = os.popen(ls_cmd).read()
+            logger.add_to_log("aws response: {}\n".format(files))
+            found = False
+            for f in files.rstrip().split('\n'):
+                if f.split('/')[-1] == file_name:
+                    found = True
+                    break
+
             # TODO remove once we have more or all tissues
-            if tissue == "SPL":
-                # csv_row[CSV_HEADER_ANNDATA] = "BASE_AWS_URL/{}/{}/{}" # TODO complete this once I have an example file name
-                csv_row[CSV_HEADER_ANNDATA] = "https://immuneaging.s3.us-west-1.amazonaws.com/integrated_samples/tissue_level/tmp/v1/example_integration.v1.h5ad"
-                aws_dir = "s3://immuneaging/integrated_samples/tissue_level/tmp/v1/"
-                aws_file = "example_integration.v1.h5ad"
-                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(aws_dir, working_dir, aws_file)
+            if not found:
+                logger.add_to_log("Integrated annotated data not found for issue {}".format(tissue))
+            else:
+                csv_row[CSV_HEADER_ANNDATA] = "{}/{}/{}/{}/{}".format(BASE_AWS_URL, BASE_S3_DIR, tissue, version, file_name)
+                dir_name = "{}/{}/{}/{}/".format(BASE_S3_URL, BASE_S3_DIR, tissue, version)
+                sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(dir_name, working_dir, file_name)
                 logger.add_to_log("sync_cmd: {}".format(sync_cmd))
                 logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-                h5ad_file = os.path.join(working_dir, aws_file)
+                
+                # now extract info from the adata
+                h5ad_file = os.path.join(working_dir, file_name)
                 adata = sc.read_h5ad(h5ad_file)
                 csv_row[CSV_HEADER_CELL_COUNT] = adata.n_obs
                 csv_row[CSV_HEADER_SAMPLES] = np.unique(adata.obs["sample_id"])
