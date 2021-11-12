@@ -82,21 +82,22 @@ logger.add_to_log("using the following configurations:\n{}".format(str(configs))
 logger.add_to_log("Configs version: " + version)
 logger.add_to_log("New configs version: " + str(is_new_version))
 
+s3_url = "s3://immuneaging/integrated_samples/{}_level".format(configs["integration_level"])
 h5ad_file = "{}.{}.h5ad".format(prefix, version)
 if is_new_version:
     if not sandbox_mode:
         logger.add_to_log("Uploading new configs version to S3...")
         with open(os.path.join(data_dir,output_configs_file), 'w') as f:
             json.dump(configs, f)
-        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/integrated_samples/{}/{} --exclude "*" --include {}'.format(
-            data_dir, prefix, version, output_configs_file)
+        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
+            data_dir, s3_url, prefix, version, output_configs_file)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 else:
     logger.add_to_log("Checking if h5ad file already exists on S3...")
     h5ad_file_exists = False
     logger_file_exists = False
-    ls_cmd = "aws s3 ls s3://immuneaging/integrated_samples/{}/{} --recursive".format(prefix,version)
+    ls_cmd = "aws s3 ls {}/{}/{} --recursive".format(s3_url, prefix,version)
     files = os.popen(ls_cmd).read()
     logger.add_to_log("aws response: {}\n".format(files))
     for f in files.rstrip().split('\n'):
@@ -233,8 +234,8 @@ except Exception as err:
     logger.add_to_log("Terminating execution prematurely.", "critical")
     if not sandbox_mode:
         # upload log to S3
-        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/integrated_samples/{}/{}/ --exclude "*" --include {}'.format( \
-            data_dir, prefix, version, logger_file)
+        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" --include {}'.format( \
+            data_dir, s3_url, prefix, version, logger_file)
         os.system(sync_cmd)
     print(err)
     sys.exit()
@@ -251,7 +252,6 @@ adata.write(os.path.join(data_dir,output_h5ad_file))
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
-    s3_url = "s3://immuneaging/integrated_samples/{}_level".format(configs["integration_level"])
     sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
         data_dir, s3_url, prefix, version, output_h5ad_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
