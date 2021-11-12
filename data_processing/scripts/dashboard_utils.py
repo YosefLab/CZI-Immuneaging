@@ -142,7 +142,9 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
         CSV_HEADER_DONOR_COUNT,
         CSV_HEADER_DONORS,
         CSV_HEADER_CELL_COUNT,
-        CSV_HEADER_ANNDATA,
+        CSV_HEADER_SAMPLE_COUNT,
+        CSV_HEADER_SAMPLES,
+        CSV_HEADER_ANNDATA,    
     ]
     writer = csv.DictWriter(csv_file, fieldnames=field_names)
     writer.writeheader()
