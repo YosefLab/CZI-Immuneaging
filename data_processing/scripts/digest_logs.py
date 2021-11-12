@@ -106,7 +106,8 @@ class BaseDigestClass(ABC):
                 filename = self._get_log_file_name(object_id)
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
-                    logger.add_to_log("File not found: {}. Skipping.".format(filepath))
+                    logger.add_to_log("File not found: {}. Skipping.".format(filepath), level="error")
+                    files_to_lines[filepath] = ["❓ No logs were found. Either processing failed or logs are unavailable."]
                     continue
                 lines = []
                 with open(filepath, 'r') as f:
