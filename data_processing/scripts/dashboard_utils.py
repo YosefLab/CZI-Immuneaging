@@ -79,7 +79,12 @@ def get_tissue_integration_results_csv():
 
     # write the csv
     csv_file = io.StringIO()
-    writer = csv.DictWriter(csv_file, fieldnames=tissues)
+    field_names = [
+        CSV_HEADER_TISSUE,
+        CSV_HEADER_DONORS,
+        CSV_HEADER_CELL_COUNT,
+    ]
+    writer = csv.DictWriter(csv_file, fieldnames=field_names)
     writer.writeheader()
     writer.writerows(csv_rows)
     print(csv_file.getvalue())
