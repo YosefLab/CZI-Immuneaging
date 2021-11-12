@@ -209,13 +209,15 @@ try:
         key = "X_totalVI_integrated"
         # if there is no protein information for some of the cells set them to zero (instead of NaN)
         rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
-        _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
-        logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
-        neighbors_key = "totalvi_integrated_neighbors"
-        sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-            use_rep=key, key_added=neighbors_key) 
-        rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-            n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
+        try:
+            _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
+            logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
+            neighbors_key = "totalvi_integrated_neighbors"
+            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
+            rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
+        except Exception as err:
+            logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "error")
     # pca
     logger.add_to_log("Calculating PCA...")
     sc.pp.pca(rna)
