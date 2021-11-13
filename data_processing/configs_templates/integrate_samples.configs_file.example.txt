@@ -4,6 +4,7 @@
 "output_destination": "/path/to/output_destination/",
 "s3_access_file": "/path/to/credentials_file.sh",
 "output_prefix": "SPL_5_donors",
+"integration_level": "tissue",
 "sample_ids": "582C-SPL-38,591C-SPL-1,D503-SPL-1,D496-SPL-1,583B-SPL-50",
 "processed_sample_configs_version": "v1,v1,v1,v1,v1",
 "n_highly_variable_genes": 3000,
