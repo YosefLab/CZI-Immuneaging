@@ -218,7 +218,7 @@ try:
             rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
         except Exception as err:
-            logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "error")
+            logger.add_to_log("Execution failed with the following error: {}.\n{}".format(err, traceback.format_exc()), "error")
     # pca
     logger.add_to_log("Calculating PCA...")
     sc.pp.pca(rna)
