@@ -11,6 +11,7 @@ import numpy as np
 import os
 import traceback
 import scanpy as sc
+import zipfile
 
 import utils
 from logger import RichLogger
@@ -61,6 +62,52 @@ def get_tissue_coverage_csv():
     print(csv_file.getvalue())
     csv_file.close()
 
+def generate_tissue_integration_figures(adata, tissue, version, working_dir, base_aws_url, base_s3_dir):
+    
+    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts"]
+
+    logger.add_to_log("Generating figures for tissue: {}, version: {}\n".format(tissue,version))
+    figures_dir = os.path.join(working_dir,"figures")
+    os.system("mkdir -p " + figures_dir)
+    prefix = "{}.{}".format(tissue, version)
+    
+    # use umap embeddings based on totalVI if available; otherwise based on scvi
+    if "X_umap_totalvi_integrated" in adata.obsm:
+        umap_key = "X_umap_totalvi_integrated"
+    else:
+        umap_key = "X_umap_scvi_integrated"
+    adata.obsm["X_umap"] = adata.obsm[umap_key]
+    
+    for field in fields_to_plot:
+        # looks like sc.pl.umap cannot take an absolute path; move files from the output dir of sc.pl.umap to the working directory
+        filename = "{}.umap.{}.pdf".format(prefix,field)
+        sc.pl.umap(adata, color=[field], save = filename)
+        os.rename("figures/" + filename, os.path.join(figures_dir, filename))
+
+    # for each celltypist model used plot a umap colored by the predicted cell types
+    mdl = 1
+    while "celltypist_model.{}".format(str(mdl)) in adata.obs:
+        mdl_name = "celltypist_{}".format(adata.obs["celltypist_model." + str(mdl)][1].split("/")[-1].split(".")[0])
+        filename = "{}.umap.{}.pdf".format(prefix,mdl_name)
+        sc.pl.umap(adata, color=["celltypist_predicted_labels.{}".format(str(mdl))], save = filename)
+        os.rename("figures/" + filename, os.path.join(figures_dir, filename))
+        mdl += 1
+    
+    logger.add_to_log("Saving .zip file with the figures...")
+    zip_filename = "{}.figures.zip",format(prefix)
+    figures_file_path = os.path.join(working_dir,zip_filename)
+    zipf = zipfile.ZipFile(figures_file_path, 'w', zipfile.ZIP_DEFLATED)
+    zipdir(figures_dir, zipf)
+    zipf.close()
+    
+    logger.add_to_log("Uploading {} to aws...".format(filename))
+    aws_destination = "{}/{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version)
+    figures_url = "{}/{}".format(aws_destination, zip_filename)
+    sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(working_dir, aws_destination, zip_filename)
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    return figures_url
+
 def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
     logger.add_to_log("Downloading the Samples sheet from Google drive...")
     samples = utils.read_immune_aging_sheet("Samples")
@@ -74,6 +121,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
     CSV_HEADER_SAMPLE_COUNT: str = "# Samples"
     CSV_HEADER_SAMPLES: str = "Samples"
     CSV_HEADER_ANNDATA: str = "Anndata URL"
+    CSV_HEADER_FIGURES: str = "Figures URL"
 
     # prepare the needful for downloading data from aws
     utils.set_access_keys(s3_access_file)
@@ -93,6 +141,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
         csv_row[CSV_HEADER_SAMPLE_COUNT] = -1
         csv_row[CSV_HEADER_SAMPLES] = []
         csv_row[CSV_HEADER_ANNDATA] = "Pending processing"
+        csv_row[CSV_HEADER_FIGURES] = "Pending processing"
 
         # download the integrated anndata from aws
         try:
@@ -126,6 +175,10 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
                 csv_row[CSV_HEADER_SAMPLE_COUNT] = len(csv_row[CSV_HEADER_SAMPLES])
                 csv_row[CSV_HEADER_DONORS] = np.unique(adata.obs["donor_id"])
                 csv_row[CSV_HEADER_DONOR_COUNT] = len(csv_row[CSV_HEADER_DONORS])
+
+                # generate figures
+                csv_row[CSV_HEADER_FIGURES] = generate_tissue_integration_figures(adata, tissue, version, working_dir, BASE_AWS_URL, BASE_S3_DIR)
+
                 # clean up
                 os.system("rm {}/*".format(working_dir))
         except Exception:
@@ -144,7 +197,8 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
         CSV_HEADER_CELL_COUNT,
         CSV_HEADER_SAMPLE_COUNT,
         CSV_HEADER_SAMPLES,
-        CSV_HEADER_ANNDATA,    
+        CSV_HEADER_ANNDATA,
+        CSV_HEADER_FIGURES,
     ]
     writer = csv.DictWriter(csv_file, fieldnames=field_names)
     writer.writeheader()
