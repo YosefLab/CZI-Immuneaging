@@ -12,6 +12,7 @@ import os
 import traceback
 import scanpy as sc
 import zipfile
+import shutil
 
 import utils
 from logger import RichLogger
@@ -62,7 +63,7 @@ def get_tissue_coverage_csv():
     print(csv_file.getvalue())
     csv_file.close()
 
-def generate_tissue_integration_figures(adata, tissue, version, working_dir, base_aws_url, base_s3_dir):
+def generate_tissue_integration_figures(adata, tissue, version, working_dir, base_aws_url, base_s3_url, base_s3_dir):
     
     fields_to_plot = ["site", "donor_id", "sample_id", "total_counts"]
 
@@ -80,32 +81,36 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     
     for field in fields_to_plot:
         # looks like sc.pl.umap cannot take an absolute path; move files from the output dir of sc.pl.umap to the working directory
-        filename = "{}.umap.{}.pdf".format(prefix,field)
+        filename = ".{}.{}.pdf".format(prefix,field)
         sc.pl.umap(adata, color=[field], save = filename)
+        filename = "umap" + filename
         os.rename("figures/" + filename, os.path.join(figures_dir, filename))
 
     # for each celltypist model used plot a umap colored by the predicted cell types
     mdl = 1
     while "celltypist_model.{}".format(str(mdl)) in adata.obs:
         mdl_name = "celltypist_{}".format(adata.obs["celltypist_model." + str(mdl)][1].split("/")[-1].split(".")[0])
-        filename = "{}.umap.{}.pdf".format(prefix,mdl_name)
+        filename = ".{}.{}.pdf".format(prefix,mdl_name)
         sc.pl.umap(adata, color=["celltypist_predicted_labels.{}".format(str(mdl))], save = filename)
+        filename = "umap" + filename
         os.rename("figures/" + filename, os.path.join(figures_dir, filename))
         mdl += 1
-    
+
     logger.add_to_log("Saving .zip file with the figures...")
-    zip_filename = "{}.figures.zip",format(prefix)
-    figures_file_path = os.path.join(working_dir,zip_filename)
+    zip_filename = "{}.figures.zip".format(prefix)
+    figures_file_path = os.path.join(working_dir, zip_filename)
     zipf = zipfile.ZipFile(figures_file_path, 'w', zipfile.ZIP_DEFLATED)
-    zipdir(figures_dir, zipf)
+    utils.zipdir(figures_dir, zipf)
     zipf.close()
     
-    logger.add_to_log("Uploading {} to aws...".format(filename))
-    aws_destination = "{}/{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version)
-    figures_url = "{}/{}".format(aws_destination, zip_filename)
+    logger.add_to_log("Uploading {} to aws...".format(zip_filename))
+    aws_destination = "{}/{}/{}/{}".format(base_s3_url, base_s3_dir, tissue, version)
     sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(working_dir, aws_destination, zip_filename)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    
+    shutil.rmtree("figures")
+    figures_url = "{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename)
     return figures_url
 
 def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
@@ -125,7 +130,8 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
 
     # prepare the needful for downloading data from aws
     utils.set_access_keys(s3_access_file)
-    BASE_AWS_URL = "https://immuneaging.s3.us-west-1.amazonaws.com"
+    #BASE_AWS_URL = "https://immuneaging.s3.us-west-1.amazonaws.com"
+    BASE_AWS_URL = "https://s3.console.aws.amazon.com/s3/object/immuneaging?prefix="
     BASE_S3_URL = "s3://immuneaging"
     BASE_S3_DIR = "integrated_samples/tissue_level"
     version = "v1" # TODO add ability to get the latest version (github issue #32)
@@ -148,12 +154,12 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
             file_name = "{}.{}.h5ad".format(tissue, version)
 
             # first check to see if we have an anndata for this tissue
-            ls_cmd = "aws s3 ls {}/{}/{}/{}".format(BASE_S3_URL, BASE_S3_DIR, tissue, version)
+            ls_cmd = "aws s3 ls {}/{}/{}/{}/".format(BASE_S3_URL, BASE_S3_DIR, tissue, version)
             files = os.popen(ls_cmd).read()
             logger.add_to_log("aws response: {}\n".format(files))
             found = False
             for f in files.rstrip().split('\n'):
-                if f.split('/')[-1] == file_name:
+                if f.split(' ')[-1] == file_name:
                     found = True
                     break
 
@@ -161,7 +167,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
             if not found:
                 logger.add_to_log("Integrated annotated data not found for issue {}".format(tissue))
             else:
-                csv_row[CSV_HEADER_ANNDATA] = "{}/{}/{}/{}/{}".format(BASE_AWS_URL, BASE_S3_DIR, tissue, version, file_name)
+                csv_row[CSV_HEADER_ANNDATA] = "{}{}/{}/{}/{}".format(BASE_AWS_URL, BASE_S3_DIR, tissue, version, file_name)
                 dir_name = "{}/{}/{}/{}/".format(BASE_S3_URL, BASE_S3_DIR, tissue, version)
                 sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(dir_name, working_dir, file_name)
                 logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -177,13 +183,13 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
                 csv_row[CSV_HEADER_DONOR_COUNT] = len(csv_row[CSV_HEADER_DONORS])
 
                 # generate figures
-                csv_row[CSV_HEADER_FIGURES] = generate_tissue_integration_figures(adata, tissue, version, working_dir, BASE_AWS_URL, BASE_S3_DIR)
+                csv_row[CSV_HEADER_FIGURES] = generate_tissue_integration_figures(adata, tissue, version, working_dir, BASE_AWS_URL, BASE_S3_URL, BASE_S3_DIR)
 
                 # clean up
-                os.system("rm {}/*".format(working_dir))
+                #os.system("rm {}/*".format(working_dir))
         except Exception:
             logger.add_to_log("Execution failed for tissue {} with the following error:\n{}".format(tissue, traceback.format_exc()), "critical")
-            os.system("rm {}/*".format(working_dir))
+            #os.system("rm {}/*".format(working_dir))
             logger.add_to_log("Continuing execution for other tissues...")
             continue
         csv_rows.append(csv_row)
