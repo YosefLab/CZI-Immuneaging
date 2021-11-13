@@ -233,8 +233,8 @@ try:
     # save the identify of the most variable genes used
     adata.var["is_highly_variable_gene"] = adata.var.index.isin(rna.var.index)
 except Exception as err:
-    logger.add_to_log("Execution failed with the following error:\n{}".format(err), "critical")
-    logger.add_to_log("Terminating execution prematurely.", "critical")
+    logger.add_to_log("Execution failed with the following error: {}.\n{}".format(err, traceback.format_exc()), "critical")
+    logger.add_to_log("Terminating execution prematurely.")
     if not sandbox_mode:
         # upload log to S3
         sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" --include {}'.format( \
