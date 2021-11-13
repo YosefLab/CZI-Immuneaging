@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import scvi
 import hashlib
+import traceback
 
 # This does two things:
 # 1. Makes the logger look good in a log file
