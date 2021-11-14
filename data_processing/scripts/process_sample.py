@@ -362,7 +362,7 @@ if not no_cells:
             try:
                 _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir, logger, max_retry_count=retry_count)
             except Exception as err:
-                logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {} times: {}. Moving on...".format(retry_count, err), "warning")
+                logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
                 is_cite = False
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
         logger.add_to_log("Running solo for detecting doublets...")

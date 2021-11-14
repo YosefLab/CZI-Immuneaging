@@ -199,7 +199,7 @@ try:
     rna.X = np.round(rna.layers["decontaminated_counts"])
     # scvi
     key = "X_scvi_integrated"
-    _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger=logger, latent_key=key)
+    _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
     logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
     neighbors_key = "scvi_integrated_neighbors"
     sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
@@ -215,14 +215,14 @@ try:
         # rest of the data regardless of CITE info
         retry_count = 2
         try:
-            _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger=logger, latent_key=key, max_retry_count=retry_count)
+            _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
             logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
             neighbors_key = "totalvi_integrated_neighbors"
             sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
             rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
         except Exception as err:
-            logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {} times: {}. Moving on...".format(retry_count, err), "warning")
+            logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
             is_cite = False
     # pca
     logger.add_to_log("Calculating PCA...")

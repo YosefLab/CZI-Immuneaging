@@ -184,9 +184,9 @@ def run_model(
         prefix: str,
         version: str,
         data_dir: str,
-        logger: Type[BaseLogger] = None,
+        logger: Type[BaseLogger],
         latent_key: str = None,
-        max_retry_count = 0,
+        max_retry_count: int = 0,
     ):
     """
     Wrapper for `_run_model_impl` that retries the call up to `max_retry_count` times
@@ -254,9 +254,6 @@ def _run_model_impl(
     -------
     A tuple containing the trained model and the name of the zip file where the model is saved.
     """
-    # logger could be a positional arg but we use it as a kwarg so the retry decorator
-    # can grab it easily
-    assert(logger is not None)
     assert model_name in ["scvi", "totalvi"]
     logger.add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
