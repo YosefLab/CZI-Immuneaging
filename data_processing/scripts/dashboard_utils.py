@@ -8,6 +8,7 @@ import sys
 import io
 import csv
 import numpy as np
+import pandas as pd
 import os
 import traceback
 import scanpy as sc
@@ -65,7 +66,31 @@ def get_tissue_coverage_csv():
 
 def generate_tissue_integration_figures(adata, tissue, version, working_dir, base_aws_url, base_s3_url, base_s3_dir):
     
-    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts"]
+    # add two age fields for the umaps - age as a quantitative variable and as a categorical variable using 3 age groups
+    ages_str = np.unique(adata.obs["age"])
+    ages = {}
+    for a in ages_str:
+        try:
+            ages[a] = float(a)
+        except ValueError:
+            # this is a range and not a number
+            b = sorted([float(j) for j in a.split("-")])
+            ages[a] = b[0]+(b[1]-b[0])/2 # take the middle of the range
+    adata.obs["age_continuous"] = np.array([ages[j] for j in adata.obs["age"].values])
+    age_categorical = []
+    grp1_label = "{}-39 y/o".format(round(np.min(adata.obs["age_continuous"].values)))
+    grp2_label = "40-59 y/o"
+    grp3_label = "60-{} y/o".format(round(np.max(adata.obs["age_continuous"].values)))
+    for j in adata.obs["age_continuous"].values:
+        if j <= 40:
+            age_categorical.append(grp1_label)
+        elif j <= 60:
+            age_categorical.append(grp2_label)
+        else:
+            age_categorical.append(grp3_label)
+    adata.obs["age_categorical"] = pd.Categorical(np.array(age_categorical))
+
+    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts", "sex", "age_continuous", "age_categorical"]
 
     logger.add_to_log("Generating figures for tissue: {}, version: {}\n".format(tissue,version))
     figures_dir = os.path.join(working_dir,"figures")
