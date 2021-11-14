@@ -199,7 +199,7 @@ try:
     rna.X = np.round(rna.layers["decontaminated_counts"])
     # scvi
     key = "X_scvi_integrated"
-    _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
+    _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger=logger, latent_key=key)
     logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
     neighbors_key = "scvi_integrated_neighbors"
     sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
@@ -210,15 +210,20 @@ try:
         key = "X_totalVI_integrated"
         # if there is no protein information for some of the cells set them to zero (instead of NaN)
         rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
+        # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
+        # so we try a few times then carry on with the rest of the script as we can still mine the
+        # rest of the data regardless of CITE info
+        retry_count = 2
         try:
-            _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, key)
+            _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger=logger, latent_key=key, max_retry_count=retry_count)
             logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
             neighbors_key = "totalvi_integrated_neighbors"
             sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
             rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
         except Exception as err:
-            logger.add_to_log("Execution failed with the following error: {}.\n{}".format(err, traceback.format_exc()), "error")
+            logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {} times: {}. Moving on...".format(retry_count, err), "warning")
+            is_cite = False
     # pca
     logger.add_to_log("Calculating PCA...")
     sc.pp.pca(rna)
