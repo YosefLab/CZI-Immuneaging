@@ -218,10 +218,10 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
                 csv_row[CSV_HEADER_FIGURES] = generate_tissue_integration_figures(adata, tissue, version, working_dir, BASE_AWS_URL, BASE_S3_URL, BASE_S3_DIR)
 
                 # clean up
-                os.system("rm {}/*".format(working_dir))
+                os.system("rm -r {}".format(working_dir))
         except Exception:
             logger.add_to_log("Execution failed for tissue {} with the following error:\n{}".format(tissue, traceback.format_exc()), "critical")
-            os.system("rm {}/*".format(working_dir))
+            os.system("rm -r {}".format(working_dir))
             logger.add_to_log("Continuing execution for other tissues...")
             continue
         csv_rows.append(csv_row)
