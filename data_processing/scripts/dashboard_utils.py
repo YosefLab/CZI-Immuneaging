@@ -122,6 +122,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
     CSV_HEADER_TISSUE: str = "Tissue"
     CSV_HEADER_DONOR_COUNT: str = "# Donors"
     CSV_HEADER_DONORS: str = "Donors"
+    CSV_HEADER_DONORS_AGE: str = "Donors age"
     CSV_HEADER_CELL_COUNT: str = "# Cells"
     CSV_HEADER_SAMPLE_COUNT: str = "# Samples"
     CSV_HEADER_SAMPLES: str = "Samples"
@@ -143,6 +144,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
         csv_row[CSV_HEADER_TISSUE] = tissue
         csv_row[CSV_HEADER_DONOR_COUNT] = -1
         csv_row[CSV_HEADER_DONORS] = []
+        csv_row[CSV_HEADER_DONORS_AGE] = []
         csv_row[CSV_HEADER_CELL_COUNT] = -1
         csv_row[CSV_HEADER_SAMPLE_COUNT] = -1
         csv_row[CSV_HEADER_SAMPLES] = []
@@ -179,9 +181,14 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
                 csv_row[CSV_HEADER_CELL_COUNT] = adata.n_obs
                 csv_row[CSV_HEADER_SAMPLES] = np.unique(adata.obs["sample_id"])
                 csv_row[CSV_HEADER_SAMPLE_COUNT] = len(csv_row[CSV_HEADER_SAMPLES])
-                csv_row[CSV_HEADER_DONORS] = np.unique(adata.obs["donor_id"])
+                donor_ids = np.unique(adata.obs["donor_id"])
+                csv_row[CSV_HEADER_DONORS] = donor_ids
                 csv_row[CSV_HEADER_DONOR_COUNT] = len(csv_row[CSV_HEADER_DONORS])
-
+                ages = []
+                for donor_id in donor_ids:
+                    ages.append(np.unique(adata[adata.obs["donor_id"] == donor_id,].obs["age"])[0])
+                csv_row[CSV_HEADER_DONORS_AGE] = np.array(ages)
+                
                 # generate figures
                 csv_row[CSV_HEADER_FIGURES] = generate_tissue_integration_figures(adata, tissue, version, working_dir, BASE_AWS_URL, BASE_S3_URL, BASE_S3_DIR)
 
@@ -200,6 +207,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
         CSV_HEADER_TISSUE,
         CSV_HEADER_DONOR_COUNT,
         CSV_HEADER_DONORS,
+        CSV_HEADER_DONORS_AGE,
         CSV_HEADER_CELL_COUNT,
         CSV_HEADER_SAMPLE_COUNT,
         CSV_HEADER_SAMPLES,
