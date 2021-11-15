@@ -112,7 +112,7 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
         filename = ".{}.{}.{}.pdf".format(prefix,integration_model,field)
         sc.pl.umap(adata, color=[field], save = filename)
         filename = "umap" + filename
-        os.rename("figures/" + filename, os.path.join(figures_dir, filename))
+        shutil.move("figures/" + filename, os.path.join(figures_dir, filename))
 
     # for each celltypist model used plot a umap colored by the predicted cell types
     mdl = 1
@@ -121,7 +121,7 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
         filename = ".{}.{}.{}.pdf".format(prefix,integration_model,mdl_name)
         sc.pl.umap(adata, color=["celltypist_predicted_labels.{}".format(str(mdl))], save = filename)
         filename = "umap" + filename
-        os.rename("figures/" + filename, os.path.join(figures_dir, filename))
+        shutil.move("figures/" + filename, os.path.join(figures_dir, filename))
         mdl += 1
 
     logger.add_to_log("Saving .zip file with the figures...")
@@ -138,6 +138,7 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     
     shutil.rmtree("figures")
+    shutil.rmtree(figures_dir)
     figures_url = "{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename)
     return figures_url
 
@@ -261,7 +262,7 @@ else:
     assert(os.path.isdir(working_dir))
     assert(os.path.isfile(s3_access_file))
     rm_working_dir = True
-    if len(sys.argv) > 4
-        assert(sys.argv[4] == "True" | sys.argv[4] == "False")
+    if len(sys.argv) > 4:
+        assert(sys.argv[4] == "True" or sys.argv[4] == "False")
         rm_working_dir = sys.argv[4] == "True"
     get_tissue_integration_results_csv(working_dir, s3_access_file, rm_working_dir)
