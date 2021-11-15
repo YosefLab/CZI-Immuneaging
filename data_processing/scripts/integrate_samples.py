@@ -205,6 +205,7 @@ try:
     sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
     rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
             n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
+    totalvi_model_file = None
     if is_cite:
         # totalVI
         key = "X_totalVI_integrated"
@@ -262,7 +263,7 @@ if not sandbox_mode:
     logger.add_to_log("Uploading model files (a single .zip file for each model) to S3...")
     sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, s3_url, prefix, version, scvi_model_file)
-    if is_cite:
+    if totalvi_model_file is not None:
         sync_cmd += ' --include {}'.format(totalvi_model_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))    
