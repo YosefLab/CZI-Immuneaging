@@ -100,13 +100,15 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     # use umap embeddings based on totalVI if available; otherwise based on scvi
     if "X_umap_totalvi_integrated" in adata.obsm:
         umap_key = "X_umap_totalvi_integrated"
+        integration_model = "totalvi"
     else:
         umap_key = "X_umap_scvi_integrated"
+        integration_model = "scvi"
     adata.obsm["X_umap"] = adata.obsm[umap_key]
     
     for field in fields_to_plot:
         # looks like sc.pl.umap cannot take an absolute path; move files from the output dir of sc.pl.umap to the working directory
-        filename = ".{}.{}.pdf".format(prefix,field)
+        filename = ".{}.{}.{}.pdf".format(prefix,integration_model,field)
         sc.pl.umap(adata, color=[field], save = filename)
         filename = "umap" + filename
         os.rename("figures/" + filename, os.path.join(figures_dir, filename))
@@ -115,14 +117,14 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     mdl = 1
     while "celltypist_model.{}".format(str(mdl)) in adata.obs:
         mdl_name = "celltypist_{}".format(adata.obs["celltypist_model." + str(mdl)][1].split("/")[-1].split(".")[0])
-        filename = ".{}.{}.pdf".format(prefix,mdl_name)
+        filename = ".{}.{}.{}.pdf".format(prefix,integration_model,mdl_name)
         sc.pl.umap(adata, color=["celltypist_predicted_labels.{}".format(str(mdl))], save = filename)
         filename = "umap" + filename
         os.rename("figures/" + filename, os.path.join(figures_dir, filename))
         mdl += 1
 
     logger.add_to_log("Saving .zip file with the figures...")
-    zip_filename = "{}.figures.zip".format(prefix)
+    zip_filename = "{}.{}.figures.zip".format(prefix,integration_model)
     figures_file_path = os.path.join(working_dir, zip_filename)
     zipf = zipfile.ZipFile(figures_file_path, 'w', zipfile.ZIP_DEFLATED)
     utils.zipdir(figures_dir, zipf)
