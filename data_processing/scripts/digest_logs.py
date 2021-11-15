@@ -207,6 +207,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
 
             # define the csv digest headers
             CSV_HEADER_SAMPLE_ID: str = "Sample ID"
+            CSV_HEADER_CELL_COUNT: str = "# Cells"
             CSV_HEADER_FAILED: str = "Failed?"
             CSV_HEADER_WARNING: str = "Warning?"
             CSV_HEADER_FAILURE_REASON: str = "Failure Reason"
@@ -216,11 +217,17 @@ class DigestSampleProcessingLogs(BaseDigestClass):
             CSV_HEADER_VDJ: str = "% vdj genes"
             CSV_HEADER_RBC: str = "% RBC"
 
+            def parse_line(line: str, formatted_str: str, formatted_str_index: int, csv_header: str, csv_row: Dict):
+                parsed = search(formatted_str, line)
+                if parsed:
+                    csv_row[csv_header] = parsed[formatted_str_index]
+
             # for each file, parse its logs and add digest info to csv
             csv_rows = []
             for filepath,lines in files_to_lines.items():
                 csv_row = {
                     CSV_HEADER_SAMPLE_ID: self._get_object_id(filepath),
+                    CSV_HEADER_CELL_COUNT: -1,
                     CSV_HEADER_FAILED: "No",
                     CSV_HEADER_WARNING: "No",
                     CSV_HEADER_FAILURE_REASON: "",
@@ -231,37 +238,38 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     CSV_HEADER_RBC: -1,
                 }
                 for line in lines:
+                    # cell count
+                    parse_line(line, utils.QC_STRING_COUNT, 0, CSV_HEADER_CELL_COUNT, csv_row)
+                    # failures and warnings
                     if self._is_failure_line(line):
                         csv_row[CSV_HEADER_FAILED] = "Yes"
-                        csv_row[CSV_HEADER_FAILURE_REASON] = line.strip('"').strip()
+                        stripped_line = line.strip('"').strip()
+                        if csv_row[CSV_HEADER_FAILURE_REASON] == "": # first one
+                            csv_row[CSV_HEADER_FAILURE_REASON] += stripped_line
+                        else:
+                            csv_row[CSV_HEADER_FAILURE_REASON] += " --- " + stripped_line
                     if self._is_warning_line(line):
                         csv_row[CSV_HEADER_WARNING] = "Yes"
+                        stripped_line = line.strip('"').strip()
                         if csv_row[CSV_HEADER_WARNING_REASON] == "": # first one
-                            csv_row[CSV_HEADER_WARNING_REASON] += line.strip('"').strip()
+                            csv_row[CSV_HEADER_WARNING_REASON] += stripped_line
                         else:
-                            csv_row[CSV_HEADER_WARNING_REASON] += " --- " + line.strip('"').strip()
+                            csv_row[CSV_HEADER_WARNING_REASON] += " --- " + stripped_line
                     # doublets
-                    doublets_qc_parsed = search(utils.QC_STRING_DOUBLETS, line)
-                    if doublets_qc_parsed:
-                        csv_row[CSV_HEADER_DOUBLETS] = doublets_qc_parsed[1]
+                    parse_line(line, utils.QC_STRING_DOUBLETS, 1, CSV_HEADER_DOUBLETS, csv_row)
                     # ambient rna
-                    ambient_rna_qc_parsed = search(utils.QC_STRING_AMBIENT_RNA, line)
-                    if ambient_rna_qc_parsed:
-                        csv_row[CSV_HEADER_AMBIENT_RNA] = ambient_rna_qc_parsed[1]
+                    parse_line(line, utils.QC_STRING_AMBIENT_RNA, 1, CSV_HEADER_AMBIENT_RNA, csv_row)
                     # vdj genes
-                    vdj_qc_parsed = search(utils.QC_STRING_VDJ, line)
-                    if vdj_qc_parsed:
-                        csv_row[CSV_HEADER_VDJ] = vdj_qc_parsed[1]
+                    parse_line(line, utils.QC_STRING_VDJ, 1, CSV_HEADER_VDJ, csv_row)
                     # red blood cells
-                    rbc_qc_parsed = search(utils.QC_STRING_RBC, line)
-                    if rbc_qc_parsed:
-                        csv_row[CSV_HEADER_RBC] = rbc_qc_parsed[1]
+                    parse_line(line, utils.QC_STRING_RBC, 1, CSV_HEADER_RBC, csv_row)
                 csv_rows.append(csv_row)
 
             # write the csv
             csv_file = io.StringIO()
             field_names = [
                 CSV_HEADER_SAMPLE_ID,
+                CSV_HEADER_CELL_COUNT,
                 CSV_HEADER_FAILED,
                 CSV_HEADER_WARNING,
                 CSV_HEADER_FAILURE_REASON,
