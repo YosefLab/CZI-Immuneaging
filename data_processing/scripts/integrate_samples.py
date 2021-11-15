@@ -213,7 +213,7 @@ try:
         # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
         # so we try a few times then carry on with the rest of the script as we can still mine the
         # rest of the data regardless of CITE info
-        retry_count = 2
+        retry_count = 4
         try:
             _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
             logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")

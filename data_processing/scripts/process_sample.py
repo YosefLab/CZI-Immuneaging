@@ -358,7 +358,7 @@ if not no_cells:
             # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
             # so we try a few times then carry on with the rest of the script as we can still mine the
             # rest of the data regardless of CITE info
-            retry_count = 2
+            retry_count = 4
             try:
                 _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir, logger, max_retry_count=retry_count)
             except Exception as err:
