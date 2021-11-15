@@ -355,7 +355,15 @@ if not no_cells:
             level = "warning" if percent_removed > 20 else "info"
             logger.add_to_log(QC_STRING_RBC.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
         if is_cite:
-            _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir, logger)
+            # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
+            # so we try a few times then carry on with the rest of the script as we can still mine the
+            # rest of the data regardless of CITE info
+            retry_count = 4
+            try:
+                _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir, logger, max_retry_count=retry_count)
+            except Exception as err:
+                logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
+                is_cite = False
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
         logger.add_to_log("Running solo for detecting doublets...")
         if len(library_ids)>1:
