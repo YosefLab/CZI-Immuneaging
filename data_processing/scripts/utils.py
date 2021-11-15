@@ -10,6 +10,8 @@ from anndata._core.anndata import AnnData
 from math import floor
 import csv
 from typing import Type
+import traceback
+
 from logger import BaseLogger
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
@@ -182,7 +184,44 @@ def run_model(
         prefix: str,
         version: str,
         data_dir: str,
-        logger,
+        logger: Type[BaseLogger],
+        latent_key: str = None,
+        max_retry_count: int = 0,
+    ):
+    """
+    Wrapper for `_run_model_impl` that retries the call up to `max_retry_count` times
+    """
+    n_tries = 0
+    while n_tries < max_retry_count + 1:
+        try:
+            return _run_model_impl(
+                adata,
+                configs,
+                batch_key,
+                protein_expression_obsm_key,
+                model_name,
+                prefix,
+                version,
+                data_dir,
+                logger,
+                latent_key
+            )
+        except Exception as err:
+            n_tries += 1
+            logger.add_to_log("Execution failed with the following error: {}. Tried {} time(s)...\n{}".format(err, n_tries, traceback.format_exc()))
+            if n_tries == max_retry_count + 1:
+                raise
+    
+def _run_model_impl(
+        adata: AnnData,
+        configs: dict,
+        batch_key: str,
+        protein_expression_obsm_key: str,
+        model_name: str,
+        prefix: str,
+        version: str,
+        data_dir: str,
+        logger: Type[BaseLogger],
         latent_key: str = None,
     ):
     """
