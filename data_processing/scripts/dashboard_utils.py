@@ -2,7 +2,8 @@
 # - To get tissue coverage csv, run as follows:
 #   python dashboard_utils.py tissue_coverage
 # - To get tissue integration results csv, run as follows:
-#   python dashboard_utils.py tissue_integration_results <working_dir> <s3_access_file>
+#   python dashboard_utils.py tissue_integration_results <working_dir> <s3_access_file> <rm_working_dir>
+#   where <rm_working_dir> is "True" or "False" for indicating whether the working dir should be removed at the end; this argument is optional (default value is "True").
 
 import sys
 import io
@@ -140,7 +141,7 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     figures_url = "{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename)
     return figures_url
 
-def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
+def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm_working_dir: bool):
     logger.add_to_log("Downloading the Samples sheet from Google drive...")
     samples = utils.read_immune_aging_sheet("Samples")
     tissues = np.unique(samples["Organ"])
@@ -219,11 +220,13 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str):
                 # generate figures
                 csv_row[CSV_HEADER_FIGURES] = generate_tissue_integration_figures(adata, tissue, version, working_dir, BASE_AWS_URL, BASE_S3_URL, BASE_S3_DIR)
 
-                # clean up
-                os.system("rm -r {}/*".format(working_dir))
+                if rm_working_dir:
+                    # clean up
+                    os.system("rm -r {}/*".format(working_dir))
         except Exception:
             logger.add_to_log("Execution failed for tissue {} with the following error:\n{}".format(tissue, traceback.format_exc()), "critical")
-            os.system("rm -r {}/*".format(working_dir))
+            if rm_working_dir:
+                os.system("rm -r {}/*".format(working_dir))
             logger.add_to_log("Continuing execution for other tissues...")
             continue
         csv_rows.append(csv_row)
@@ -257,4 +260,8 @@ else:
     s3_access_file = sys.argv[3] # must be the absolute path to the aws credentials file
     assert(os.path.isdir(working_dir))
     assert(os.path.isfile(s3_access_file))
-    get_tissue_integration_results_csv(working_dir, s3_access_file)
+    rm_working_dir = True
+    if len(sys.argv) > 4
+        assert(sys.argv[4] == "True" | sys.argv[4] == "False")
+        rm_working_dir = sys.argv[4] == "True"
+    get_tissue_integration_results_csv(working_dir, s3_access_file, rm_working_dir)
