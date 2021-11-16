@@ -239,7 +239,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                 }
                 for line in lines:
                     # cell count
-                    parse_line(line, utils.QC_STRING_COUNT, 0, CSV_HEADER_CELL_COUNT, csv_row)
+                    parse_line(line, utils.QC_STRING_COUNTS, 0, CSV_HEADER_CELL_COUNT, csv_row)
                     # failures and warnings
                     if self._is_failure_line(line):
                         csv_row[CSV_HEADER_FAILED] = "Yes"
