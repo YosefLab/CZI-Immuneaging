@@ -22,7 +22,7 @@ QC_STRING_DOUBLETS = "Removed {} estimated doublets (percent removed: {:.2f}%); 
 QC_STRING_AMBIENT_RNA = "Removed {} cells (percent removed: {:.2f}%) with total decontaminated counts below filter_decontaminated_cells_min_genes={}"
 QC_STRING_VDJ = "Removed {} vdj genes (percent removed: {:.2f}%); {} genes remained."
 QC_STRING_RBC = "Removed {} red blood cells (percent removed: {:.2f}%); {} droplets remained."
-QC_STRING_COUNT = "Final number of cells: {}, final number of genes: {}."
+QC_STRING_COUNTS = "Final number of cells: {}, final number of genes: {}."
 
 def init_scvi_settings():
     # This does two things:
