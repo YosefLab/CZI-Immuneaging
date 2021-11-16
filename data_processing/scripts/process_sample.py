@@ -475,8 +475,7 @@ if not sandbox_mode:
 
 logger.add_to_log("Execution of process_sample.py is complete.")
 
-summary.append("Final number of cells: {}, final number of genes: {}.".format(
-    adata.n_obs, adata.n_vars))
+summary.append(QC_STRING_COUNTS.format(adata.n_obs, adata.n_vars))
 for i in summary:
     logger.add_to_log(i)
 
