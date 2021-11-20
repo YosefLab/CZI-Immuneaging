@@ -330,6 +330,6 @@ def get_internal_protein_names(df):
         i += 1
     assert len(np.unique(panel_sizes)) == len(panel_sizes) # make sure we can identify the panel solely based on its size
     assert np.sum(df.shape[1] == np.array(panel_sizes)) == 1 # make sure that twe can identify the protein panel used
-    for protein_panel in protein_panels:
+    for protein_panel in protein_panels.values():
         if df.shape[1] == protein_panel.shape[0]:
             return protein_panel["internal_name"]
