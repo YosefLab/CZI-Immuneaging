@@ -12,9 +12,6 @@ import numpy as np
 import re
 import hashlib
 
-from logger import SimpleLogger
-from utils import *
-
 timestamp = time.strftime("%H:%M, %m-%d-%Y")
 
 align_lib_script = sys.argv[0]
@@ -24,6 +21,9 @@ lib_type = sys.argv[3]
 lib_ids = sys.argv[4]
 
 sys.path.append(code_path)
+
+from logger import SimpleLogger
+from utils import *
 
 VARIABLE_CONFIG_KEYS = ["donor",
 "seq_run",
@@ -235,6 +235,7 @@ if lib_type == "GEX":
 		for i in range(len(GEX_libs)):
 			if not pd.isna(GEX_libs[i]) and GEX_lib in GEX_libs[i]:
 				protein_panel = read_immune_aging_sheet(samples["Protein panel"].loc[i])
+				protein_panel = protein_panel[["id", "name", "read", "pattern", "sequence", "feature_type"]]
 				break
 	if lib_ids[2] == "none":
 		HTO_lib = None
