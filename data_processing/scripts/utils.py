@@ -4,6 +4,7 @@ import time
 import glob
 import warnings
 import pandas as pd
+import numpy as np
 import scvi
 import zipfile
 from anndata._core.anndata import AnnData
