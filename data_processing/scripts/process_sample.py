@@ -250,12 +250,18 @@ if not no_cells:
             # copy protein data from X into adata.obsm["protein_expression"]
             protein_df = protein.to_df()
             protein_expression_obsm_key = "protein_expression"
+            protein_expression_ctrl_obsm_key = "protein_expression_Ctrl"
             if not protein_df.empty:
                 if np.median(protein_df.fillna(0).sum(axis=1)) == 0:
                     logger.add_to_log("median coverage (total number of protein reads per cell) across cells is 0. Removing protein information from data.", level = "warning")
                     is_cite = False
                 else:
-                    adata.obsm[protein_expression_obsm_key] = protein_df
+                    # switch the protein names to their internal names defined in the protein panels (in the Google Spreadsheet)
+                    protein_df.columns = get_internal_protein_names(protein_df)
+                    # save control and non-control proteins in different obsm structures
+                    is_ctrl_protein = np.array([i.endswith("Ctrl") for i in protein_df.columns])
+                    adata.obsm[protein_expression_ctrl_obsm_key] = protein_df[protein_df.columns[is_ctrl_protein]].copy()
+                    adata.obsm[protein_expression_obsm_key] = protein_df[protein_df.columns[np.logical_not(is_ctrl_protein)]].copy()
             else:
                 logger.add_to_log("All detected Antibody Capture features were due to HTO, no proteins of interest to analyze.")
                 is_cite = False

@@ -311,3 +311,24 @@ def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Ty
     percent_removed = 100*(n_var_before-rna.n_vars)/n_var_before
     level = "warning" if percent_removed > 50 else "info" # TODO adjust threshold if needed
     logger.add_to_log(QC_STRING_VDJ.format(n_var_before-rna.n_vars, percent_removed, rna.n_vars), level=level)
+
+# gets dataframe of CITE data extracted from the anndata and converts the protein names to internal names (based on information from the protein panels in the google spreadsheet)
+def get_internal_protein_names(df):
+    panel_sizes = []
+    protein_panels = {}
+    protein_panel_columns = np.array(["id", "name", "read", "pattern", "sequence", "feature_type", "internal_name"])
+    # find the protein panel that describes the proteins in df
+    i = 1
+    while True:
+        protein_panel_i_name = "Protein panel {}".format(str(i))
+        protein_panel_i = read_immune_aging_sheet(protein_panel_i_name)
+        if np.sum(np.in1d(protein_panel_columns, protein_panel_i.columns)) != len(protein_panel_columns):
+            break
+        protein_panels[protein_panel_i_name] = protein_panel_i
+        panel_sizes.append(protein_panel_i.shape[0])
+        i += 1
+    assert len(np.unique(panel_sizes)) == len(panel_sizes) # make sure we can identify the panel solely based on its size
+    assert np.sum(df.shape[1] == np.array(panel_sizes)) == 1 # make sure that twe can identify the protein panel used
+    for protein_panel in protein_panels:
+        if df.shape[1] == protein_panel.shape[0]:
+            return protein_panel["internal_name"]
