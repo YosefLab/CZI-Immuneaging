@@ -51,6 +51,8 @@ tissues = np.unique(samples["Organ"][np.logical_not(pd.isnull(samples["Organ"]))
 outfile = open(os.path.join(code_path,"integrate_samples_runs.sh"),'w') 
 outfile.write("source activate {}\n".format(python_env))
 
+no_integration = []
+
 for tissue in tissues:
     # get all samples from the requested tissue as appears in the google spreadsheet
     final_sample_ids = []
@@ -88,6 +90,13 @@ for tissue in tissues:
             json.dump(tissue_integration_configs, f)
         print("generated configs file " + filename)
         outfile.write("python integrate_samples.py {}\n".format(filename))
+    else:
+        no_integration.append((tissue, len(final_sample_ids)))
+        
 
 outfile.write("conda deactivate")
 outfile.close()
+
+if len(no_integration) > 0:
+    print("Integration config file was not generated for the following tissues that do not have more than one processed sample:")
+    print("\n".join(["{}, number of processed samples:{}".format(no_integration[i][0],no_integration[i][1]) for i in range(len(no_integration))]))

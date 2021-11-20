@@ -91,7 +91,7 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
             age_categorical.append(grp3_label)
     adata.obs["age_categorical"] = pd.Categorical(np.array(age_categorical))
 
-    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts", "sex", "age_continuous", "age_categorical"]
+    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts", "sex", "age_continuous", "age_categorical", "stimulation"]
     vmins = ["p0", "p0", "p0", "p10", "p0", "p0", "p0",] # minimal value for sc.pl.umap (p0 means using the minimal value in the data; p10 means the 10th percentile)
     vmaxs = ["p100", "p100", "p100", "p90", "p100", "p100", "p100",] # maximal value for sc.pl.umap (p100 means using the maximal value in the data)
     min_cell_type_frac = 0.001 # for generating annotation figures (cells annotated as coming from cell types that demonstrate less than min_cell_type_frac fraction of cells in the data will be removed form the plots)
@@ -105,12 +105,12 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
         return(adata.obs[obs_key].isin(keep))
 
     logger.add_to_log("Generating figures for tissue: {}, version: {}\n".format(tissue,version))
-    figures_dir = os.path.join(working_dir,"figures")
-    os.system("mkdir -p " + figures_dir)
     prefix = "{}.{}".format(tissue, version)
     
+    figures_urls = []
+
     # plot umaps and color by metadata; plot all umap versions (i.e. based on all dimensionality reductions we have)
-    umap_keys = ["X_umap_scvi_integrated","X_pca"]
+    umap_keys = ["X_umap_scvi_integrated","X_umap_pca"]
     integration_models = ["scvi","pca"]
     if "X_umap_totalvi_integrated" in adata.obsm:
         umap_keys.append("X_umap_totalvi_integrated")
@@ -119,6 +119,8 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     for mdl in range(len(umap_keys)):
         adata.obsm["X_umap"] = adata.obsm[umap_keys[mdl]]
         integration_model = integration_models[mdl]
+        figures_dir = os.path.join(working_dir,"{}.{}.figures".format(prefix,integration_model))
+        os.system("mkdir -p " + figures_dir)
         for field_index in range(len(fields_to_plot)):
             field = fields_to_plot[field_index]
             # looks like sc.pl.umap cannot take an absolute path; move files from the output dir of sc.pl.umap to the working directory
@@ -151,10 +153,13 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
         sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(working_dir, aws_destination, zip_filename)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        
+        shutil.rmtree(figures_dir)
+        figures_urls.append("{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename))
     
     shutil.rmtree("figures")
-    shutil.rmtree(figures_dir)
-    figures_url = "{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename)
+    # concatenate urls
+    figures_url = "[{}]".format(" ".join(figures_urls))
     return figures_url
 
 def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm_working_dir: bool):
