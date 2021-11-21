@@ -96,13 +96,14 @@ The root directory of the Immune Aging S3 bucket includes the following sub-dire
 
 * aligned_libraries/
 * job_queue/
+* integrated_samples/
 * processed_libraries/
 * processed_samples/
 * raw_columbia/
 * raw_sanger/
 * test_folder/
 
-Most of the users should mostly care about the `processed_samples` directory, which includes a processed data file for each sample in the project.
+Most of the users should mostly care about the `processed_samples` directory, which includes a processed data file for each sample in the project, and the `integrated_samples` directory, which includes integration of samples.
 This directory, as well as the directories `aligned_libraries` and `processed_libraries` -  intermediate products of the data processing pipline - are discussed in detail below.
 Briefly, the directories `raw_columbia` and `raw_sanger` are designated for raw data uploads (more details under [Data upload](#upload)) ,`job_queue` is a job queue to be used by data processors (more details under [Data Processing](#processing)), and `test_folder` is being used by the system admins for testing.
 
@@ -186,6 +187,25 @@ Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
 **Note**:
 In some cases, the sub-directories under `processed_libraries` and `processed_samples` may not contain data files (i.e., h5ad files) due to a failure of the processing pipeline to run on a specific library or sample. In such cases, there will still be a log file that should include some error message at the end.
+
+The `integrated_samples` directory stores integrated data. Particularly, integration of multiple samples for every tissue in the project. The structure of the directory is as follows:
+
+* integrated_samples/
+    * tissue_level/
+        * tissue1/
+            * v1/
+                * tissue1.v1.h5ad
+                * tissue1.v1.pca.figures.zip
+                * tissue1.v1.scvi_model.zip
+                * tissue1.v1.scvi.figures.zip
+                * tissue1.v1.totalvi_model.zip
+                * tissue1.v1.totalvi.figures.zip
+                * integrate_samples.tissue1.v1.log
+                * integrate_samples.configs.tissue1.v1.txt
+        * tissue2/
+        * ...
+
+The `.h5ad` file is the integrated data file, the `.zip` files incude the scVI and totalVI models and figures showing the integration (UMAPs colored by different variables), the `.txt` file includes the configurations that were used in the execution of the sample integration (i.e., `integrate_samples.py`), and the `.log` file provides a documentation of the execution of the integration. 
 
 ### <a name="download_console"></a> Downloading data via the AWS console
 
