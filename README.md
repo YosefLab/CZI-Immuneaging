@@ -31,6 +31,7 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     1. [Aligning libraries](#admins_lib_alignment)
     2. [Executing job queue jobs](#admins_job_queue_execution)
     3. [Generating job configs](#admins_job_configs_generation)
+    4. [Tissue-level integration](#tissue_integration)
 
 ---
 
@@ -433,6 +434,13 @@ adding keys to the config files - (1) if adding keys that should not affect on v
 
 link to the configs template and description of `align_library.py`
 -->
+
+### <a name="tissue_integration"></a> Tissue-level integration
+
+The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue, thus creating tissue-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
+
+In addition, the script `generate_tissue_integration_config_files.py` automatically generates configuration files for `integrate_samples.py` - one per tissue - by collecting for each tissue the list of available processed samples.
+
 
 ---
 
