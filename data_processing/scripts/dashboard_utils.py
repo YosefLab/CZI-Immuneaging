@@ -91,55 +91,75 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
             age_categorical.append(grp3_label)
     adata.obs["age_categorical"] = pd.Categorical(np.array(age_categorical))
 
-    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts", "sex", "age_continuous", "age_categorical"]
+    fields_to_plot = ["site", "donor_id", "sample_id", "total_counts", "sex", "age_continuous", "age_categorical", "stimulation"]
+    vmins = ["p0", "p0", "p0", "p10", "p0", "p0", "p0",] # minimal value for sc.pl.umap (p0 means using the minimal value in the data; p10 means the 10th percentile)
+    vmaxs = ["p100", "p100", "p100", "p90", "p100", "p100", "p100",] # maximal value for sc.pl.umap (p100 means using the maximal value in the data)
+    min_cell_type_frac = 0.001 # for generating annotation figures (cells annotated as coming from cell types that demonstrate less than min_cell_type_frac fraction of cells in the data will be removed form the plots)
+    def extract_abundant_cell_types(adata, min_cell_type_frac, obs_key):
+        # for extracting only cells that were annotated as a cell type that was used for at least min_num_cells_per_ct cells
+        cell_types = np.unique(adata.obs[obs_key])
+        keep = []
+        for cell_type in cell_types:
+            if np.sum(adata.obs[obs_key] == cell_type) >= round(min_cell_type_frac*adata.n_obs):
+                keep.append(cell_type)    
+        return(adata.obs[obs_key].isin(keep))
 
     logger.add_to_log("Generating figures for tissue: {}, version: {}\n".format(tissue,version))
-    figures_dir = os.path.join(working_dir,"figures")
-    os.system("mkdir -p " + figures_dir)
     prefix = "{}.{}".format(tissue, version)
     
-    # use umap embeddings based on totalVI if available; otherwise based on scvi
+    figures_urls = []
+
+    # plot umaps and color by metadata; plot all umap versions (i.e. based on all dimensionality reductions we have)
+    umap_keys = ["X_umap_scvi_integrated","X_umap_pca"]
+    integration_models = ["scvi","pca"]
     if "X_umap_totalvi_integrated" in adata.obsm:
-        umap_key = "X_umap_totalvi_integrated"
-        integration_model = "totalvi"
-    else:
-        umap_key = "X_umap_scvi_integrated"
-        integration_model = "scvi"
-    adata.obsm["X_umap"] = adata.obsm[umap_key]
+        umap_keys.append("X_umap_totalvi_integrated")
+        integration_models.append("totalvi")
     
-    for field in fields_to_plot:
-        # looks like sc.pl.umap cannot take an absolute path; move files from the output dir of sc.pl.umap to the working directory
-        filename = ".{}.{}.{}.pdf".format(prefix,integration_model,field)
-        sc.pl.umap(adata, color=[field], save = filename)
-        filename = "umap" + filename
-        shutil.move("figures/" + filename, os.path.join(figures_dir, filename))
+    for mdl in range(len(umap_keys)):
+        adata.obsm["X_umap"] = adata.obsm[umap_keys[mdl]]
+        integration_model = integration_models[mdl]
+        figures_dir = os.path.join(working_dir,"{}.{}.figures".format(prefix,integration_model))
+        os.system("mkdir -p " + figures_dir)
+        for field_index in range(len(fields_to_plot)):
+            field = fields_to_plot[field_index]
+            # looks like sc.pl.umap cannot take an absolute path; move files from the output dir of sc.pl.umap to the working directory
+            filename = ".{}.{}.{}.pdf".format(prefix,integration_model,field)
+            sc.pl.umap(adata, color=[field], save = filename, vmin = vmins[field_index], vmax = vmaxs[field_index])
+            filename = "umap" + filename
+            shutil.move("figures/" + filename, os.path.join(figures_dir, filename))
 
-    # for each celltypist model used plot a umap colored by the predicted cell types
-    mdl = 1
-    while "celltypist_model.{}".format(str(mdl)) in adata.obs:
-        mdl_name = "celltypist_{}".format(adata.obs["celltypist_model." + str(mdl)][1].split("/")[-1].split(".")[0])
-        filename = ".{}.{}.{}.pdf".format(prefix,integration_model,mdl_name)
-        sc.pl.umap(adata, color=["celltypist_predicted_labels.{}".format(str(mdl))], save = filename)
-        filename = "umap" + filename
-        shutil.move("figures/" + filename, os.path.join(figures_dir, filename))
-        mdl += 1
+        # for each celltypist model used plot a umap colored by the predicted cell types; remove lowly abundant cell types
+        celltypist_mdl = 1
+        while "celltypist_model.{}".format(str(celltypist_mdl)) in adata.obs:
+            celltypist_mdl_name = "celltypist_{}".format(adata.obs["celltypist_model." + str(celltypist_mdl)][1].split("/")[-1].split(".")[0])
+            filename = ".{}.{}.{}.pdf".format(prefix,integration_model,celltypist_mdl_name)
+            obs_key = "celltypist_predicted_labels.{}".format(str(celltypist_mdl))
+            abundant_cell_types = extract_abundant_cell_types(adata, min_cell_type_frac, obs_key)
+            sc.pl.umap(adata[abundant_cell_types,], color=[obs_key], save = filename)
+            filename = "umap" + filename
+            shutil.move("figures/" + filename, os.path.join(figures_dir, filename))
+            celltypist_mdl += 1
 
-    logger.add_to_log("Saving .zip file with the figures...")
-    zip_filename = "{}.{}.figures.zip".format(prefix,integration_model)
-    figures_file_path = os.path.join(working_dir, zip_filename)
-    zipf = zipfile.ZipFile(figures_file_path, 'w', zipfile.ZIP_DEFLATED)
-    utils.zipdir(figures_dir, zipf)
-    zipf.close()
-    
-    logger.add_to_log("Uploading {} to aws...".format(zip_filename))
-    aws_destination = "{}/{}/{}/{}".format(base_s3_url, base_s3_dir, tissue, version)
-    sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(working_dir, aws_destination, zip_filename)
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        logger.add_to_log("Saving .zip file with the figures...")
+        zip_filename = "{}.{}.figures.zip".format(prefix,integration_model)
+        figures_file_path = os.path.join(working_dir, zip_filename)
+        zipf = zipfile.ZipFile(figures_file_path, 'w', zipfile.ZIP_DEFLATED)
+        utils.zipdir(figures_dir, zipf)
+        zipf.close()
+        
+        logger.add_to_log("Uploading {} to aws...".format(zip_filename))
+        aws_destination = "{}/{}/{}/{}".format(base_s3_url, base_s3_dir, tissue, version)
+        sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(working_dir, aws_destination, zip_filename)
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        
+        shutil.rmtree(figures_dir)
+        figures_urls.append("{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename))
     
     shutil.rmtree("figures")
-    shutil.rmtree(figures_dir)
-    figures_url = "{}{}/{}/{}/{}".format(base_aws_url, base_s3_dir, tissue, version, zip_filename)
+    # concatenate urls
+    figures_url = "[{}]".format(" ".join(figures_urls))
     return figures_url
 
 def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm_working_dir: bool):
