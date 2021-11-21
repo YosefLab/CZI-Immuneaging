@@ -17,12 +17,12 @@ The configuration file is formatted as json with the following fields:
 * `"highly_variable_genes_flavor"` - The flavor for identifying highly variable genes using `scanpy.pp.highly_variable_genes`
 * `"scvi_max_epochs"` - The maximum number of epochs to be used when applying SCVI
 * `"totalvi_max_epochs"` - The maximum number of epochs to be used when applying totalVI
-* `"use_layer_norm"` - Whether to use layer norm in layers when fitting the SCVI and totalVI models; for default behavior set to `"none"`.
-* `"use_batch_norm"` - whether to use batch norm when fitting the SCVI and totalVI models; for default behavior set to `"both"`.
-* `"early_stopping"` - `"True"` or `"False"` to indicate whether to use early stopping in the model training of scvi and totalVI; for large data it is advised to use `"True"`.
-* `"early_stopping_patience"` - Number of validation epochs with no improvement after which training of SCVI and totalVI will be stopped.
-* `"batch_size"` - Minibatch size to use during training of SCVI and totalVI.
-* `"limit_train_batches"` - Limit on the number of training batches during one epoch of training of SCVI and totalVI.
+* `"use_layer_norm"` - Whether to use layer norm in layers when fitting the SCVI and totalVI models; for default behavior set to `"none"` or omit.
+* `"use_batch_norm"` - whether to use batch norm when fitting the SCVI and totalVI models; for default behavior set to `"both"` or omit.
+* `"early_stopping"` - `"True"` or `"False"` to indicate whether to use early stopping in the model training of scvi and totalVI; for very large data it is advised to use `"True"`, and for default behavior set to `"False"` or omit.
+* `"early_stopping_patience"` - Number of validation epochs with no improvement after which training of SCVI and totalVI will be stopped; omit for default behavior.
+* `"batch_size"` - Minibatch size to use during training of SCVI and totalVI; omit for default behavior.
+* `"limit_train_batches"` - Limit on the number of training batches during one epoch of training of SCVI and totalVI; omit for default behavior.
 * `"neighborhood_graph_n_neighbors"` - The number of neighbors to use for computing the neighborhood graph (using `scanpy.pp.neighbors`)
 * `"umap_min_dist"` - The `min_dist` argument for computing UMAP (using `scanpy.tl.umap`)
 * `"umap_spread"` - The `spread` argument for computing UMAP (using `scanpy.tl.umap`)
