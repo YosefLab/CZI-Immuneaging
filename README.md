@@ -9,7 +9,8 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
 1. [Overview](#overview)
 2. [Preliminaries](#preliminaries)
     1. [Setting up data access](#preliminaries_access)
-    2. [List of donors and samples](#preliminaries_spreadsheet)
+    2. [The Immune Aging samples spreadsheet](#preliminaries_spreadsheet)
+    3. [The Immune Aging Dashboard](#dashboard)
 3. [Data Download](#download)
     1. [Directory structure on S3](#download_structure)
     2. [Downloading data via the AWS console](#download_console)
@@ -31,6 +32,7 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     1. [Aligning libraries](#admins_lib_alignment)
     2. [Executing job queue jobs](#admins_job_queue_execution)
     3. [Generating job configs](#admins_job_configs_generation)
+    4. [Tissue-level integration](#tissue_integration)
 
 ---
 
@@ -67,7 +69,7 @@ If the problem persists, run in terminal the command `aws configure`. You will t
 To share data with temporary members (like research assistants temporarily helping out) or for one-off access, email Galen (gx2113@columbia.edu) with the S3 folder you want to share (or upload data to) and he will generate a script that will automatically upload/download data when run. This is super easy for him to do (says Galen writing this), so don't hesitate to reach out. DO NOT SHARE YOUR USER SPECIFIC CREDENTIALS!
 -->
 
-### <a name="preliminaries_spreadsheet"></a> List of donors and samples
+### <a name="preliminaries_spreadsheet"></a> The Immune Aging samples spreadsheet
 
 The project's donors and samples, as well as the raw metadata, can be found in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2" target="_blank">AI samples Google Spreadsheet</a>.
 You should never share this link with anyone outside the immune aging project. Also, **DO NOT MAKE EDITS IN THIS FILE**, unless you are a designated data uploader and you read all the instructions under [Data upload](#upload) - the data processing scripts rely on the data in this spreadsheet and some changes can compromise data integrity.
@@ -77,6 +79,12 @@ Note that:
 * This spreadsheet does not reflect at any given moment the existing data on the S3 bucket or which samples have already been processed. Specifically, it may include information about donors and samples that either were not sequenced yet, are being currently sequenced, being uploaded, or pending data processing.
 * The metadata of the donors and samples in the spreadsheet is also available in the processed data files (see below).
 
+### <a name="dashboard"></a> The Immune Aging Dashboard
+
+We provide this <a href= "https://docs.google.com/spreadsheets/d/1v1TT1uJHTAxemnPmORX8XvSDZCXWq27ZK0Nbfugjts0/edit?usp=sharing">dashboard</a>, which reflects the current state of the data. The dashboard includes the following three sheets:
+1. Tissue Coverage - describes the coverage of tissues across donors.
+2. Samples QC - provides basic quality control summaries for each processed sample, as well as detailed warnings and/or errors that were issued during processing.
+3. Tissue Integration - shows basic information on the current tissue-level integrations in the project, including the sample IDs and ages of the samples that were used for generating the data for each tissue. The last two columns provide links to the data files and to figures that demonstrate the integration through multiple UMAPs colored by different metadata and variables of the experimental design. Note that these links are accessible only after loging into the AWS console ([see instructions here](#preliminaries_access)).
 
 ## <a name="download"></a> Data Download
 
@@ -88,13 +96,14 @@ The root directory of the Immune Aging S3 bucket includes the following sub-dire
 
 * aligned_libraries/
 * job_queue/
+* integrated_samples/
 * processed_libraries/
 * processed_samples/
 * raw_columbia/
 * raw_sanger/
 * test_folder/
 
-Most of the users should mostly care about the `processed_samples` directory, which includes a processed data file for each sample in the project.
+Most of the users should mostly care about the `processed_samples` directory, which includes a processed data file for each sample in the project, and the `integrated_samples` directory, which includes integration of samples.
 This directory, as well as the directories `aligned_libraries` and `processed_libraries` -  intermediate products of the data processing pipline - are discussed in detail below.
 Briefly, the directories `raw_columbia` and `raw_sanger` are designated for raw data uploads (more details under [Data upload](#upload)) ,`job_queue` is a job queue to be used by data processors (more details under [Data Processing](#processing)), and `test_folder` is being used by the system admins for testing.
 
@@ -178,6 +187,25 @@ Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
 **Note**:
 In some cases, the sub-directories under `processed_libraries` and `processed_samples` may not contain data files (i.e., h5ad files) due to a failure of the processing pipeline to run on a specific library or sample. In such cases, there will still be a log file that should include some error message at the end.
+
+The `integrated_samples` directory stores integrated data. Particularly, integration of multiple samples for every tissue in the project. The structure of the directory is as follows:
+
+* integrated_samples/
+    * tissue_level/
+        * tissue1/
+            * v1/
+                * tissue1.v1.h5ad
+                * tissue1.v1.pca.figures.zip
+                * tissue1.v1.scvi_model.zip
+                * tissue1.v1.scvi.figures.zip
+                * tissue1.v1.totalvi_model.zip
+                * tissue1.v1.totalvi.figures.zip
+                * integrate_samples.tissue1.v1.log
+                * integrate_samples.configs.tissue1.v1.txt
+        * tissue2/
+        * ...
+
+The `.h5ad` file is the integrated data file, the `.zip` files incude the scVI and totalVI models and figures showing the integration (UMAPs colored by different variables), the `.txt` file includes the configurations that were used in the execution of the sample integration (i.e., `integrate_samples.py`), and the `.log` file provides a documentation of the execution of the integration. 
 
 ### <a name="download_console"></a> Downloading data via the AWS console
 
@@ -433,6 +461,13 @@ adding keys to the config files - (1) if adding keys that should not affect on v
 
 link to the configs template and description of `align_library.py`
 -->
+
+### <a name="tissue_integration"></a> Tissue-level integration
+
+The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue, thus creating tissue-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
+
+In addition, the script `generate_tissue_integration_config_files.py` automatically generates configuration files for `integrate_samples.py` - one per tissue - by collecting for each tissue the list of available processed samples.
+
 
 ---
 
