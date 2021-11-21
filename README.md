@@ -9,7 +9,8 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
 1. [Overview](#overview)
 2. [Preliminaries](#preliminaries)
     1. [Setting up data access](#preliminaries_access)
-    2. [List of donors and samples](#preliminaries_spreadsheet)
+    2. [The Immune Aging samples spreadsheet](#preliminaries_spreadsheet)
+    3. [The Immune Aging Dashboard](#dashboard)
 3. [Data Download](#download)
     1. [Directory structure on S3](#download_structure)
     2. [Downloading data via the AWS console](#download_console)
@@ -68,7 +69,7 @@ If the problem persists, run in terminal the command `aws configure`. You will t
 To share data with temporary members (like research assistants temporarily helping out) or for one-off access, email Galen (gx2113@columbia.edu) with the S3 folder you want to share (or upload data to) and he will generate a script that will automatically upload/download data when run. This is super easy for him to do (says Galen writing this), so don't hesitate to reach out. DO NOT SHARE YOUR USER SPECIFIC CREDENTIALS!
 -->
 
-### <a name="preliminaries_spreadsheet"></a> List of donors and samples
+### <a name="preliminaries_spreadsheet"></a> The Immune Aging samples spreadsheet
 
 The project's donors and samples, as well as the raw metadata, can be found in the <a href="https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/edit?usp=sharing_eip&ts=6054e1a2" target="_blank">AI samples Google Spreadsheet</a>.
 You should never share this link with anyone outside the immune aging project. Also, **DO NOT MAKE EDITS IN THIS FILE**, unless you are a designated data uploader and you read all the instructions under [Data upload](#upload) - the data processing scripts rely on the data in this spreadsheet and some changes can compromise data integrity.
@@ -78,6 +79,12 @@ Note that:
 * This spreadsheet does not reflect at any given moment the existing data on the S3 bucket or which samples have already been processed. Specifically, it may include information about donors and samples that either were not sequenced yet, are being currently sequenced, being uploaded, or pending data processing.
 * The metadata of the donors and samples in the spreadsheet is also available in the processed data files (see below).
 
+### <a name="dashboard"></a> The Immune Aging Dashboard
+
+We provide this <a href= "https://docs.google.com/spreadsheets/d/1v1TT1uJHTAxemnPmORX8XvSDZCXWq27ZK0Nbfugjts0/edit?usp=sharing">dashboard</a>, which reflects the current state of the data. The dashboard includes the following three sheets:
+1. Tissue Coverage - describes the coverage of tissues across donors.
+2. Samples QC - provides basic quality control summaries for each processed sample, as well as detailed warnings and/or errors that were issued during processing.
+3. Tissue Integration - shows basic information on the current tissue-level integrations in the project, including the sample IDs and ages of the samples that were used for generating the data for each tissue. The last two columns provide links to the data files and to figures that demonstrate the integration through multiple UMAPs colored by different metadata and variables of the experimental design. Note that these links are accessible only after loging into the AWS console ([see instructions here](#preliminaries_access)).
 
 ## <a name="download"></a> Data Download
 
