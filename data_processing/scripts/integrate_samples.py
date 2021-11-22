@@ -193,10 +193,17 @@ try:
     logger.add_to_log("Filtering out vdj genes...")
     filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
     logger.add_to_log("Detecting highly variable genes...")
+    rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
+    rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)
+    rna.X = rna.layers["rounded_decontaminated_counts"].copy()
+    sc.pp.log1p(rna)
+    rna.layers["log1p_transformed"] = rna.X.copy()
+    if configs["highly_variable_genes_flavor"] == "seurat_v3":
+        # highly_variable_genes requires counts data in this case
+        rna.X = rna.layers["rounded_decontaminated_counts"]
     sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
         flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
-    # use the decontaminated counts as the input for scvi and totalvi
-    rna.X = np.round(rna.layers["decontaminated_counts"])
+    rna.X = rna.layers["rounded_decontaminated_counts"]
     # scvi
     key = "X_scvi_integrated"
     _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
@@ -226,6 +233,7 @@ try:
             is_cite = False
     # pca
     logger.add_to_log("Calculating PCA...")
+    rna.X = rna.layers["log1p_transformed"]
     sc.pp.pca(rna)
     logger.add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
     key = "pca_neighbors"

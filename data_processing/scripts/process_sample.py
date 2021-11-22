@@ -321,8 +321,13 @@ if not no_cells:
         logger.add_to_log("Filtering out vdj genes...")
         filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
         logger.add_to_log("Detecting highly variable genes...")
+        rna.layers["rounded_decontaminated_counts_copy"] = rna.X.copy()
+        if configs["highly_variable_genes_flavor"] != "seurat_v3":
+            # highly_variable_genes requires log-transformed data in this case
+            sc.pp.log1p(rna)
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
+        rna.X = rna.layers["rounded_decontaminated_counts_copy"]
         logger.add_to_log("Predict cell type labels using celltypist...")
         model_urls = configs["celltypist_model_urls"].split(",")
         if configs["rbc_model_url"] != "":
