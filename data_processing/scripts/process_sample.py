@@ -9,6 +9,7 @@ import json
 import scanpy as sc
 import numpy as np
 import pandas as pd
+from scipy.sparse.csr import csr_matrix
 import scvi
 import hashlib
 import celltypist
@@ -298,13 +299,14 @@ if not no_cells:
         contamination_levels = pd.read_csv(contamination_levels_file, index_col=0, header=None).index
         decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
         decontaminated_counts.index = rna.obs.index # note that decontx replaces "-" with "." in the cell names
+        decontaminated_counts = csr_matrix(decontaminated_counts)
         rna.obs["contamination_levels"] = contamination_levels
         rna.X = np.round(decontaminated_counts)
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
-        rna = rna[:,rna.var.index.isin(solo_genes)]
+        rna = rna[:,rna.var.index.isin(solo_genes)].copy()
         # remove empty cells after decontaminations
         n_obs_before = rna.n_obs
-        rna = rna[rna.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:]
+        rna = rna[rna.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:].copy()
         n_decon_cells_filtered = n_obs_before-rna.n_obs
         percent_removed = 100*n_decon_cells_filtered/n_obs_before
         level = "warning" if percent_removed > 10 else "info"
@@ -383,7 +385,7 @@ if not no_cells:
             is_solo_singlet = solo.predict(soft=False) == "singlet"
         logger.add_to_log("Removing doublets...")
         n_obs_before = rna.n_obs
-        rna = rna[is_solo_singlet,]
+        rna = rna[is_solo_singlet,].copy()
         percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
         level = "warning" if percent_removed > 40 else "info"
         logger.add_to_log(QC_STRING_DOUBLETS.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
@@ -421,16 +423,16 @@ if not no_cells:
         logger.add_to_log("Gathering data...")
         # keep only the cells that passed all filters
         keep = adata.obs.index.isin(rna.obs.index)
-        adata = adata[keep,]
+        adata = adata[keep,].copy()
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
         logger.add_to_log("Remove protein counts from adata.X...")
         # keep only the subset of X that does not have protein data, since we already moved these to obsm
-        adata = adata[:, adata.var["feature_types"] == "Gene Expression"]
+        adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         # save raw rna counts
         adata.layers["raw_counts"] = adata.X.copy()
         # save decontaminated counts (only applies to rna data; consider only cells that we keep after filters)
-        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"]
+        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"].copy()
         adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
         if adata.n_obs > 0:
             logger.add_to_log("Normalize rna counts in adata.X...")
@@ -448,7 +450,7 @@ if not no_cells:
         sys.exit()
 
 logger.add_to_log("Saving h5ad file...")
-adata.write(os.path.join(data_dir,h5ad_file))
+adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######

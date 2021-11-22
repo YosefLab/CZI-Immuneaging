@@ -252,7 +252,7 @@ logger.add_to_log("Saving h5ad files...")
 adata.obs["age"] = adata.obs["age"].astype(str)
 adata.obs["BMI"] = adata.obs["BMI"].astype(str)
 adata.obs["height"] = adata.obs["height"].astype(str)
-adata.write(os.path.join(data_dir,output_h5ad_file))
+adata.write(os.path.join(data_dir,output_h5ad_file), compression="lzf")
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
