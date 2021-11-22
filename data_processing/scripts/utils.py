@@ -308,7 +308,7 @@ def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Ty
         reader = csv.reader(csvfile)
         genes = [row[0] for row in reader]
     n_var_before = rna.n_vars
-    rna = rna[:, ~rna.var.index.isin(genes)]
+    rna = rna[:, ~rna.var.index.isin(genes)].copy()
     percent_removed = 100*(n_var_before-rna.n_vars)/n_var_before
     level = "warning" if percent_removed > 50 else "info" # TODO adjust threshold if needed
     logger.add_to_log(QC_STRING_VDJ.format(n_var_before-rna.n_vars, percent_removed, rna.n_vars), level=level)

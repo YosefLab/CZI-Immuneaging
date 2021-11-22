@@ -296,7 +296,7 @@ for out in aligner_outputs_to_save:
 logger.add_to_log("Converting aligned data to h5ad...")
 adata = sc.read_10x_mtx(aligned_data_dir, gex_only = False)
 logger.add_to_log("Saving file as {}...".format(os.path.join(data_dir, h5ad_file)))
-adata.write(os.path.join(data_dir, h5ad_file))
+adata.write(os.path.join(data_dir, h5ad_file), compression="lzf")
 
 logger.add_to_log("Uploading h5ad file to S3...")
 sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, h5ad_file)

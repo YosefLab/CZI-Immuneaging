@@ -131,10 +131,10 @@ adata.var['mt'] = adata.var_names.str.startswith('MT-') # mitochondrial genes
 adata.var['ribo'] = adata.var_names.str.startswith(("RPS","RPL")) # ribosomal genes
 sc.pp.calculate_qc_metrics(adata, qc_vars=['mt','ribo'], percent_top=None, log1p=False, inplace=True)
 n_cells_before = adata.n_obs
-adata = adata[adata.obs['pct_counts_mt'] <= configs["filter_cells_max_pct_counts_mt"], :]
+adata = adata[adata.obs['pct_counts_mt'] <= configs["filter_cells_max_pct_counts_mt"], :].copy()
 logger.add_to_log("Filtered out {} cells with more than {}\% counts coming from mitochondrial genes.".format(n_cells_before-adata.n_obs, configs["filter_cells_max_pct_counts_mt"]))
 n_cells_before = adata.n_obs
-adata = adata[adata.obs['pct_counts_ribo'] >= configs["filter_cells_min_pct_counts_ribo"], :]
+adata = adata[adata.obs['pct_counts_ribo'] >= configs["filter_cells_min_pct_counts_ribo"], :].copy()
 logger.add_to_log("Filtered out {} cells with less than {}\% counts coming from ribosomal genes.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_pct_counts_ribo"]))
 
 genes_to_exclude = np.zeros((adata.n_vars,), dtype=bool)
@@ -148,7 +148,7 @@ if configs["exclude_mito_genes"] == "True":
 genes_to_exclude_names = adata.var_names[np.where(genes_to_exclude)]
 genes_to_keep = np.invert(genes_to_exclude)
 n_genes_before = adata.n_vars
-adata = adata[:,genes_to_keep]
+adata = adata[:,genes_to_keep].copy()
 logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude_names)))
 
 cell_hashing = [i for i in adata.var_names[np.where(adata.var_names.str.startswith(configs["donor"]+"-"))]]
@@ -163,12 +163,12 @@ if len(cell_hashing)>1:
     percent_doublets = 100*num_doublets/adata.n_obs
     level = "error" if percent_doublets > 40 else "info"
     logger.add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(percent_doublets, num_doublets, adata.n_obs), level=level)
-    adata = adata[adata.obs["Classification"] != "Doublet"]
+    adata = adata[adata.obs["Classification"] != "Doublet"].copy()
     logger.add_to_log("Adding the library ID to the cell barcode name (will allow to distinguish between differnet cells with the same barcode when integrating differnet libraries that were used to collect the same samples)...")
     adata.obs_names = adata.obs_names + "_" + configs["library_id"]
     
 logger.add_to_log("Saving h5ad file...")
-adata.write(os.path.join(data_dir,h5ad_file))
+adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
