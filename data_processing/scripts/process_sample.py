@@ -299,9 +299,8 @@ if not no_cells:
         contamination_levels = pd.read_csv(contamination_levels_file, index_col=0, header=None).index
         decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
         decontaminated_counts.index = rna.obs.index # note that decontx replaces "-" with "." in the cell names
-        decontaminated_counts = csr_matrix(decontaminated_counts)
         rna.obs["contamination_levels"] = contamination_levels
-        rna.X = np.round(decontaminated_counts)
+        rna.X = csr_matrix(np.round(decontaminated_counts))
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
         rna = rna[:,rna.var.index.isin(solo_genes)].copy()
         # remove empty cells after decontaminations
@@ -432,8 +431,7 @@ if not no_cells:
         # save raw rna counts
         adata.layers["raw_counts"] = adata.X.copy()
         # save decontaminated counts (only applies to rna data; consider only cells that we keep after filters)
-        adata.layers["decontaminated_counts"] = adata.layers["raw_counts"].copy()
-        adata.layers["decontaminated_counts"][:,adata.var.index.isin(decontaminated_counts.columns)] = np.array(decontaminated_counts.loc[adata.obs.index])
+        adata.layers["decontaminated_counts"] = csr_matrix(decontaminated_counts.loc[adata.obs.index,adata.var.index])
         if adata.n_obs > 0:
             logger.add_to_log("Normalize rna counts in adata.X...")
             sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
