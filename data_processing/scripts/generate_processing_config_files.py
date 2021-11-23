@@ -63,8 +63,11 @@ if config_type in ["library", "all"]:
 if config_type in ["sample", "all"]:
     # create config files for sample processing
     sample_ids = samples[indices]["Sample_ID"]
-    for sample_id in sample_ids:
+    organs = samples[indices]["Organ"]
+    for i in range(len(sample_ids)):
+        sample_id = sample_ids.iloc[i]
         library_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["GEX lib"].iloc[0].split(",")]
+        is_jejunum = organs.iloc[i] in ["JEJ", "JEJEPI", "JEJLP"]
         processed_library_configs_version = ["v1" for i in range(len(library_ids))]
         sample_configs = {
             "sandbox_mode": "False",
@@ -79,7 +82,7 @@ if config_type in ["sample", "all"]:
             "sample_id": sample_id,
             "library_ids": ",".join(library_ids),
             "processed_library_configs_version": ",".join(processed_library_configs_version),
-            "min_cells_per_library": 200,
+            "min_cells_per_library": 50 if is_jejunum else 200, # jejunum samples are generally less enriched as they are less available to sequence
             "filter_decontaminated_cells_min_genes": 100,
             "normalize_total_target_sum": 10000,
             "n_highly_variable_genes": 3000,
