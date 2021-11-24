@@ -198,7 +198,7 @@ if (len(proteins) > 0) and protein_levels_max_sds is not None:
     normalized_cell_lib_size = adata.obsm["protein_expression"].sum(axis=1)/(adata.obsm["protein_expression"].shape[1]-adata.obsm["protein_expression"].isnull().sum(axis=1))
     keep = exclude_outliers(normalized_cell_lib_size, protein_levels_max_sds)
     logger.add_to_log("Removing {} cells with extreme protein values (normalized library size more extreme than {} standard deviations)...".format(np.sum(~keep), protein_levels_max_sds))
-    adata = adata[keep,]
+    adata = adata[keep,].copy()
     # (2) remove proteins that have extreme library size (across all cells; consider only cells that have non missing values and normalize by the number of cells with no missing values for the protein)
     normalized_protein_lib_sizes = adata.obsm["protein_expression"].sum()/(adata.obsm["protein_expression"].shape[0]-adata.obsm["protein_expression"].isnull().sum(axis=0))
     keep = exclude_outliers(normalized_protein_lib_sizes, protein_levels_max_sds)
