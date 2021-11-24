@@ -7,6 +7,7 @@
 "integration_level": "tissue",
 "sample_ids": "582C-SPL-38,591C-SPL-1,D503-SPL-1,D496-SPL-1,583B-SPL-50",
 "processed_sample_configs_version": "v1,v1,v1,v1,v1",
+"protein_levels_max_sds": 5,
 "n_highly_variable_genes": 3000,
 "highly_variable_genes_flavor": "seurat_v3",
 "scvi_max_epochs": 400,

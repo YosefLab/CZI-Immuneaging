@@ -13,6 +13,7 @@ The configuration file is formatted as json with the following fields:
 * `"integration_level"` - The level of integration, which determines the output directory on aws; for example, `"tissue"`.
 * `"sample_ids"` - A comma-separated (no spaces) list of the sample IDs (`Sample_ID` field in the Google spreadsheet) to integrate
 * `"processed_sample_configs_version"` - A comma-separated (no spaces) list of the versions of the processed sample files for the samples specified by `"sample_ids"` - these versions are determined by the configs version that was used to process the samples; the latest version of each processed sample can be found on the S3 bucket under `s3://immuneaging/processed_samples/`
+* `"protein_levels_max_sds"` - Proteins and cells with extreme protein values will be excluded. This parameter sets the number of standard deviations beyond which a value will be determined as outlier and therefore filtered out from the data; omit this argument to perform no QC filtering on the protein levels.
 * `"n_highly_variable_genes"` - The number of highly variable genes to be used prior to applying dimensionality reduction using PCA and SCVI
 * `"highly_variable_genes_flavor"` - The flavor for identifying highly variable genes using `scanpy.pp.highly_variable_genes`
 * `"scvi_max_epochs"` - The maximum number of epochs to be used when applying SCVI

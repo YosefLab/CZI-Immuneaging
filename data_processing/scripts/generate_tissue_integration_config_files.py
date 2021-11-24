@@ -24,6 +24,7 @@ integration_configs = {
         "output_destination": output_destination,
         "s3_access_file": s3_access_file,
         "integration_level": "tissue",
+        "protein_levels_max_sds": 5,
         "n_highly_variable_genes": 3000,
         "highly_variable_genes_flavor": "seurat_v3",
         "scvi_max_epochs": 400,
