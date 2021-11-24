@@ -171,7 +171,7 @@ if len(proteins) > 0 or len(proteins_ctrl) > 0:
         df_ctrl = pd.DataFrame(columns = proteins_ctrl, index = adata_dict[sample_ids[j]].obs.index)
         if "protein_expression_Ctrl" in adata_dict[sample_ids[j]].obsm:
             df_ctrl[adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].copy()
-        adata_dict[sample_ids[j]].obsm["protein_expression"] = df_ctrl
+        adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"] = df_ctrl
 
 logger.add_to_log("Concatenating all cells from all samples...")
 adata = adata_dict[sample_ids[0]]
@@ -179,24 +179,39 @@ if len(sample_ids) > 1:
     adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer")
 
 # protein QC
-if len(proteins) > 0:
+if "protein_levels_max_sds" in configs:
+    protein_levels_max_sds = configs["protein_levels_max_sds"]
+else:
+    protein_levels_max_sds = None
+
+if (len(proteins) > 0) and protein_levels_max_sds is not None:
     logger.add_to_log("Running protein QC...")
-    num_sds = 5
-    # (1) remove proteins that have very low library size (across all cells; consider only cells that have non NaN values)
-    # get library size per cell, normalized by num of non-nan proteins
-    lib_sizes = adata.obsm["protein_expression"].sum(min_count = 1)/(adata.obsm["protein_expression"].shape[1]-adata.obsm["protein_expression"].isnull.sum())
-    sd = np.nanstd(lib_sizes)
-    mean = np.nanmean(lib_sizes)
-    keep1 = np.logical_or(lib_sizes.isna(), np.logical_and(lib_sizes >= (mean-sd*num_sds), lib_sizes <= (mean+sd*num_sds)))
-	# (2) remove cells that demonstrate extremely high values in any given protein
-    sds = np.nanstd(adata.obsm["protein_expression"], axis=1)
-    means = np.nanmean(adata.obsm["protein_expression"], axis=1)
-    keep2 = np.logical_or(adata.obsm["protein_expression"].isnull(),
-        np.logical_and(adata.obsm["protein_expression"] >= (mean-sd*num_sds), adata.obsm["protein_expression"] <= (mean+sd*num_sds)))
-    keep = np.logical_and(keep1, keep2)
+    n_cells_before = adata.obsm["protein_expression"].shape[0]
+    n_proteins_before = adata.obsm["protein_expression"].shape[1]
+    # a function for excluding cells or proteins based on extreme values (does not excludes cells that have only missing values)
+    exclude_outliers = lambda x, num_sds: np.logical_or(x.isna(),
+        np.logical_and(x >= (np.nanmean(x)-np.nanstd(x)*num_sds), x <= (np.nanmean(x)+np.nanstd(x)*num_sds)))
+    # (1) remove cells that demonstrate extremely high (or low) protein library size; normalize library size by the total number of non NaN proteins available for the cell.
+    normalized_cell_lib_size = adata.obsm["protein_expression"].sum(axis=1)/(adata.obsm["protein_expression"].shape[1]-adata.obsm["protein_expression"].isnull().sum(axis=1))
+    keep = exclude_outliers(normalized_cell_lib_size, protein_levels_max_sds)
+    logger.add_to_log("Removing {} cells with extreme protein values (normalized library size more extreme than {} standard deviations)...".format(np.sum(~keep), protein_levels_max_sds))
     adata = adata[keep,]
-    logger.add_to_log("{} cells with outlier protein levels were filtered out, leaving a total of {} cells ({}% removed)".format(
-        len(keep)-adata.n_obs, adata.n_obs, 100*(len(keep)-adata.n_obs)/len(keep)))
+    # (2) remove proteins that have extreme library size (across all cells; consider only cells that have non missing values and normalize by the number of cells with no missing values for the protein)
+    normalized_protein_lib_sizes = adata.obsm["protein_expression"].sum()/(adata.obsm["protein_expression"].shape[0]-adata.obsm["protein_expression"].isnull().sum(axis=0))
+    keep = exclude_outliers(normalized_protein_lib_sizes, protein_levels_max_sds)
+    logger.add_to_log("Removing {} proteins with extreme total number of reads across cells (normalized levels - by the number of cells with no missing values for the protein - more extreme than {} standard deviations)...".format(
+        np.sum(~keep), protein_levels_max_sds))
+    adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[keep.values]]
+    # (3) remove proteins that were left with zero reads
+    non_zero_proteins = adata.obsm["protein_expression"].sum() > 0
+    num_zero_proteins = np.sum(~non_zero_proteins)
+    if num_zero_proteins:
+        logger.add_to_log("Removing {} proteins with zero reads across all cells...".format(num_zero_proteins))
+    adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[non_zero_proteins.values]]
+    # summarize
+    logger.add_to_log("Protein QC summary: a total of {} cells ({}%) and {} proteins ({}%) were filtered out owing to extreme values.".format(
+        n_cells_before-adata.n_obs, round(100*(n_cells_before-adata.n_obs)/n_cells_before,2),
+        n_proteins_before-adata.obsm["protein_expression"].shape[1], round(100*(n_proteins_before-adata.obsm["protein_expression"].shape[1])/n_proteins_before,2)))
 
 if "is_solo_singlet" in adata.obs:
     del adata.obs["is_solo_singlet"]
