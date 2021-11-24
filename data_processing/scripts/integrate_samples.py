@@ -189,8 +189,11 @@ if (len(proteins) > 0) and protein_levels_max_sds is not None:
     n_cells_before = adata.obsm["protein_expression"].shape[0]
     n_proteins_before = adata.obsm["protein_expression"].shape[1]
     # a function for excluding cells or proteins based on extreme values (does not excludes cells that have only missing values)
-    exclude_outliers = lambda x, num_sds: np.logical_or(x.isna(),
-        np.logical_and(x >= (np.nanmean(x)-np.nanstd(x)*num_sds), x <= (np.nanmean(x)+np.nanstd(x)*num_sds)))
+    def exclude_outliers(x, num_sds):
+        # a value is considered as an outlier if it is more extreme that the mean plus (or minus) num_sds times the standard deviation
+        is_outlier = np.logical_and(x >= (np.nanmean(x)-np.nanstd(x)*num_sds), x <= (np.nanmean(x)+np.nanstd(x)*num_sds))
+        # do not consider missing values as outliers
+        return np.logical_or(x.isna(), is_outlier)
     # (1) remove cells that demonstrate extremely high (or low) protein library size; normalize library size by the total number of non NaN proteins available for the cell.
     normalized_cell_lib_size = adata.obsm["protein_expression"].sum(axis=1)/(adata.obsm["protein_expression"].shape[1]-adata.obsm["protein_expression"].isnull().sum(axis=1))
     keep = exclude_outliers(normalized_cell_lib_size, protein_levels_max_sds)
