@@ -222,7 +222,8 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                 parsed = search(formatted_str, line)
                 if parsed:
                     csv_row[csv_header] = parsed[formatted_str_index]
-                return parsed
+                    return True
+                return False
 
             # for each file, parse its logs and add digest info to csv
             csv_rows = []
@@ -267,7 +268,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     # red blood cells
                     parse_line(line, utils.QC_STRING_RBC, 1, CSV_HEADER_RBC, csv_row)
                     # last processed
-                    # the + " (" acts as a delimiter, to avoid reading more than needed (since we don't currently log a period after the time)
+                    # the "(" acts as a delimiter, to avoid reading more than needed (since we don't currently log a period after the time)
                     parsed = parse_line(line, utils.QC_STRING_START_TIME + " (", 0, CSV_HEADER_LAST_PROCESSED, csv_row)
                     if parsed:
                         csv_row[CSV_HEADER_LAST_PROCESSED] = utils.get_date_from_time(csv_row[CSV_HEADER_LAST_PROCESSED])
