@@ -267,7 +267,8 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     # red blood cells
                     parse_line(line, utils.QC_STRING_RBC, 1, CSV_HEADER_RBC, csv_row)
                     # last processed
-                    parsed = parse_line(line, utils.QC_STRING_START_TIME, 0, CSV_HEADER_LAST_PROCESSED, csv_row)
+                    # the + " (" acts as a delimiter, to avoid reading more than needed (since we don't currently log a period after the time)
+                    parsed = parse_line(line, utils.QC_STRING_START_TIME + " (", 0, CSV_HEADER_LAST_PROCESSED, csv_row)
                     if parsed:
                         csv_row[CSV_HEADER_LAST_PROCESSED] = utils.get_date_from_time(csv_row[CSV_HEADER_LAST_PROCESSED])
                 csv_rows.append(csv_row)
@@ -285,6 +286,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                 CSV_HEADER_AMBIENT_RNA,
                 CSV_HEADER_VDJ,
                 CSV_HEADER_RBC,
+                CSV_HEADER_LAST_PROCESSED,
             ]
             writer = csv.DictWriter(csv_file, fieldnames=field_names)
             writer.writeheader()
