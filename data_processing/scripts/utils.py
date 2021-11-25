@@ -12,6 +12,7 @@ from math import floor
 import csv
 from typing import Type
 import traceback
+from datetime import datetime
 
 from logger import BaseLogger
 
@@ -24,6 +25,7 @@ QC_STRING_AMBIENT_RNA = "Removed {} cells (percent removed: {:.2f}%) with total 
 QC_STRING_VDJ = "Removed {} vdj genes (percent removed: {:.2f}%); {} genes remained."
 QC_STRING_RBC = "Removed {} red blood cells (percent removed: {:.2f}%); {} droplets remained."
 QC_STRING_COUNTS = "Final number of cells: {}, final number of genes: {}."
+QC_STRING_START_TIME = "Starting time: {}"
 
 def init_scvi_settings():
     # This does two things:
@@ -34,8 +36,15 @@ def init_scvi_settings():
 
 init_scvi_settings()
 
+TIME_FORMAT = "%H:%M, %m-%d-%Y"
+DATE_FORMAT = "%m/%d/%Y"
+
 def get_current_time():
-	return time.strftime("%H:%M, %m-%d-%Y")
+    return time.strftime(TIME_FORMAT)
+
+def get_date_from_time(t: str):
+    dt = datetime.strptime(t, TIME_FORMAT)
+    return dt.strftime(DATE_FORMAT)
 
 def set_access_keys(filepath, return_dict = False):
 	"""

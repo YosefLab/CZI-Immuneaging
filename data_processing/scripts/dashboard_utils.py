@@ -194,7 +194,7 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm
         csv_row[CSV_HEADER_DONOR_COUNT] = -1
         csv_row[CSV_HEADER_DONORS] = []
         csv_row[CSV_HEADER_DONORS_AGE] = []
-        csv_row[CSV_HEADER_CELL_COUNT] = -1
+        csv_row[CSV_HEADER_CELL_COUNT] = 0
         csv_row[CSV_HEADER_SAMPLE_COUNT] = -1
         csv_row[CSV_HEADER_SAMPLES] = []
         csv_row[CSV_HEADER_ANNDATA] = "Pending processing"
@@ -214,9 +214,8 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm
                     found = True
                     break
 
-            # TODO remove once we have more or all tissues
             if not found:
-                logger.add_to_log("Integrated annotated data not found for issue {}".format(tissue))
+                logger.add_to_log("Integrated annotated data not found for tissue {}".format(tissue))
             else:
                 csv_row[CSV_HEADER_ANNDATA] = "{}{}/{}/{}/{}".format(BASE_AWS_URL, BASE_S3_DIR, tissue, version, file_name)
                 dir_name = "{}/{}/{}/{}/".format(BASE_S3_URL, BASE_S3_DIR, tissue, version)
@@ -250,7 +249,8 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm
                 os.system("rm -r {}/*".format(working_dir))
             logger.add_to_log("Continuing execution for other tissues...")
             continue
-        csv_rows.append(csv_row)
+        if found:
+            csv_rows.append(csv_row)
 
     # write the csv
     csv_file = io.StringIO()

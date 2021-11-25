@@ -93,7 +93,7 @@ if os.path.isfile(logger_file_path):
 
 logger = SimpleLogger(filename = logger_file_path)
 logger.add_to_log("Running process_sample.py...")
-logger.add_to_log("Starting time: {}".format(get_current_time()))
+logger.add_to_log(QC_STRING_START_TIME.format(get_current_time()))
 with open(process_sample_script, "r") as f:
     logger.add_to_log("process_sample.py md5 checksum: {}\n".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
 

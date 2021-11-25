@@ -216,6 +216,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
             CSV_HEADER_AMBIENT_RNA: str = "% ambient RNA"
             CSV_HEADER_VDJ: str = "% vdj genes"
             CSV_HEADER_RBC: str = "% RBC"
+            CSV_HEADER_LAST_PROCESSED: str = "Last Processed"
 
             def parse_line(line: str, formatted_str: str, formatted_str_index: int, csv_header: str, csv_row: Dict):
                 parsed = search(formatted_str, line)
@@ -227,7 +228,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
             for filepath,lines in files_to_lines.items():
                 csv_row = {
                     CSV_HEADER_SAMPLE_ID: self._get_object_id(filepath),
-                    CSV_HEADER_CELL_COUNT: -1,
+                    CSV_HEADER_CELL_COUNT: 0,
                     CSV_HEADER_FAILED: "No",
                     CSV_HEADER_WARNING: "No",
                     CSV_HEADER_FAILURE_REASON: "",
@@ -236,6 +237,7 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     CSV_HEADER_AMBIENT_RNA: -1,
                     CSV_HEADER_VDJ: -1,
                     CSV_HEADER_RBC: -1,
+                    CSV_HEADER_LAST_PROCESSED: "",
                 }
                 for line in lines:
                     # cell count
@@ -263,6 +265,9 @@ class DigestSampleProcessingLogs(BaseDigestClass):
                     parse_line(line, utils.QC_STRING_VDJ, 1, CSV_HEADER_VDJ, csv_row)
                     # red blood cells
                     parse_line(line, utils.QC_STRING_RBC, 1, CSV_HEADER_RBC, csv_row)
+                    # last processed
+                    parse_line(line, utils.QC_STRING_START_TIME, 0, CSV_HEADER_LAST_PROCESSED, csv_row)
+                    csv_row[CSV_HEADER_LAST_PROCESSED] = utils.get_date_from_time(csv_row[CSV_HEADER_LAST_PROCESSED])
                 csv_rows.append(csv_row)
 
             # write the csv
