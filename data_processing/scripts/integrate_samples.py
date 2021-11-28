@@ -17,6 +17,8 @@ import scvi
 import hashlib
 import traceback
 
+logging.getLogger('numba').setLevel(logging.WARNING)
+
 # This does two things:
 # 1. Makes the logger look good in a log file
 # 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
@@ -59,8 +61,8 @@ data_dir = os.path.join(output_destination, prefix)
 os.system("mkdir -p " + data_dir)
 
 # check for previous versions of integrated data
-s3_path = "s3://immuneaging/integrated_samples/{}".format(prefix)
-is_new_version, version = get_configs_status(configs, s3_path, "integrate_samples.configs."+prefix,
+s3_url = "s3://immuneaging/integrated_samples/{}_level".format(configs["integration_level"])
+is_new_version, version = get_configs_status(configs, s3_url + "/" + prefix, "integrate_samples.configs."+prefix,
     VARIABLE_CONFIG_KEYS, data_dir)
 output_configs_file = "integrate_samples.configs.{}.{}.txt".format(prefix,version)
 
@@ -83,7 +85,6 @@ logger.add_to_log("using the following configurations:\n{}".format(str(configs))
 logger.add_to_log("Configs version: " + version)
 logger.add_to_log("New configs version: " + str(is_new_version))
 
-s3_url = "s3://immuneaging/integrated_samples/{}_level".format(configs["integration_level"])
 h5ad_file = "{}.{}.h5ad".format(prefix, version)
 if is_new_version:
     if not sandbox_mode:
