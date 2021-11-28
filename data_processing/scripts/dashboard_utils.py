@@ -92,8 +92,8 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     adata.obs["age_categorical"] = pd.Categorical(np.array(age_categorical))
 
     fields_to_plot = ["site", "donor_id", "sample_id", "total_counts", "sex", "age_continuous", "age_categorical", "stimulation"]
-    vmins = ["p0", "p0", "p0", "p10", "p0", "p0", "p0",] # minimal value for sc.pl.umap (p0 means using the minimal value in the data; p10 means the 10th percentile)
-    vmaxs = ["p100", "p100", "p100", "p90", "p100", "p100", "p100",] # maximal value for sc.pl.umap (p100 means using the maximal value in the data)
+    vmins = ["p0", "p0", "p0", "p10", "p0", "p0", "p0", "p0",] # minimal value for sc.pl.umap (p0 means using the minimal value in the data; p10 means the 10th percentile)
+    vmaxs = ["p100", "p100", "p100", "p90", "p100", "p100", "p100", "p100",] # maximal value for sc.pl.umap (p100 means using the maximal value in the data)
     min_cell_type_frac = 0.001 # for generating annotation figures (cells annotated as coming from cell types that demonstrate less than min_cell_type_frac fraction of cells in the data will be removed form the plots)
     def extract_abundant_cell_types(adata, min_cell_type_frac, obs_key):
         # for extracting only cells that were annotated as a cell type that was used for at least min_num_cells_per_ct cells
