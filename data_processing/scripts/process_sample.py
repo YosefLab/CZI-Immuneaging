@@ -319,7 +319,7 @@ if not no_cells:
         logger.add_to_log(msg, level=level)
         summary.append(msg)
         logger.add_to_log("Filtering out vdj genes...")
-        filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
+        rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
         logger.add_to_log("Detecting highly variable genes...")
         rna.layers["rounded_decontaminated_counts_copy"] = rna.X.copy()
         if configs["highly_variable_genes_flavor"] != "seurat_v3":

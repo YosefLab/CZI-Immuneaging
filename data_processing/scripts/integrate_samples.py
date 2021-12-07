@@ -240,7 +240,7 @@ try:
     rna = adata.copy()
     batch_key = "batch"
     logger.add_to_log("Filtering out vdj genes...")
-    filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
+    rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
     logger.add_to_log("Detecting highly variable genes...")
     rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
     rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)
