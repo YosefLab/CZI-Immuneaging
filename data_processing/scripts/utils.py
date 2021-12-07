@@ -307,7 +307,7 @@ def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger]) -
     aws_response = os.popen(sync_cmd).read()
     logger.add_to_log("aws response: {}\n".format(aws_response))
 
-def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Type[BaseLogger]) -> None:
+def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Type[BaseLogger]) -> AnnData:
     file_path_components = aws_file_path.split("/")
     file_name = file_path_components[-1]
     aws_dir_path = "/".join(file_path_components[:-1])
@@ -319,8 +319,9 @@ def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Ty
     n_var_before = rna.n_vars
     rna = rna[:, ~rna.var.index.isin(genes)].copy()
     percent_removed = 100*(n_var_before-rna.n_vars)/n_var_before
-    level = "warning" if percent_removed > 50 else "info" # TODO adjust threshold if needed
+    level = "warning" if percent_removed > 50 else "info"
     logger.add_to_log(QC_STRING_VDJ.format(n_var_before-rna.n_vars, percent_removed, rna.n_vars), level=level)
+    return rna
 
 # gets dataframe of CITE data extracted from the anndata and converts the protein names to internal names (based on information from the protein panels in the google spreadsheet)
 def get_internal_protein_names(df):
