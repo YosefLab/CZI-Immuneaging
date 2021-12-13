@@ -35,7 +35,7 @@ BCR_runs = []
 TCR_runs = []
 for i in range(len(sample_indices)):
     gex = samples["GEX lib"][sample_indices[i]].split(',')
-    assert len(gex)>0
+    assert len(gex)>0 # all samples must have a GEX lib (at least one)
     if pd.isna(samples["ADT lib"][sample_indices[i]]):
         adt = ['none' for j in range(len(gex))]
     else:
@@ -45,9 +45,13 @@ for i in range(len(sample_indices)):
     else:
         hto = samples["HTO lib"][sample_indices[i]].split(',')
     for j in range(len(gex)):
+        # TODO Q: What guarantees that the number of adt and hto libs
+        # is the same as the number of gex libs?
         r = (gex[j], adt[j], hto[j])
         if r not in GEX_runs:
             GEX_runs.append(r)
+    # TODO Q: Why do we "batch" gex/adt/hto together as above but treat
+    # bcr/tcr separately?
     if not pd.isna(samples["BCR lib"][sample_indices[i]]):
         bcr = samples["BCR lib"][sample_indices[i]].split(',')
         for j in bcr:

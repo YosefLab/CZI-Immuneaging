@@ -1,12 +1,7 @@
 import sys
 import os
-import subprocess
-import logging
-import json
 import time
-import anndata
 import scanpy as sc
-from pathlib import Path
 import pandas as pd
 import numpy as np
 import re
@@ -105,13 +100,6 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
 			aligner_cmd = "{0} count --id={1} --transcriptome={2} --fastqs={3} --chemistry={4}".format(aligner_software_path, 
 				GEX_lib_name, aligner_genome_file, os.path.join(data_dir_fastq, GEX_lib), chem)
 	return([aligner_cmd, aligned_data_dir, outputs_to_save])
-
-def alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save):
-	alignment_exists = os.path.isdir(aligned_data_dir)
-	if alignment_exists:
-		for out in aligner_outputs_to_save:
-			alignment_exists = alignment_exists and os.path.isfile(out)
-	return(alignment_exists)
 
 configs_dir_remote = "s3://immuneaging/aligned_libraries/configs/"
 configs_file_remote_prefix = "align_library."
@@ -247,7 +235,7 @@ if lib_type == "TCR":
 if lib_type == "BCR":
 	pass
 
-alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
+alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
 prefix = "_".join([donor_id, seq_run, lib_type, GEX_lib])
 if alignment_exists:
 	logger.add_to_log("Alignment outputs for the following command already exist:")
@@ -256,7 +244,7 @@ if alignment_exists:
 else:
 	logger.add_to_log("Running the following alignment command:\n{}".format(alignment_cmd))
 	alignment_output = os.popen(alignment_cmd).read()
-	alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
+	alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
 	if not alignment_exists:
 		# remove the output directory, which is required in order to prevent errors in a following execution of cellranger		
 		os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
@@ -266,7 +254,7 @@ else:
 			alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
 			logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
 			logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
-			alignment_exists = alignment_outputs_exist(aligned_data_dir, aligner_outputs_to_save)
+			alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
 		else:
 			logger.add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output), level="error")
 
