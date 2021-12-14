@@ -88,7 +88,8 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
         outputs_to_save.append(feature_ref_csv_file)
         if BCR_lib is not None or TCR_lib is not None:
             # prepare config csv file for cellranger multi - see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#config
-            multi_config_csv_file = os.path.join(data_dir,"multi_config.csv")
+            #multi_config_csv_file = os.path.join(data_dir,"multi_config.csv")
+            multi_config_csv_file = "/data/yosef2/scratch/immuneaging/vv_runs/manual_runs/alignment_test/multi_config.csv"
             outputs_to_save.append(multi_config_csv_file)
             aligner_cmd = "{0} multi --id={1} --csv={2}".format(aligner_software_path, GEX_lib_name, multi_config_csv_file)
         else:
