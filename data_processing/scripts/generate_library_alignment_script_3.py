@@ -5,28 +5,22 @@ The script gets a configuration file (for a specific donor), path to the immune 
 **NOTE**: the path to the code base and path to the configs file must be absolute paths.
 
 Example:
-python generate_library_alignment_script.py /path/to/code /path/to/align_libraries.configs.582C_001.txt 582C_001_align_libraries.sh
+python generate_library_alignment_script.py donor_id seq_run /path/to/code /path/to/align_libraries.configs.582C_001.txt python_env_version /path/to/output_dir
 """
 
 import os
 import sys
 import pandas as pd
 
-code_path = sys.argv[1]
-configs_file = sys.argv[2]
-alignment_script = sys.argv[3]
+donor_id = sys.argv[1]
+seq_run = sys.argv[2]
+code_path = sys.argv[3]
+configs_file = sys.argv[4]
+python_env_version = sys.argv[5]
+output_dir = sys.argv[6]
 
 sys.path.append(code_path)
 from utils import *
-
-configs = load_configs(configs_file)
-donor_id = configs["donor"]
-output_dir = configs["output_destination"]
-code_path = configs["code_path"]
-python_env_version = configs["python_env_version"]
-r_env_version = configs["r_env_version"]
-seq_run = configs["seq_run"]
-donor_run = "_".join([donor_id,seq_run])
 
 samples = read_immune_aging_sheet(sheet="Samples")
 sample_indices = samples.index[(samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))]
@@ -36,20 +30,25 @@ TCR_runs = []
 for i in range(len(sample_indices)):
     gex = samples["GEX lib"][sample_indices[i]].split(',')
     assert len(gex)>0 # all samples must have a GEX lib (at least one)
-    if pd.isna(samples["ADT lib"][sample_indices[i]]):
-        adt = ['none' for j in range(len(gex))]
-    else:
-        adt = samples["ADT lib"][sample_indices[i]].split(',')
-    if pd.isna(samples["HTO lib"][sample_indices[i]]):
-        hto = ['none' for j in range(len(gex))]
-    else:
-        hto = samples["HTO lib"][sample_indices[i]].split(',')
+
+    def get_feature_lib_if_exists(lib_name: str) -> List[str]:
+        if pd.isna(samples[lib_name][sample_indices[i]]):
+            lib = ['none' for j in range(len(gex))]
+        else:
+            lib = samples[lib_name][sample_indices[i]].split(',')
+            # TODO Q: This seems to hold empirically but experimentally what
+            # guarantees that the number of adt and hto libs is the same as
+            # the number of gex libs?
+            assert len(lib) == len(gex)
+        return lib
+
+    adt = get_feature_lib_if_exists("ADT lib")
+    hto = get_feature_lib_if_exists("HTO lib")
     for j in range(len(gex)):
-        # TODO Q: What guarantees that the number of adt and hto libs
-        # is the same as the number of gex libs?
         r = (gex[j], adt[j], hto[j])
         if r not in GEX_runs:
             GEX_runs.append(r)
+
     if not pd.isna(samples["BCR lib"][sample_indices[i]]):
         bcr = samples["BCR lib"][sample_indices[i]].split(',')
         for j in bcr:
@@ -64,29 +63,25 @@ for i in range(len(sample_indices)):
 l_cd_mkdir = []
 l_align_lib = []
 l_align_msg = []
+donor_run = "_".join([donor_id,seq_run])
 for r in GEX_runs:
-    l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, r[0]))
-    l_align_lib.append("python {0}/align_library.py {1} {0} GEX {2}".format(code_path, configs_file, ",".join(r)))
+    l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, r[0])) # name the dir after the GEX lib's name
+    l_align_lib.append("python {0}/align_library_3.py {1} {0} {2}".format(code_path, configs_file, ",".join(r)))
     l_align_msg.append("echo \"Execution of align_library.py on GEX {} is complete.\"".format(",".join(r)))
-
-# uncomment the following lines in order to allow aligning of BCR and TCR libraries
-"""
 for r in BCR_runs:
-    l_cd_mkdir.append("mkdir -p " + os.path.join(output_dir, "S3", donor_id, r))
-    l_align_lib.append("python {0}/align_library.py {1} {0} BCR {2}".format(code_path, configs_file, ",".join(r)))
+    # often the same lib (same lib id) is used for GEX, BCR and TCR
+    l_cd_mkdir.append("mkdir -p " + os.path.join(output_dir, "S3", donor_id, r + "-BCR"))
+    l_align_lib.append("python {0}/align_library_3.py {1} {0} BCR {2}".format(code_path, configs_file, r))
 for r in TCR_runs:
-    l_cd_mkdir.append("mkdir -p " + os.path.join(output_dir, "S3", donor_id, r))
-    l_align_lib.append("python {0}/align_library.py {1} {0} TCR {2}".format(code_path, configs_file, ",".join(r)))
-"""
+    l_cd_mkdir.append("mkdir -p " + os.path.join(output_dir, "S3", donor_id, r + "-TCR"))
+    l_align_lib.append("python {0}/align_library_3.py {1} {0} TCR {2}".format(code_path, configs_file, r))
 
 l1 = ["source activate {}".format(python_env_version),
     "mkdir -p " + os.path.join(output_dir, "S3"),
     "mkdir -p " + os.path.join(output_dir, "S3", donor_run)]
-l2 = ["conda deactivate ",
-    "source activate {}".format(r_env_version),
-    #"Rscript ...", ## TODO complete the Rscript command
-    "conda deactivate"] 
+l2 = ["conda deactivate"] 
 
+alignment_script = "{}_align_libraries.sh".format(donor_run)
 f = open(alignment_script,'w')
 f.write("\n".join(l1) + "\n")
 for i in range(len(l_cd_mkdir)):
