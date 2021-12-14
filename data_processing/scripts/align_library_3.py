@@ -1,6 +1,5 @@
 import sys
 import os
-import time
 import scanpy as sc
 import pandas as pd
 import numpy as np
@@ -10,12 +9,8 @@ import hashlib
 align_lib_script = sys.argv[0]
 configs_file = sys.argv[1]
 code_path = sys.argv[2]
-lib_ids = sys.argv[3]
-
-# we don't need this, but we use it to name the output h5ad file, which is
-# used downstream and expects the "GEX" in the name, so keep it around for
-# now
-lib_type = "GEX"
+lib_type = sys.argv[3]
+lib_ids = sys.argv[4]
 
 sys.path.append(code_path)
 
@@ -31,9 +26,19 @@ VARIABLE_CONFIG_KEYS = ["donor",
 "s3_access_file",
 "code_path"]
 
+assert lib_type in ["GEX", "BCR", "TCR"]
+
 def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
     assert aligner == "cellranger" # no other option is currently implemented
-    assert GEX_lib is not None
+    assert GEX_lib or TCR_lib or BCR_lib
+    if GEX_lib:
+        assert TCR_lib is None and BCR_lib is None
+    if TCR_lib or BCR_lib:
+        assert GEX_lib is None and ADT_lib is None and HTO_lib is None
+        if TCR_lib:
+            assert BCR_lib is None
+        else:
+            assert TCR_lib is None
     # set chemistry
     assert chemistry == "5'v1" or chemistry == "5'v2" or chemistry == "3'v2" or chemistry == "3'v3"
     if chemistry == "5'v1" or chemistry == "5'v2":
@@ -43,63 +48,61 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
     if chemistry == "3'v3":
         chem = "SC3Pv3"
     libs = []
-    GEX_lib_name = "_".join([donor_id, seq_run, "GEX", GEX_lib])
-    outputs_to_save = [os.path.join(data_dir,GEX_lib_name,"outs/web_summary.html"),
-        os.path.join(data_dir,GEX_lib_name,"outs/metrics_summary.csv"),
-        os.path.join(data_dir,GEX_lib_name,"outs/cloupe.cloupe")]
-    aligned_data_dir = os.path.join(data_dir, GEX_lib_name,"outs/filtered_feature_bc_matrix/")
-    if (ADT_lib is not None) or (HTO_lib is not None):
-        # prepare libraries csv file - see https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/feature-bc-analysis#libraries-csv
-        libs.append([os.path.join(data_dir_fastq, GEX_lib), GEX_lib_name, "Gene Expression"])
-        if ADT_lib is not None:
-            ADT_lib_name = "_".join([donor_id, seq_run, "ADT", ADT_lib])
-            libs.append([os.path.join(data_dir_fastq, ADT_lib), ADT_lib_name, "Antibody Capture"])
-        if HTO_lib is not None:
-            HTO_lib_name = "_".join([donor_id, seq_run, "HTO", HTO_lib])
-            libs.append([os.path.join(data_dir_fastq, HTO_lib), HTO_lib_name, "Antibody Capture"])
-        libraries_df = pd.DataFrame(libs, columns = ['fastqs', 'sample', 'library_type'])
-        libraries_csv_file = os.path.join(data_dir,"libraries.csv")
-        libraries_df.to_csv(libraries_csv_file, sep=',', header=True, index=False)	
-        outputs_to_save.append(libraries_csv_file)
-        # prepare feature reference csv file from HTO and/or ADT.
-        # first, prep feature information for the hashtags
-        sample_indices = []
-        GEX_libs = samples["GEX lib"].values
-        for i in range(len(GEX_libs)):
-            if not pd.isna(GEX_libs[i]) and GEX_lib in GEX_libs[i]:
-                sample_indices.append(i)
-        feature_ref = []
-        hashtags = samples["Hashtag"][sample_indices].values
-        hashtag_ids = samples["Sample_ID"][sample_indices].values
-        counter = 0
-        for hashtag in hashtags:
-            for i in range(cite_key.shape[0]):
-                if hashtag in cite_key.loc[i].values:
-                    feature_ref.append([hashtag_ids[counter], hashtag_ids[counter], cite_key.loc[i].values[6], cite_key.loc[i].values[5], cite_key.loc[i].values[3], "Antibody Capture"])
-                    counter += 1
-                    continue
-        feature_ref_df = pd.DataFrame(feature_ref, columns = ['id', 'name', 'read', 'pattern', 'sequence', 'feature_type'])
-        # second, incorporate protein panel if applicable
-        if ADT_lib is not None:
-            assert protein_panel is not None
-            feature_ref_df = pd.concat([feature_ref_df, protein_panel])
-        feature_ref_csv_file = os.path.join(data_dir,"feature_ref.csv")
-        feature_ref_df.to_csv(feature_ref_csv_file, sep=',', header=True, index=False)
-        outputs_to_save.append(feature_ref_csv_file)
-        if BCR_lib is not None or TCR_lib is not None:
-            # prepare config csv file for cellranger multi - see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#config
-            multi_config_csv_file = os.path.join(data_dir,"multi_config.csv")
-            outputs_to_save.append(multi_config_csv_file)
-            aligner_cmd = "{0} multi --id={1} --csv={2}".format(aligner_software_path, GEX_lib_name, multi_config_csv_file)
+    if GEX_lib is not None:
+        GEX_lib_name = "_".join([donor_id, seq_run, "GEX", GEX_lib])
+        outputs_to_save = [os.path.join(data_dir,GEX_lib_name,"outs/web_summary.html"),
+            os.path.join(data_dir,GEX_lib_name,"outs/metrics_summary.csv"),
+            os.path.join(data_dir,GEX_lib_name,"outs/cloupe.cloupe")]
+        aligned_data_dir = os.path.join(data_dir, GEX_lib_name,"outs/filtered_feature_bc_matrix/")
+        if ADT_lib or HTO_lib:
+            # prepare libraries csv file - see https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/feature-bc-analysis#libraries-csv
+            libs.append([os.path.join(data_dir_fastq, GEX_lib), GEX_lib_name, "Gene Expression"])
+            if ADT_lib:
+                ADT_lib_name = "_".join([donor_id, seq_run, "ADT", ADT_lib])
+                libs.append([os.path.join(data_dir_fastq, ADT_lib), ADT_lib_name, "Antibody Capture"])
+            if HTO_lib:
+                HTO_lib_name = "_".join([donor_id, seq_run, "HTO", HTO_lib])
+                libs.append([os.path.join(data_dir_fastq, HTO_lib), HTO_lib_name, "Antibody Capture"])
+            libraries_df = pd.DataFrame(libs, columns = ['fastqs', 'sample', 'library_type'])
+            libraries_csv_file = os.path.join(data_dir,"libraries.csv")
+            libraries_df.to_csv(libraries_csv_file, sep=',', header=True, index=False)	
+            outputs_to_save.append(libraries_csv_file)
+            # prepare feature reference csv file from HTO and/or ADT.
+            # first, prep feature information for the hashtags
+            sample_indices = []
+            GEX_libs = samples["GEX lib"].values
+            for i in range(len(GEX_libs)):
+                if not pd.isna(GEX_libs[i]) and GEX_lib in GEX_libs[i]:
+                    sample_indices.append(i)
+            feature_ref = []
+            hashtags = samples["Hashtag"][sample_indices].values
+            hashtag_ids = samples["Sample_ID"][sample_indices].values
+            counter = 0
+            for hashtag in hashtags:
+                for i in range(cite_key.shape[0]):
+                    if hashtag in cite_key.loc[i].values:
+                        feature_ref.append([hashtag_ids[counter], hashtag_ids[counter], cite_key.loc[i].values[6], cite_key.loc[i].values[5], cite_key.loc[i].values[3], "Antibody Capture"])
+                        counter += 1
+                        continue
+            feature_ref_df = pd.DataFrame(feature_ref, columns = ['id', 'name', 'read', 'pattern', 'sequence', 'feature_type'])
+            # second, incorporate protein panel if applicable
+            if ADT_lib:
+                assert protein_panel
+                feature_ref_df = pd.concat([feature_ref_df, protein_panel])
+            feature_ref_csv_file = os.path.join(data_dir,"feature_ref.csv")
+            feature_ref_df.to_csv(feature_ref_csv_file, sep=',', header=True, index=False)
+            outputs_to_save.append(feature_ref_csv_file)
+            aligner_cmd = "{} count --id={} --libraries={} --transcriptome={} --feature-ref={} --chemistry={}".format(aligner_software_path, GEX_lib_name, libraries_csv_file, aligner_genome_file, feature_ref_csv_file, chem)
         else:
-            aligner_cmd = "{0} count --id={1} --libraries={2} --transcriptome={3} --feature-ref={4} --chemistry={5}".format(aligner_software_path, GEX_lib_name, libraries_csv_file, aligner_genome_file, feature_ref_csv_file, chem)
-    #elif BCR_lib is not None or TCR_lib is not None:
-        # TODO
-        #pass
-    else:
-        # GEX with no hashtags, ADT, BCR or TCR
-        aligner_cmd = "{0} count --id={1} --transcriptome={2} --fastqs={3} --chemistry={4}".format(aligner_software_path, 
-            GEX_lib_name, aligner_genome_file, os.path.join(data_dir_fastq, GEX_lib), chem)
+            # GEX with no hashtags or ADT
+            aligner_cmd = "{} count --id={} --transcriptome={} --fastqs={} --chemistry={}".format(aligner_software_path, GEX_lib_name, aligner_genome_file, os.path.join(data_dir_fastq, GEX_lib), chem)
+    elif TCR_lib:
+        TCR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib])
+        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, TCR_lib_name, os.path.join(data_dir_fastq, TCR_lib), aligner_vdj_file, TCR_lib_name)
+    elif BCR_lib:
+        BCR_lib_name = "_".join([donor_id, seq_run, "BCR", TCR_lib])
+        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, BCR_lib_name, os.path.join(data_dir_fastq, BCR_lib), aligner_vdj_file, BCR_lib_name)
+
     return (aligner_cmd, aligned_data_dir, outputs_to_save)
 
 configs_dir_remote = "s3://immuneaging/aligned_libraries/configs/"
@@ -114,22 +117,24 @@ donor_run = "_".join([donor_id,seq_run])
 aligner = configs["aligner"]
 aligner_software_path = configs["aligner_software_path"]
 aligner_genome_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_genome_file"])
+aligner_vdj_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_vdj_file"])
 
-data_dir = os.path.join(configs["output_destination"],"S3",donor_run,lib_ids[0])
+data_dir = os.path.join(configs["output_destination"],"S3",donor_run,"{}-{}".format(lib_type, lib_ids[0]))
 
 configs_version = get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, VARIABLE_CONFIG_KEYS)
 
 # TODO added for debugging, delete
 print("*** DEBUG: configs_version: {}".format(configs_version))
-if configs_version != "v2":
+if configs_version != "v3":
     sys.exit()
 
-h5ad_file = "{}.{}.{}.h5ad".format(donor_run, lib_ids[0], configs_version)
-logger_file = os.path.join("align_library.{}.{}.{}.log".format(donor_run,lib_ids[0],configs_version))
+h5ad_file = "{}.{}.{}.{}.h5ad".format(donor_run, lib_type, lib_ids[0], configs_version)
+logger_file = os.path.join("align_library.{}.{}.{}.log".format(donor_run,lib_type,lib_ids[0],configs_version))
 h5ad_file_exists = False
 logger_file_exists = False
 
 # check if aligned files are already on the server
+# TODO update this to only look under /vX
 ls_cmd = 'aws s3 ls s3://immuneaging/aligned_libraries --recursive'
 aligned_files = os.popen(ls_cmd).read()
 for f in aligned_files.rstrip().split('\n'):
@@ -153,7 +158,7 @@ logger.add_to_log("Starting time: {}".format(get_current_time()))
 with open(align_lib_script, "r") as f:
     logger.add_to_log("align_library.py md5 checksum: {}".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
 
-logger.add_to_log("donor: {}\nSeq run: {}\nlib_ids: {}".format(donor_id, seq_run, lib_ids))
+logger.add_to_log("donor: {}\nSeq run: {}\lib_type: {}\nlib_ids: {}".format(donor_id, seq_run, lib_type, lib_ids))
 logger.add_to_log("using the following configurations:\n{}".format(str(configs)))
 
 logger.add_to_log("Loading metadata from the Google spreadsheet...")
@@ -174,18 +179,17 @@ else:
 logger.add_to_log("detected site_s3_dir = {}".format(site_s3_dir))
 
 logger.add_to_log("Extracting chemistry information...")
-fields = ["GEX lib","GEX chem"]
-if lib_ids[1] != "none":
-    fields.append("CITE chem")
-
-if lib_ids[2] != "none":
-    fields.append("HTO chem")
-
-if lib_ids[3] != "none":
-    fields.append("BCR chem")
-
-if lib_ids[4] != "none":
-    fields.append("TCR chem")
+fields = []
+if lib_type == "GEX":
+    fields.append("GEX lib","GEX chem")
+    if lib_ids[1] != "none":
+        fields.append("CITE chem")
+    if lib_ids[2] != "none":
+        fields.append("HTO chem")
+elif lib_type == "BCR":
+    fields.append("BCR lib","BCR chem")
+elif lib_type == "TCR":
+    fields.append("TCR lib","TCR chem")
 
 libs_chem = samples[fields]
 lib_chems = []
@@ -222,21 +226,25 @@ for lib_id in lib_ids:
                     logger.add_to_log("aws response: {}".format(os.popen(cp_cmd).read()))
 
 logger.add_to_log("Preparing alignment command...")
-GEX_lib = lib_ids[0]
-ADT_lib = None if lib_ids[1] == "none" else lib_ids[1]
-HTO_lib = None if lib_ids[2] == "none" else lib_ids[2]
-BCR_lib = None if lib_ids[3] == "none" else lib_ids[3]
-TCR_lib = None if lib_ids[4] == "none" else lib_ids[4]
-if lib_ids[1] == "none":
-    protein_panel = None
-else:
-    # get protein panel
-    GEX_libs = samples["GEX lib"].values
-    for i in range(len(GEX_libs)):
-        if not pd.isna(GEX_libs[i]) and GEX_lib in GEX_libs[i]:
-            protein_panel = read_immune_aging_sheet(samples["Protein panel"].loc[i])
-            protein_panel = protein_panel[["id", "name", "read", "pattern", "sequence", "feature_type"]]
-            break
+protein_panel = None
+TCR_lib,BCR_lib,GEX_lib,ADT_lib,HTO_lib = None,None,None,None,None
+if lib_type == "GEX":
+    GEX_lib = lib_ids[0]
+    ADT_lib = None if lib_ids[1] == "none" else lib_ids[1]
+    HTO_lib = None if lib_ids[2] == "none" else lib_ids[2]
+    if lib_ids[1] != "none":
+        # get protein panel
+        GEX_libs = samples["GEX lib"].values
+        for i in range(len(GEX_libs)):
+            if not pd.isna(GEX_libs[i]) and GEX_lib in GEX_libs[i]:
+                protein_panel = read_immune_aging_sheet(samples["Protein panel"].loc[i])
+                protein_panel = protein_panel[["id", "name", "read", "pattern", "sequence", "feature_type"]]
+                break
+elif lib_type == "TCR":
+    TCR_lib = lib_ids[0]
+elif lib_type == "BCR":
+    BCR_lib = lib_ids[0]
+
 alignment_cmd, aligned_data_dir, aligner_outputs_to_save = get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib, ADT_lib, HTO_lib, TCR_lib, BCR_lib, protein_panel)
 
 alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
