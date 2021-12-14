@@ -86,15 +86,14 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
         feature_ref_csv_file = os.path.join(data_dir,"feature_ref.csv")
         feature_ref_df.to_csv(feature_ref_csv_file, sep=',', header=True, index=False)
         outputs_to_save.append(feature_ref_csv_file)
-        aligner_cmd = "{0} count --id={1} --libraries={2} --transcriptome={3} --feature-ref={4} --chemistry={5}".format(aligner_software_path,
-                GEX_lib_name, libraries_csv_file, aligner_genome_file, feature_ref_csv_file, chem)
-        #if BCR_lib is None and TCR_lib is None:
-            #aligner_cmd = "{0} count --id={1} --libraries={2} --transcriptome={3} --feature-ref={4} --chemistry={5}".format(aligner_software_path, 
-                #GEX_lib_name, libraries_csv_file, aligner_genome_file, feature_ref_csv_file, chem)
-        #else:
-            # TODO
-            #pass
-    #elif BCR_lib is not None or TCR_lib is None:
+        if BCR_lib is not None or TCR_lib is not None:
+            # prepare config csv file for cellranger multi - see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#config
+            multi_config_csv_file = os.path.join(data_dir,"multi_config.csv")
+            outputs_to_save.append(multi_config_csv_file)
+            aligner_cmd = "{0} multi --id={1} --csv={2}".format(aligner_software_path, GEX_lib_name, multi_config_csv_file)
+        else:
+            aligner_cmd = "{0} count --id={1} --libraries={2} --transcriptome={3} --feature-ref={4} --chemistry={5}".format(aligner_software_path, GEX_lib_name, libraries_csv_file, aligner_genome_file, feature_ref_csv_file, chem)
+    #elif BCR_lib is not None or TCR_lib is not None:
         # TODO
         #pass
     else:
