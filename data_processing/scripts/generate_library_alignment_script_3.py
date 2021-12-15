@@ -33,7 +33,7 @@ for i in range(len(sample_indices)):
 
     def get_feature_lib_if_exists(lib_name: str) -> List[str]:
         if pd.isna(samples[lib_name][sample_indices[i]]):
-            lib = ['none' * (1 + range(len(gex)))]
+            lib = ['none' * len(gex)]
         else:
             lib = samples[lib_name][sample_indices[i]].split(',')
             # TODO Q: This seems to hold empirically but experimentally what
@@ -68,14 +68,14 @@ for r in GEX_runs:
     # name the dir after the GEX lib's name
     # often the same lib (same lib id) is used for GEX, BCR and TCR thus distinguish the lib type in the dir name
     l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r[0],"GEX"))) 
-    l_align_lib.append("python {0}/align_library_3.py {1} {0} {2}".format(code_path, configs_file, ",".join(r)))
+    l_align_lib.append("python {0}/align_library_3.py {1} {0} GEX {2}".format(code_path, configs_file, ",".join(r)))
     l_align_msg.append("echo \"Execution of align_library.py on GEX {} is complete.\"".format(",".join(r)))
 for r in BCR_runs:
-    l_cd_mkdir.append("mkdir -p " + os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r,"BCR")))
+    l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r,"BCR")))
     l_align_lib.append("python {0}/align_library_3.py {1} {0} BCR {2}".format(code_path, configs_file, r))
     l_align_msg.append("echo \"Execution of align_library.py on BCR {} is complete.\"".format(r))
 for r in TCR_runs:
-    l_cd_mkdir.append("mkdir -p " + os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r,"TCR")))
+    l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r,"TCR")))
     l_align_lib.append("python {0}/align_library_3.py {1} {0} TCR {2}".format(code_path, configs_file, r))
     l_align_msg.append("echo \"Execution of align_library.py on TCR {} is complete.\"".format(r))
 

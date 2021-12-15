@@ -86,7 +86,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
             feature_ref_df = pd.DataFrame(feature_ref, columns = ['id', 'name', 'read', 'pattern', 'sequence', 'feature_type'])
             # second, incorporate protein panel if applicable
             if ADT_lib:
-                assert protein_panel
+                assert protein_panel is not None
                 feature_ref_df = pd.concat([feature_ref_df, protein_panel])
             feature_ref_csv_file = os.path.join(data_dir,"feature_ref.csv")
             feature_ref_df.to_csv(feature_ref_csv_file, sep=',', header=True, index=False)
@@ -181,17 +181,16 @@ else:
 logger.add_to_log("detected site_s3_dir = {}".format(site_s3_dir))
 
 logger.add_to_log("Extracting chemistry information...")
-fields = []
 if lib_type == "GEX":
-    fields.append("GEX lib","GEX chem")
+    fields = ["GEX lib","GEX chem"]
     if lib_ids[1] != "none":
         fields.append("CITE chem")
     if lib_ids[2] != "none":
         fields.append("HTO chem")
 elif lib_type == "BCR":
-    fields.append("BCR lib","BCR chem")
-elif lib_type == "TCR":
-    fields.append("TCR lib","TCR chem")
+    fields = ["BCR lib","BCR chem"]
+else:
+    fields = ["TCR lib","TCR chem"]
 
 libs_chem = samples[fields]
 lib_chems = []
