@@ -98,9 +98,13 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
     elif TCR_lib:
         TCR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib])
         aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, TCR_lib_name, os.path.join(data_dir_fastq, TCR_lib), aligner_vdj_file, TCR_lib_name)
+        outputs_to_save = [] # TODO add some stuff to this maybe
+        aligned_data_dir = os.path.join(data_dir, TCR_lib_name, "outs/filtered_feature_bc_matrix/")
     elif BCR_lib:
         BCR_lib_name = "_".join([donor_id, seq_run, "BCR", BCR_lib])
         aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, BCR_lib_name, os.path.join(data_dir_fastq, BCR_lib), aligner_vdj_file, BCR_lib_name)
+        outputs_to_save = [] # TODO add some stuff to this maybe
+        aligned_data_dir = os.path.join(data_dir, BCR_lib_name,"outs/filtered_feature_bc_matrix/")
 
     return (aligner_cmd, aligned_data_dir, outputs_to_save)
 
