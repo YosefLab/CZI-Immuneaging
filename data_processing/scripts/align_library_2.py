@@ -252,15 +252,16 @@ else:
     alignment_output = os.popen(alignment_cmd).read()
     alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
     if not alignment_exists:
-        # remove the output directory, which is required in order to prevent errors in a following execution of cellranger		
-        os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
         if "We detected an unsupported chemistry combination (SC5P-R2, SC5P-PE)" in alignment_output:
             logger.add_to_log("Alignment failed due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).", level="error")
             logger.add_to_log("Rerunning after changing chemistry argument...")
-            alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
-            logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
-            logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
-            alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
+            # TODO uncomment the below
+            # remove the output directory, which is required in order to prevent errors in a following execution of cellranger              
+            #os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
+            #alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
+            #logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
+            #logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
+            #alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
         else:
             logger.add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output), level="error")
 
