@@ -37,7 +37,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
         assert GEX_lib is None and ADT_lib is None and HTO_lib is None
         if TCR_lib:
             assert BCR_lib is None
-        else:
+        if BCR_lib:
             assert TCR_lib is None
     if GEX_lib is not None:
         GEX_lib_name = "_".join([donor_id, seq_run, "GEX", GEX_lib])
@@ -95,16 +95,23 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
         else:
             # GEX with no hashtags or ADT
             aligner_cmd = "{} count --id={} --transcriptome={} --fastqs={} --chemistry={}".format(aligner_software_path, GEX_lib_name, aligner_genome_file, os.path.join(data_dir_fastq, GEX_lib), chem)
-    elif TCR_lib:
-        TCR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib])
-        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, TCR_lib_name, os.path.join(data_dir_fastq, TCR_lib), aligner_vdj_file, TCR_lib_name)
-        outputs_to_save = [] # TODO add some stuff to this maybe
-        aligned_data_dir = os.path.join(data_dir, TCR_lib_name, "outs/filtered_feature_bc_matrix/")
-    elif BCR_lib:
-        BCR_lib_name = "_".join([donor_id, seq_run, "BCR", BCR_lib])
-        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, BCR_lib_name, os.path.join(data_dir_fastq, BCR_lib), aligner_vdj_file, BCR_lib_name)
-        outputs_to_save = [] # TODO add some stuff to this maybe
-        aligned_data_dir = os.path.join(data_dir, BCR_lib_name,"outs/filtered_feature_bc_matrix/")
+    else:
+        # if we are here we have either TCR_lib or BCR_lib exclusive
+        assert (TCR_lib is not None) ^ (BCR_lib is not None)
+        IR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib]) if TCR_lib else "_".join([donor_id, seq_run, "BCR", BCR_lib])
+        outputs_to_save = [
+            os.path.join(data_dir,IR_lib_name,"outs/web_summary.html"),
+            os.path.join(data_dir,IR_lib_name,"outs/metrics_summary.csv"),
+            os.path.join(data_dir,IR_lib_name,"outs/vloupe.vloupe"),
+            os.path.join(data_dir,IR_lib_name,"outs/filtered_contig.fasta"),
+            os.path.join(data_dir,IR_lib_name,"outs/filtered_contig_annotations.csv"),
+            os.path.join(data_dir,IR_lib_name,"outs/all_contig.fasta"),
+            os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.csv"),
+            os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.json"),
+            os.path.join(data_dir,IR_lib_name,"outs/airr_rearrangement.tsv"),
+        ]
+        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, IR_lib_name, os.path.join(data_dir_fastq, IR_lib_name), aligner_vdj_file, IR_lib_name)
+        aligned_data_dir = os.path.join(data_dir, IR_lib_name, "outs/")
 
     return (aligner_cmd, aligned_data_dir, outputs_to_save)
 
@@ -262,13 +269,12 @@ else:
         if "We detected an unsupported chemistry combination (SC5P-R2, SC5P-PE)" in alignment_output:
             logger.add_to_log("Alignment failed due to: an unsupported chemistry combination (SC5P-R2, SC5P-PE).", level="error")
             logger.add_to_log("Rerunning after changing chemistry argument...")
-            # TODO uncomment the below
-            # remove the output directory, which is required in order to prevent errors in a following execution of cellranger              
-            #os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
-            #alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
-            #logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
-            #logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
-            #alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
+            # remove the output directory, which is required in order to prevent errors in a following execution of cellranger
+            os.system("rm -r {}".format(os.path.join(data_dir, prefix)))
+            alignment_cmd = alignment_cmd[0:alignment_cmd.index("--chemistry=")] + "--chemistry=SC5P-R2"
+            logger.add_to_log("alignment_cmd:\n{}".format(alignment_cmd))
+            logger.add_to_log("Output from aligner:\n" + os.popen(alignment_cmd).read())
+            alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
         else:
             logger.add_to_log("Alignment failed. Alignment output:\n{}".format(alignment_output), level="error")
 
@@ -291,17 +297,18 @@ for out in aligner_outputs_to_save:
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
 
-logger.add_to_log("Converting aligned data to h5ad...")
-adata = sc.read_10x_mtx(aligned_data_dir, gex_only = False)
-logger.add_to_log("Saving file as {}...".format(os.path.join(data_dir, h5ad_file)))
-adata.write(os.path.join(data_dir, h5ad_file), compression="lzf")
+if lib_type == "GEX":
+    logger.add_to_log("Converting aligned data to h5ad...")
+    adata = sc.read_10x_mtx(aligned_data_dir, gex_only = False)
+    logger.add_to_log("Saving file as {}...".format(os.path.join(data_dir, h5ad_file)))
+    adata.write(os.path.join(data_dir, h5ad_file), compression="lzf")
 
-logger.add_to_log("Uploading h5ad file to S3...")
-sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, h5ad_file)
-logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
+    logger.add_to_log("Uploading h5ad file to S3...")
+    sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, h5ad_file)
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}".format(os.popen(sync_cmd).read()))
 
-msg = "Done aligning library {}".format(GEX_lib)
+msg = "Done aligning library {}".format(lib_ids[0])
 logger.add_to_log(msg)
 print(msg)
 
