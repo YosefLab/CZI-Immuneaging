@@ -47,18 +47,19 @@ for i in range(len(sample_indices)):
     for j in range(len(gex)):
         r = (gex[j], adt[j], hto[j])
         if r not in GEX_runs:
+            # TEST below TODO remove
+            for j in GEX_runs:
+                assert j[0] != gex[j]
+            # TEST above TODO remove
             GEX_runs.append(r)
 
     if not pd.isna(samples["BCR lib"][sample_indices[i]]):
         bcr = samples["BCR lib"][sample_indices[i]].split(',')
-        for j in bcr:
-            if j not in BCR_runs:
-                BCR_runs.append(j)
+        BCR_runs = np.unique(bcr)
     if not pd.isna(samples["TCR lib"][sample_indices[i]]):
         tcr = samples["TCR lib"][sample_indices[i]].split(',')
-        for j in tcr:
-            if j not in TCR_runs:
-                TCR_runs.append(j)
+        TCR_runs = np.unique(tcr)
+    assert len(BCR_runs) == len(TCR_runs) and len(TCR_runs) == len(gex)
 
 l_cd_mkdir = []
 l_align_lib = []

@@ -23,16 +23,32 @@ sys.path.append(code_path)
 from utils import *
 
 samples = read_immune_aging_sheet("Samples")
-indices = samples["Donor ID"] == donor_id
+indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))
 
 if config_type in ["library", "all"]:
-    # create config files for library processing
-    library_ids = set()
-    for i in samples[indices]["GEX lib"]:
-        for j in i.split(","):
-            library_ids.add(j)
+    # Traverse the set of triplets (gex,bcr,tcr) across all samples and ensure that they are all
+    # different element-wise (i.e. for two given triplets (gex,bcr,tcr) and (gex',bcr',tcr'), we
+    # have gex!=gex' and bcr!=bcr' and tcr!=tcr'). If this holds for all triplets across all samples
+    # then we can assert that the three libs gex, bcr and tcr must have the same number of cells.
+    triplets = []
+    for sample in samples[indices]:
+        gex = sample["GEX lib"].split(",")
+        assert len(gex) > 0 # all samples must have a GEX lib (at least one)
+        bcr = ['none' * len(gex)] if pd.isna(samples["BCR lib"]) else samples["BCR lib"].split(',')
+        tcr = ['none' * len(gex)] if pd.isna(samples["TCR lib"]) else samples["TCR lib"].split(',')
+        assert len(bcr) == len(tcr) and len(tcr) == len(gex)
+        for j in range(len(gex)):
+            elem = (gex[j], bcr[j], tcr[j])
+            for t in triplets:
+                if elem != t:
+                    # if the two triplets are different, then we need each member of them to
+                    # be different (at each index 0,1,2)
+                    assert elem[0] != t[0]
+                    assert elem[1] != t[1] or elem[1] == "none"
+                    assert elem[2] != t[2] or elem[2] == "none"
 
-    for library_id in library_ids:
+    # create config files for library processing
+    for t in triplets:
         lib_configs = {
             "sandbox_mode": "False",
             "data_owner": "erahmani",
@@ -41,8 +57,8 @@ if config_type in ["library", "all"]:
             "s3_access_file": "./",
             "donor": donor_id,
             "seq_run": seq_run,
-            "library_type": "GEX",
-            "library_id": library_id,
+            "library_type": "GEX", # this is obsolete and unnecessary but we keep it for compatibility
+            "library_id": ",".join(t), # gex_lib_id,bcr_lib_id,tcr_lib_id 
             "filter_cells_min_genes": 200,
             "filter_genes_min_cells": 0,
             "filter_cells_max_pct_counts_mt": 20,
@@ -51,12 +67,13 @@ if config_type in ["library", "all"]:
             "exclude_mito_genes": "True",
             "hashsolo_priors": "0.01,0.8,0.19",
             "hashsolo_number_of_noise_barcodes": 2,
-            "aligned_library_configs_version": "v1",
+            "aligned_library_configs_version": "v1,v1,v1", # same for all three lib types
             "python_env_version": "immune_aging.py_env.v3",
             "r_setup_version": "immune_aging.R_setup.v2"
         }
-        filename = os.path.join(output_destination,
-            "process_library.{}.{}.{}.configs.txt".format(donor_id,seq_run,library_id))
+        # Keep the GEX lib id in the file name. Eventually one h5ad file will remain
+        # which will encapsulate all GEX, VDJ and CITE information
+        filename = os.path.join(output_destination, "process_library.{}.{}.{}.configs.txt".format(donor_id,seq_run,t[0]))
         with open(filename, 'w') as f:
             json.dump(lib_configs, f)
 
