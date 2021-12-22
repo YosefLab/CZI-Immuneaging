@@ -31,11 +31,11 @@ if config_type in ["library", "all"]:
     # have gex!=gex' and bcr!=bcr' and tcr!=tcr'). If this holds for all triplets across all samples
     # then we can assert that the three libs gex, bcr and tcr must have the same number of cells.
     triplets = []
-    for sample in samples[indices]:
+    for _,sample in samples[indices].iterrows():
         gex = sample["GEX lib"].split(",")
         assert len(gex) > 0 # all samples must have a GEX lib (at least one)
-        bcr = ['none' * len(gex)] if pd.isna(samples["BCR lib"]) else samples["BCR lib"].split(',')
-        tcr = ['none' * len(gex)] if pd.isna(samples["TCR lib"]) else samples["TCR lib"].split(',')
+        bcr = ['none' * len(gex)] if pd.isna(sample["BCR lib"]) else sample["BCR lib"].split(',')
+        tcr = ['none' * len(gex)] if pd.isna(sample["TCR lib"]) else sample["TCR lib"].split(',')
         assert len(bcr) == len(tcr) and len(tcr) == len(gex)
         for j in range(len(gex)):
             elem = (gex[j], bcr[j], tcr[j])
@@ -46,6 +46,9 @@ if config_type in ["library", "all"]:
                     assert elem[0] != t[0]
                     assert elem[1] != t[1] or elem[1] == "none"
                     assert elem[2] != t[2] or elem[2] == "none"
+            triplets.append(elem)
+
+    print("*** " + str(len(triplets)))
 
     # create config files for library processing
     for t in triplets:

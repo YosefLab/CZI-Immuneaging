@@ -48,8 +48,8 @@ for i in range(len(sample_indices)):
         r = (gex[j], adt[j], hto[j])
         if r not in GEX_runs:
             # TEST below TODO remove
-            for j in GEX_runs:
-                assert j[0] != gex[j]
+            for p in GEX_runs:
+                assert p[0] != gex[j]
             # TEST above TODO remove
             GEX_runs.append(r)
 
