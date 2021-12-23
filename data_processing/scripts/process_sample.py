@@ -32,7 +32,6 @@ output_destination = configs["output_destination"]
 donor = configs["donor"]
 seq_run = configs["seq_run"]
 sample_id = configs["sample_id"]
-library_type = configs["library_type"]
 
 sys.path.append(configs["code_path"])
 
@@ -79,7 +78,7 @@ data_dir = os.path.join(output_destination, "_".join([donor, seq_run]))
 os.system("mkdir -p " + data_dir)
 
 # check for previous versions of the processed sample
-prefix = "{}_{}".format(sample_id, library_type)
+prefix = "{}_{}".format(sample_id)
 s3_path = "s3://immuneaging/processed_samples/" + prefix
 is_new_version, version = get_configs_status(configs, s3_path, "process_sample.configs." + prefix,
     VARIABLE_CONFIG_KEYS, data_dir)
@@ -89,7 +88,7 @@ output_configs_file = "process_sample.configs.{}.{}.txt".format(prefix,version)
 logger_file = "process_sample.{}.{}.log".format(prefix,version)
 logger_file_path = os.path.join(data_dir, logger_file)
 if os.path.isfile(logger_file_path):
-	os.remove(logger_file_path)
+    os.remove(logger_file_path)
 
 logger = SimpleLogger(filename = logger_file_path)
 logger.add_to_log("Running process_sample.py...")
@@ -131,8 +130,9 @@ else:
     if not h5ad_file_exists:
         logger.add_to_log("The following h5ad file does not exist on S3: {}".format(h5ad_file))
 
-library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
+library_types = configs["library_types"].split(',')
+library_versions = configs["processed_library_configs_version"].split(',')
 if ("processed_libraries_dir" in configs) and (len(configs.get("processed_libraries_dir")) > 0):
     processed_libraries_dir = configs["processed_libraries_dir"]
     logger.add_to_log("Copying h5ad files of processed libraries from {}...".format(processed_libraries_dir))
@@ -143,6 +143,7 @@ else:
     logger.add_to_log("*** Note: This can take some time. If you already have the processed libraries, you can halt this process and provide processed_libraries_dir in the config file in order to use your existing h5ad files. ***")   
     for j in range(len(library_ids)):
         library_id = library_ids[j]
+        library_type = library_types[j]
         library_version = library_versions[j]
         lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version)
@@ -163,13 +164,16 @@ samples = read_immune_aging_sheet("Samples")
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
 
-logger.add_to_log("Reading h5ad files of processed libraries...")
+logger.add_to_log("Reading h5ad files of processed libraries for GEX libs...")
 adata_dict = {}
 initial_n_obs = 0
 solo_genes = set()
 library_ids_keep = []
 for j in range(len(library_ids)):
+    if library_types[j] != "GEX":
+        continue
     library_id = library_ids[j]
+    library_type = library_types[j]
     library_version = library_versions[j]
     lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
         library_type, library_id, library_version))
@@ -193,9 +197,7 @@ for j in range(len(library_ids)):
     else:
         solo_genes = np.intersect1d(solo_genes,solo_genes_j)
 
-library_ids = library_ids_keep
-
-if len(library_ids)==0:
+if len(library_ids_keep)==0:
     logger.add_to_log("No cells passed the filtering steps. Terminating execution.", "error")
     logging.shutdown()
     if not sandbox_mode:
@@ -205,10 +207,33 @@ if len(library_ids)==0:
         os.system(sync_cmd)
     sys.exit()
 
-logger.add_to_log("Concatenating all cells of sample {} from available libraries...".format(sample_id))
-adata = adata_dict[library_ids[0]]
-if len(library_ids) > 1:
-    adata = adata.concatenate([adata_dict[library_ids[j]] for j in range(1,len(library_ids))])
+logger.add_to_log("Concatenating all cells of sample {} from available GEX libraries...".format(sample_id))
+adata = adata_dict[library_ids_keep[0]]
+if len(library_ids_keep) > 1:
+    adata = adata.concatenate([adata_dict[library_ids_keep[j]] for j in range(1,len(library_ids_keep))])
+
+logger.add_to_log("Reading h5ad files of processed libraries for BCR libs...")
+adata_dict = {}
+library_ids_keep = []
+for j in range(len(library_ids)):
+    if library_types[j] != "BCR":
+        continue
+    library_id = library_ids[j]
+    library_type = library_types[j]
+    library_version = library_versions[j]
+    lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
+        library_type, library_id, library_version))
+    adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
+    adata_dict[library_id].obs["library_id"] = library_id
+    library_ids_keep.append(library_id)
+
+logger.add_to_log("Concatenating all cells of sample {} from available BCR libraries...".format(sample_id))
+adata_bcr = adata_dict[library_ids_keep[0]]
+if len(library_ids_keep) > 1:
+    adata_bcr = adata_bcr.concatenate([adata_dict[library_ids_keep[j]] for j in range(1,len(library_ids_keep))])
+
+# TODO tcr
+# TODO merge adata_gex with adata_bcr then the result with adata_tcr (can I merge back to back btw or will obs be overwritten?)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 summary.append("Started with a total of {} cells and {} genes coming from {} libraries.".format(

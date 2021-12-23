@@ -183,8 +183,8 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Applying basic filters and chain QC using scirpy...")
     ir.tl.chain_qc()
     # filter out cells that are multichain or ambiguous as these likely represent doublets
-    # plus, filter our "orphan chain" cells and cells that don't have immune receptors (no_ir)
-    # (Note: These cells can also be matched to clonotypes on a single chain only, by
+    # plus, filter our "orphan chain" cells
+    # (Note: Orphan chain cells can also be matched to clonotypes on a single chain only, by
     # using receptor_arms=”any” when running scirpy.tl.define_clonotypes(). TODO should we do this?)
     n_cells_before = adata.n_obs
     n_multichain_cells = sum(adata.obs["multi_chain"] == "True")
@@ -193,15 +193,11 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     n_ambiguous_cells_pct = (n_ambiguous_cells/adata.n_obs) * 100
     n_orphan_cells = sum(adata.obs["chain_pairing"] == "orphan VJ" | adata.obs["chain_pairing"] == "orphan VDJ")
     n_orphan_cells_pct = (n_orphan_cells/adata.n_obs) * 100
-    n_no_ir_cells = sum(adata.obs["chain_pairing"] == "no IR")
-    n_no_ir_cells_pct = (n_no_ir_cells/adata.n_obs) * 100
     # TODO should we also filter out "single pair" and "extra V(D}J" cells?
-    indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous") & (adata.obs["chain_pairing"] != "orphan VJ") & (adata.obs["chain_pairing"] != "orphan VDJ") & (adata.obs["chain_pairing"] != "no IR")
+    indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous") & (adata.obs["chain_pairing"] != "orphan VJ") & (adata.obs["chain_pairing"] != "orphan VDJ")
     adata = adata[indices].copy()
     logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%), and ambiguous cells (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct, n_ambiguous_cells, n_ambiguous_cells_pct))
     logger.add_to_log("Removed orphan V(D)J cells (individual count and percentage: {}, {:.2f}%).".format(n_orphan_cells, n_orphan_cells_pct))
-    level = "info" if n_no_ir_cells == 0 else "warning"
-    logger.add_to_log("Removed no IR cells (individual count and percentage: {}, {:.2f}%).".format(n_no_ir_cells, n_no_ir_cells_pct), level = level)
     logger.add_to_log("Original cell count: {}, cell count after all the filtering: {}.".format(n_cells_before, adata.n_obs))
 
     logger.add_to_log("Validate that there are no no-IR cells, and that cell receptor_type matches the lib type")

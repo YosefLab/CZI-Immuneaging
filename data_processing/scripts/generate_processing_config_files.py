@@ -12,6 +12,7 @@
 import sys
 import os
 import json
+from typing import List
 
 config_type = sys.argv[1]
 code_path = sys.argv[2]
@@ -27,8 +28,7 @@ indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_r
 
 if config_type in ["library", "all"]:
     # create config files for library processing
-    all_libs = set()
-    def add_all_libs(lib_type: str) -> None:
+    def add_lib(lib_type: str, all_libs: set) -> None:
         column_name = "{} lib".format(lib_type)
         for i in samples[indices][column_name]:
             for j in i.split(","):
@@ -36,9 +36,10 @@ if config_type in ["library", "all"]:
                 lib_version = "v1" if lib_type == "GEX" else "v3"
                 all_libs.add((j,lib_type,lib_version))
 
-    add_all_libs("GEX")
-    add_all_libs("BCR")
-    add_all_libs("TCR")
+    all_libs = set()
+    add_lib("GEX", all_libs)
+    add_lib("BCR", all_libs)
+    add_lib("TCR", all_libs)
 
     for lib in all_libs:
         lib_id = lib[0]
@@ -77,9 +78,21 @@ if config_type in ["sample", "all"]:
     organs = samples[indices]["Organ"]
     for i in range(len(sample_ids)):
         sample_id = sample_ids.iloc[i]
-        library_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["GEX lib"].iloc[0].split(",")]
         is_jejunum = organs.iloc[i] in ["JEJ", "JEJEPI", "JEJLP"]
-        processed_library_configs_version = ["v1" * len(library_ids)]
+
+        def add_libs(lib_type: str, all_libs: List, all_lib_types: List, all_lib_versions: List) -> None:
+            lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
+            all_libs += lib_ids
+            all_lib_types += [lib_type * len(lib_ids)]
+            # TODO remove this once we are done experimenting with BCR/TCR and put everything in v1 (or v2)
+            lib_version = "v1" if lib_type == "GEX" else "v3"
+            all_lib_versions += [lib_version * len(lib_ids)]
+
+        all_libs = []
+        all_lib_types = []
+        all_lib_versions = []
+        add_libs("GEX", all_libs, all_lib_types, all_lib_versions)
+
         sample_configs = {
             "sandbox_mode": "False",
             "data_owner": "valehvpa",
@@ -89,10 +102,10 @@ if config_type in ["sample", "all"]:
             "processed_libraries_dir": "",
             "donor": donor_id,
             "seq_run": seq_run,
-            "library_type": "GEX",
             "sample_id": sample_id,
-            "library_ids": ",".join(library_ids),
-            "processed_library_configs_version": ",".join(processed_library_configs_version),
+            "library_ids": ",".join(all_libs),
+            "library_types": ",".join(all_lib_types),
+            "processed_library_configs_version": ",".join(all_lib_versions),
             "min_cells_per_library": 50 if is_jejunum else 200, # jejunum samples are generally less enriched as they are less available to sequence
             "filter_decontaminated_cells_min_genes": 100,
             "normalize_total_target_sum": 10000,
