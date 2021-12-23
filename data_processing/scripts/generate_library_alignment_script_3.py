@@ -36,9 +36,6 @@ for i in range(len(sample_indices)):
             lib = ['none' * len(gex)]
         else:
             lib = samples[lib_name][sample_indices[i]].split(',')
-            # TODO Q: This seems to hold empirically but experimentally what
-            # guarantees that the number of adt and hto libs is the same as
-            # the number of gex libs?
             assert len(lib) == len(gex)
         return lib
 
@@ -47,10 +44,6 @@ for i in range(len(sample_indices)):
     for j in range(len(gex)):
         r = (gex[j], adt[j], hto[j])
         if r not in GEX_runs:
-            # TEST below TODO remove
-            for p in GEX_runs:
-                assert p[0] != gex[j]
-            # TEST above TODO remove
             GEX_runs.append(r)
 
     if not pd.isna(samples["BCR lib"][sample_indices[i]]):

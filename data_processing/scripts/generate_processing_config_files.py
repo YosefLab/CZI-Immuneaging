@@ -26,32 +26,24 @@ samples = read_immune_aging_sheet("Samples")
 indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))
 
 if config_type in ["library", "all"]:
-    # Traverse the set of triplets (gex,bcr,tcr) across all samples and ensure that they are all
-    # different element-wise (i.e. for two given triplets (gex,bcr,tcr) and (gex',bcr',tcr'), we
-    # have gex!=gex' and bcr!=bcr' and tcr!=tcr'). If this holds for all triplets across all samples
-    # then we can assert that the three libs gex, bcr and tcr must have the same number of cells.
-    triplets = []
-    for _,sample in samples[indices].iterrows():
-        gex = sample["GEX lib"].split(",")
-        assert len(gex) > 0 # all samples must have a GEX lib (at least one)
-        bcr = ['none' * len(gex)] if pd.isna(sample["BCR lib"]) else sample["BCR lib"].split(',')
-        tcr = ['none' * len(gex)] if pd.isna(sample["TCR lib"]) else sample["TCR lib"].split(',')
-        assert len(bcr) == len(tcr) and len(tcr) == len(gex)
-        for j in range(len(gex)):
-            elem = (gex[j], bcr[j], tcr[j])
-            for t in triplets:
-                if elem != t:
-                    # if the two triplets are different, then we need each member of them to
-                    # be different (at each index 0,1,2)
-                    assert elem[0] != t[0]
-                    assert elem[1] != t[1] or elem[1] == "none"
-                    assert elem[2] != t[2] or elem[2] == "none"
-            triplets.append(elem)
-
-    print("*** " + str(len(triplets)))
-
     # create config files for library processing
-    for t in triplets:
+    all_libs = set()
+    def add_all_libs(lib_type: str) -> None:
+        column_name = "{} lib".format(lib_type)
+        for i in samples[indices][column_name]:
+            for j in i.split(","):
+                # TODO remove this once we are done experimenting with BCR/TCR and put everything in v1 (or v2)
+                lib_version = "v1" if lib_type == "GEX" else "v3"
+                all_libs.add((j,lib_type,lib_version))
+
+    add_all_libs("GEX")
+    add_all_libs("BCR")
+    add_all_libs("TCR")
+
+    for lib in all_libs:
+        lib_id = lib[0]
+        lib_type = lib[1]
+        lib_version = lib[2]
         lib_configs = {
             "sandbox_mode": "False",
             "data_owner": "erahmani",
@@ -60,8 +52,8 @@ if config_type in ["library", "all"]:
             "s3_access_file": "./",
             "donor": donor_id,
             "seq_run": seq_run,
-            "library_type": "GEX", # this is obsolete and unnecessary but we keep it for compatibility
-            "library_id": ",".join(t), # gex_lib_id,bcr_lib_id,tcr_lib_id 
+            "library_type": lib_type,
+            "library_id": lib_id,
             "filter_cells_min_genes": 200,
             "filter_genes_min_cells": 0,
             "filter_cells_max_pct_counts_mt": 20,
@@ -70,13 +62,12 @@ if config_type in ["library", "all"]:
             "exclude_mito_genes": "True",
             "hashsolo_priors": "0.01,0.8,0.19",
             "hashsolo_number_of_noise_barcodes": 2,
-            "aligned_library_configs_version": "v1,v1,v1", # same for all three lib types
+            "aligned_library_configs_version": lib_version,
             "python_env_version": "immune_aging.py_env.v3",
             "r_setup_version": "immune_aging.R_setup.v2"
         }
-        # Keep the GEX lib id in the file name. Eventually one h5ad file will remain
-        # which will encapsulate all GEX, VDJ and CITE information
-        filename = os.path.join(output_destination, "process_library.{}.{}.{}.configs.txt".format(donor_id,seq_run,t[0]))
+        filename = os.path.join(output_destination,
+            "process_library.{}.{}.{}.{}.configs.txt".format(donor_id,seq_run,lib_id, lib_type))
         with open(filename, 'w') as f:
             json.dump(lib_configs, f)
 
@@ -88,7 +79,7 @@ if config_type in ["sample", "all"]:
         sample_id = sample_ids.iloc[i]
         library_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["GEX lib"].iloc[0].split(",")]
         is_jejunum = organs.iloc[i] in ["JEJ", "JEJEPI", "JEJLP"]
-        processed_library_configs_version = ["v1" for i in range(len(library_ids))]
+        processed_library_configs_version = ["v1" * len(library_ids)]
         sample_configs = {
             "sandbox_mode": "False",
             "data_owner": "valehvpa",

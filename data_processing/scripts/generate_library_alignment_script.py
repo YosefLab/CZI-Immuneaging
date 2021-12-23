@@ -45,8 +45,6 @@ for i in range(len(sample_indices)):
     else:
         hto = samples["HTO lib"][sample_indices[i]].split(',')
     for j in range(len(gex)):
-        # TODO Q: What guarantees that the number of adt and hto libs
-        # is the same as the number of gex libs?
         r = (gex[j], adt[j], hto[j])
         if r not in GEX_runs:
             GEX_runs.append(r)
