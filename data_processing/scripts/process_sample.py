@@ -78,7 +78,7 @@ data_dir = os.path.join(output_destination, "_".join([donor, seq_run]))
 os.system("mkdir -p " + data_dir)
 
 # check for previous versions of the processed sample
-prefix = "{}_{}".format(sample_id)
+prefix = sample_id
 s3_path = "s3://immuneaging/processed_samples/" + prefix
 is_new_version, version = get_configs_status(configs, s3_path, "process_sample.configs." + prefix,
     VARIABLE_CONFIG_KEYS, data_dir)
@@ -168,7 +168,7 @@ logger.add_to_log("Reading h5ad files of processed libraries for GEX libs...")
 adata_dict = {}
 initial_n_obs = 0
 solo_genes = set()
-library_ids_keep = []
+library_ids_gex = []
 for j in range(len(library_ids)):
     if library_types[j] != "GEX":
         continue
@@ -188,16 +188,16 @@ for j in range(len(library_ids)):
             logger.add_to_log(msg, "warning")
             del adata_dict[library_id]
             continue
-    library_ids_keep.append(library_id)
+    library_ids_gex.append(library_id)
     solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
     solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]
-    initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
+    initial_n_obs += adata_dict[library_id].n_obs
     if len(solo_genes)==0:
         solo_genes = solo_genes_j
     else:
         solo_genes = np.intersect1d(solo_genes,solo_genes_j)
 
-if len(library_ids_keep)==0:
+if len(library_ids_gex)==0:
     logger.add_to_log("No cells passed the filtering steps. Terminating execution.", "error")
     logging.shutdown()
     if not sandbox_mode:
@@ -207,33 +207,44 @@ if len(library_ids_keep)==0:
         os.system(sync_cmd)
     sys.exit()
 
+# TODO make sure concatenation doesn't produce a "batch" column that would cause issues downstream
+
 logger.add_to_log("Concatenating all cells of sample {} from available GEX libraries...".format(sample_id))
-adata = adata_dict[library_ids_keep[0]]
-if len(library_ids_keep) > 1:
-    adata = adata.concatenate([adata_dict[library_ids_keep[j]] for j in range(1,len(library_ids_keep))])
+adata_gex = adata_dict[library_ids_gex[0]]
+if len(library_ids_gex) > 1:
+    adata_gex = adata_gex.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
 
-logger.add_to_log("Reading h5ad files of processed libraries for BCR libs...")
-adata_dict = {}
-library_ids_keep = []
-for j in range(len(library_ids)):
-    if library_types[j] != "BCR":
-        continue
-    library_id = library_ids[j]
-    library_type = library_types[j]
-    library_version = library_versions[j]
-    lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
-        library_type, library_id, library_version))
-    adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
-    adata_dict[library_id].obs["library_id"] = library_id
-    library_ids_keep.append(library_id)
+def build_adata_from_ir_libs(lib_type: str) -> AnnData:
+    assert lib_type in ["BCR", "TCR"]
+    logger.add_to_log("Reading h5ad files of processed libraries for {} libs...".format(lib_type))
+    adata_dict = {}
+    library_ids_ir = []
+    for j in range(len(library_ids)):
+        if library_types[j] != lib_type:
+            continue
+        library_id = library_ids[j]
+        library_type = library_types[j]
+        library_version = library_versions[j]
+        lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
+            library_type, library_id, library_version))
+        adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
+        adata_dict[library_id].obs["library_id"] = library_id
+        library_ids_ir.append(library_id)
 
-logger.add_to_log("Concatenating all cells of sample {} from available BCR libraries...".format(sample_id))
-adata_bcr = adata_dict[library_ids_keep[0]]
-if len(library_ids_keep) > 1:
-    adata_bcr = adata_bcr.concatenate([adata_dict[library_ids_keep[j]] for j in range(1,len(library_ids_keep))])
+    logger.add_to_log("Concatenating all cells of sample {} from available {} libraries...".format(sample_id, lib_type))
+    adata = adata_dict[library_ids_ir[0]]
+    if len(library_ids_ir) > 1:
+        adata = adata.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))])
+    return adata
 
-# TODO tcr
-# TODO merge adata_gex with adata_bcr then the result with adata_tcr (can I merge back to back btw or will obs be overwritten?)
+adata_bcr = build_adata_from_ir_libs("BCR")
+adata_tcr = build_adata_from_ir_libs("TCR")
+
+# in theory, adata_bcr and adata_tcr could have different number of cells. Keep the one that has the most
+adata_ir = adata_bcr.copy() if adata_bcr.n_obs > adata_tcr.n_obs else adata_tcr.copy()
+
+# TODO for each obs in adata_ir, append its info from the counterpart adata (bcr or tcr)
+# TODO merge adata_ir with adata_gex
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 summary.append("Started with a total of {} cells and {} genes coming from {} libraries.".format(

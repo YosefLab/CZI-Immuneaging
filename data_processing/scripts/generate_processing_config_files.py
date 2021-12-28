@@ -92,6 +92,8 @@ if config_type in ["sample", "all"]:
         all_lib_types = []
         all_lib_versions = []
         add_libs("GEX", all_libs, all_lib_types, all_lib_versions)
+        add_libs("BCR", all_libs, all_lib_types, all_lib_versions)
+        add_libs("TCR", all_libs, all_lib_types, all_lib_versions)
 
         sample_configs = {
             "sandbox_mode": "False",
