@@ -46,12 +46,16 @@ for i in range(len(sample_indices)):
         if r not in GEX_runs:
             GEX_runs.append(r)
 
-    if not pd.isna(samples["BCR lib"][sample_indices[i]]):
-        bcr = samples["BCR lib"][sample_indices[i]].split(',')
-        BCR_runs = np.unique(bcr)
-    if not pd.isna(samples["TCR lib"][sample_indices[i]]):
-        tcr = samples["TCR lib"][sample_indices[i]].split(',')
-        TCR_runs = np.unique(tcr)
+    def get_bcr_tcr_libs(lib_type: str, lib_runs: List[str]) -> None:
+        assert lib_type in ["BCR", "TCR"]
+        if not pd.isna(samples["{} lib".format(lib_type)][sample_indices[i]]):
+            libs = samples["{} lib".format(lib_type)][sample_indices[i]].split(',')
+            for l in libs:
+                if l not in lib_runs:
+                    lib_runs.append(r)
+
+    get_bcr_tcr_libs("BCR", BCR_runs)
+    get_bcr_tcr_libs("TCR", TCR_runs)
     assert len(BCR_runs) == len(TCR_runs) and len(TCR_runs) == len(gex)
 
 l_cd_mkdir = []

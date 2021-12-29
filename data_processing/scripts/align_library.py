@@ -26,7 +26,7 @@ VARIABLE_CONFIG_KEYS = ["donor",
 "alignment_ref_genome_path",
 "berkeley_user",
 "s3_access_file",
-"code_path"]
+]
 
 def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
     assert aligner == "cellranger" # no other option is currently implemented
