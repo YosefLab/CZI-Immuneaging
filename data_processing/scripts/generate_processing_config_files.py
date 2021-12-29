@@ -47,7 +47,7 @@ if config_type in ["library", "all"]:
         lib_version = lib[2]
         lib_configs = {
             "sandbox_mode": "False",
-            "data_owner": "erahmani",
+            "data_owner": "valehvpa",
             "code_path": "./",
             "output_destination": "./",
             "s3_access_file": "./",
