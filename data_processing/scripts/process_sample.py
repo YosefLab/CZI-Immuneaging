@@ -15,6 +15,7 @@ import hashlib
 import celltypist
 import urllib.request
 import traceback
+import scirpy as ir
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -210,9 +211,9 @@ if len(library_ids_gex)==0:
 # TODO make sure concatenation doesn't produce a "batch" column that would cause issues downstream
 
 logger.add_to_log("Concatenating all cells of sample {} from available GEX libraries...".format(sample_id))
-adata_gex = adata_dict[library_ids_gex[0]]
+adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
-    adata_gex = adata_gex.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
+    adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
 
 def build_adata_from_ir_libs(lib_type: str) -> AnnData:
     assert lib_type in ["BCR", "TCR"]
@@ -240,11 +241,10 @@ def build_adata_from_ir_libs(lib_type: str) -> AnnData:
 adata_bcr = build_adata_from_ir_libs("BCR")
 adata_tcr = build_adata_from_ir_libs("TCR")
 
-# in theory, adata_bcr and adata_tcr could have different number of cells. Keep the one that has the most
-adata_ir = adata_bcr.copy() if adata_bcr.n_obs > adata_tcr.n_obs else adata_tcr.copy()
+adata_bcr.obs = adata_bcr.obs.join(adata_tcr.obs, how="outer").copy()
+adata_ir = adata_bcr.copy()
 
-# TODO for each obs in adata_ir, append its info from the counterpart adata (bcr or tcr)
-# TODO merge adata_ir with adata_gex
+ir.pp.merge_with_ir(adata, adata_ir)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 summary.append("Started with a total of {} cells and {} genes coming from {} libraries.".format(

@@ -180,6 +180,14 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     adata = ir.io.read_10x_vdj(aligned_csv_file)
     summary.append("Started with a total of {} cells.".format(adata.n_obs))
 
+    logger.add_to_log("Filtering out cell calls that are marked low confidence by cellranger.")
+    # for more info about what this and other cellranger vdj output fields mean, see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/output/annotation
+    n_low_confidence_cells = sum(adata.obs["high_confidence"] == "False")
+    n_low_confidence_cells_pct = (n_low_confidence_cells/adata.n_obs) * 100
+    adata = adata[adata.obs["high_confidence"] == "True"].copy()
+    level = "warning" if n_low_confidence_cells_pct > 5 else "info"
+    logger.add_to_log("Removed {} ({:.2f}%) cells called with low confidence by cellranger.".format(n_low_confidence_cells, n_low_confidence_cells_pct), level=level)
+
     logger.add_to_log("Applying basic filters and chain QC using scirpy...")
     ir.tl.chain_qc(adata)
     # filter out cells that are multichain or ambiguous as these likely represent doublets
@@ -197,16 +205,30 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     # TODO should we select "cells with a single pair of productive αβ TCR chains" (same as celltypist studies)
     indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous") & (adata.obs["chain_pairing"] != "orphan VJ") & (adata.obs["chain_pairing"] != "orphan VDJ")
     adata = adata[indices].copy()
-    logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%), and ambiguous cells (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct, n_ambiguous_cells, n_ambiguous_cells_pct))
-    logger.add_to_log("Removed orphan V(D)J cells (individual count and percentage: {}, {:.2f}%).".format(n_orphan_cells, n_orphan_cells_pct))
+    level = "warning" if n_multichain_cells_pct > 5 else "info"
+    logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct), level=level)
+    level = "warning" if n_ambiguous_cells_pct > 5 else "info"
+    logger.add_to_log("Removed ambiguous cells (individual count and percentage: {}, {:.2f}%).".format(n_ambiguous_cells, n_ambiguous_cells_pct), level=level)
+    level = "warning" if n_orphan_cells_pct > 50 else "info"
+    logger.add_to_log("Removed orphan V(D)J cells (individual count and percentage: {}, {:.2f}%).".format(n_orphan_cells, n_orphan_cells_pct), level=level)
     logger.add_to_log("Original cell count: {}, cell count after all the filtering: {}.".format(n_cells_before, adata.n_obs))
 
-    logger.add_to_log("Validate that there are no no-IR cells, and that cell receptor_type matches the lib type")
-    n_no_ir_cells = sum(adata.obs["chain_pairing"] == "no IR")
+    logger.add_to_log("Validating that there are no non-cells, no non-IR cells, and that cells' receptor_type match the lib type.")
+    n_no_cells = sum(adata.obs["is_cell"] == "False")
+    n_no_ir_cells = sum(adata.obs["chain_pairing"] == "no IR" | adata.obs["has_ir"] == "False")
     n_unexpected_ir_type_cells = sum(adata.obs["receptor_type"] != configs["library_type"]) # BCR or TCR
-    if n_no_ir_cells > 0 or n_unexpected_ir_type_cells > 0:
-        logger.add_to_log("Detected {} cells with no IR detected and {} cells with a different receptor_type than expected. unique receptor types found: {}.".format(n_no_ir_cells, n_unexpected_ir_type_cells, np.unique(adata.obs["receptor_type"])), level = "error")
+    if n_no_cells > 0:
+        logger.add_to_log("Detected {} barcodes not called as a cell.".format(n_no_cells), level = "error")
         sys.exit()
+    elif n_no_ir_cells > 0:
+        logger.add_to_log("Detected {} cells with no IR detected.".format(n_no_ir_cells), level = "error")
+        sys.exit()
+    elif n_unexpected_ir_type_cells > 0:
+        logger.add_to_log("Detected {} cells with a different receptor_type than expected. unique receptor types found: {}.".format(n_unexpected_ir_type_cells, np.unique(adata.obs["receptor_type"])), level = "error")
+        sys.exit()
+
+    logger.add_to_log("Pre-pending obs column names with the library type.")
+    adata.obs = adata.obs.add_prefix("{}-".format(configs["library_type"]))
 
     summary.append("Final number of cells: {}.".format(adata.n_obs))
 else:
