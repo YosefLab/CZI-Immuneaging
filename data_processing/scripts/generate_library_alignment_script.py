@@ -50,13 +50,13 @@ for i in range(len(sample_indices)):
         assert lib_type in ["BCR", "TCR"]
         if not pd.isna(samples["{} lib".format(lib_type)][sample_indices[i]]):
             libs = samples["{} lib".format(lib_type)][sample_indices[i]].split(',')
+            assert len(libs) == len(gex)
             for l in libs:
                 if l not in lib_runs:
-                    lib_runs.append(r)
+                    lib_runs.append(l)
 
     get_bcr_tcr_libs("BCR", BCR_runs)
     get_bcr_tcr_libs("TCR", TCR_runs)
-    assert len(BCR_runs) == len(TCR_runs) and len(TCR_runs) == len(gex)
 
 l_cd_mkdir = []
 l_align_lib = []
@@ -66,15 +66,15 @@ for r in GEX_runs:
     # name the dir after the GEX lib's name
     # often the same lib (same lib id) is used for GEX, BCR and TCR thus distinguish the lib type in the dir name
     l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r[0],"GEX"))) 
-    l_align_lib.append("python {0}/align_library_3.py {1} {0} GEX {2}".format(code_path, configs_file, ",".join(r)))
+    l_align_lib.append("python {0}/align_library.py {1} {0} GEX {2}".format(code_path, configs_file, ",".join(r)))
     l_align_msg.append("echo \"Execution of align_library.py on GEX {} is complete.\"".format(",".join(r)))
 for r in BCR_runs:
     l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r,"BCR")))
-    l_align_lib.append("python {0}/align_library_3.py {1} {0} BCR {2}".format(code_path, configs_file, r))
+    l_align_lib.append("python {0}/align_library.py {1} {0} BCR {2}".format(code_path, configs_file, r))
     l_align_msg.append("echo \"Execution of align_library.py on BCR {} is complete.\"".format(r))
 for r in TCR_runs:
     l_cd_mkdir.append(os.path.join(output_dir, "S3", donor_run, "{}-{}".format(r,"TCR")))
-    l_align_lib.append("python {0}/align_library_3.py {1} {0} TCR {2}".format(code_path, configs_file, r))
+    l_align_lib.append("python {0}/align_library.py {1} {0} TCR {2}".format(code_path, configs_file, r))
     l_align_msg.append("echo \"Execution of align_library.py on TCR {} is complete.\"".format(r))
 
 l1 = ["source activate {}".format(python_env_version),
