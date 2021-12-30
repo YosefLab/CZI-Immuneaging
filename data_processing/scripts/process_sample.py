@@ -181,7 +181,7 @@ for j in range(len(library_ids)):
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
     if "Classification" in adata_dict[library_id].obs.columns:
-        adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+        adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id].copy()
         if "min_cells_per_library" in configs and configs["min_cells_per_library"] > adata_dict[library_id].n_obs:
             # do not consider cells from this library
             msg = "Cells from library {} were not included - there are {} cells from the sample, however, min_cells_per_library was set to {}.".format(
@@ -241,6 +241,8 @@ def build_adata_from_ir_libs(lib_type: str) -> AnnData:
 adata_bcr = build_adata_from_ir_libs("BCR")
 adata_tcr = build_adata_from_ir_libs("TCR")
 
+# TODO use merge_airr_chains?
+# TODO use scirpy.tl.chain_qc() here too?
 adata_bcr.obs = adata_bcr.obs.join(adata_tcr.obs, how="outer").copy()
 adata_ir = adata_bcr.copy()
 
