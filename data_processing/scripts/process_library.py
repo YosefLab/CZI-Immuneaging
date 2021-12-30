@@ -101,8 +101,8 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 
 if configs["library_type"] == "GEX":
     logger.add_to_log("Downloading h5ad file of aligned library from S3...")
-    aligned_h5ad_file = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
-        configs["library_id"], configs["aligned_library_configs_version"])
+    aligned_h5ad_file = "{}_{}.{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
+        configs["library_type"], configs["library_id"], configs["aligned_library_configs_version"])
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
         configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
         configs["library_id"], data_dir, aligned_h5ad_file)
