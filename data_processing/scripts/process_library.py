@@ -101,8 +101,8 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 
 if configs["library_type"] == "GEX":
     logger.add_to_log("Downloading h5ad file of aligned library from S3...")
-    aligned_h5ad_file = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
-        configs["library_id"], configs["aligned_library_configs_version"])
+    aligned_h5ad_file = "{}_{}.{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
+        configs["library_type"], configs["library_id"], configs["aligned_library_configs_version"])
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
         configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
         configs["library_id"], data_dir, aligned_h5ad_file)
@@ -199,7 +199,7 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     n_multichain_cells_pct = (n_multichain_cells/adata.n_obs) * 100
     n_ambiguous_cells = sum(adata.obs["chain_pairing"] == "ambiguous")
     n_ambiguous_cells_pct = (n_ambiguous_cells/adata.n_obs) * 100
-    n_orphan_cells = sum(adata.obs["chain_pairing"] == "orphan VJ" | adata.obs["chain_pairing"] == "orphan VDJ")
+    n_orphan_cells = sum(adata.obs["chain_pairing"].isin(["orphan VJ", "orphan VDJ"]))
     n_orphan_cells_pct = (n_orphan_cells/adata.n_obs) * 100
     # TODO should we also filter out "single pair" and "extra V(D)J" cells?
     # TODO should we select "cells with a single pair of productive αβ TCR chains" (same as celltypist studies)
@@ -215,7 +215,7 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
 
     logger.add_to_log("Validating that there are no non-cells, no non-IR cells, and that cells' receptor_type match the lib type.")
     n_no_cells = sum(adata.obs["is_cell"] == "False")
-    n_no_ir_cells = sum(adata.obs["chain_pairing"] == "no IR" | adata.obs["has_ir"] == "False")
+    n_no_ir_cells = sum((adata.obs["chain_pairing"] == "no IR") | (adata.obs["has_ir"] == "False"))    
     n_unexpected_ir_type_cells = sum(adata.obs["receptor_type"] != configs["library_type"]) # BCR or TCR
     if n_no_cells > 0:
         logger.add_to_log("Detected {} barcodes not called as a cell.".format(n_no_cells), level = "error")

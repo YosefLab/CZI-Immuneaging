@@ -32,8 +32,7 @@ if config_type in ["library", "all"]:
         column_name = "{} lib".format(lib_type)
         for i in samples[indices][column_name]:
             for j in i.split(","):
-                # TODO remove this once we are done experimenting with BCR/TCR and put everything in v1 (or v2)
-                lib_version = "v1" if lib_type == "GEX" else "v3"
+                lib_version = "v3"
                 all_libs.add((j,lib_type,lib_version))
 
     all_libs = set()
@@ -84,8 +83,7 @@ if config_type in ["sample", "all"]:
             lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
             all_libs += lib_ids
             all_lib_types += [lib_type * len(lib_ids)]
-            # TODO remove this once we are done experimenting with BCR/TCR and put everything in v1 (or v2)
-            lib_version = "v1" if lib_type == "GEX" else "v3"
+            lib_version = "v1"
             all_lib_versions += [lib_version * len(lib_ids)]
 
         all_libs = []
