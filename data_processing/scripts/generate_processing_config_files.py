@@ -30,10 +30,13 @@ if config_type in ["library", "all"]:
     # create config files for library processing
     def add_lib(lib_type: str, all_libs: set) -> None:
         column_name = "{} lib".format(lib_type)
+        gex_libs_all = samples[indices]["GEX lib"]
         for i in samples[indices][column_name]:
+            gex_libs = gex_libs_all.iloc[i].split(",")
             for j in i.split(","):
                 lib_version = "v3"
-                all_libs.add((j,lib_type,lib_version))
+                corresponding_gex_lib = gex_libs[j]
+                all_libs.add((j,lib_type,lib_version,corresponding_gex_lib))
 
     all_libs = set()
     add_lib("GEX", all_libs)
@@ -44,6 +47,7 @@ if config_type in ["library", "all"]:
         lib_id = lib[0]
         lib_type = lib[1]
         lib_version = lib[2]
+        corresponding_gex_lib = lib[3]
         lib_configs = {
             "sandbox_mode": "False",
             "data_owner": "valehvpa",
@@ -54,6 +58,7 @@ if config_type in ["library", "all"]:
             "seq_run": seq_run,
             "library_type": lib_type,
             "library_id": lib_id,
+            "corresponding_gex_lib": corresponding_gex_lib,
             "filter_cells_min_genes": 200,
             "filter_genes_min_cells": 0,
             "filter_cells_max_pct_counts_mt": 20,

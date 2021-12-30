@@ -157,8 +157,12 @@ if configs["library_type"] == "GEX":
         level = "error" if percent_doublets > 40 else "info"
         logger.add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(percent_doublets, num_doublets, adata.n_obs), level=level)
         adata = adata[adata.obs["Classification"] != "Doublet"].copy()
-        logger.add_to_log("Adding the library ID to the cell barcode name (will allow to distinguish between differnet cells with the same barcode when integrating differnet libraries that were used to collect the same samples)...")
-        adata.obs_names = adata.obs_names + "_" + configs["library_id"]
+
+    # Add the library ID to the cell barcode name. This will enable two things:
+    # a) distinguish between different cells with the same barcode when integrating different libraries (of the same type) that were used to collect the same samples
+    # b) successfully merge ir data with gex data during sample processing, the merging is contingent on the obs_names being exactly the same
+    logger.add_to_log("Adding the library ID to the cell barcode name...")
+    adata.obs_names = adata.obs_names + "_" + configs["library_id"]
 
     summary.append("Final number of cells: {}, final number of genes: {}.".format(adata.n_obs, adata.n_vars))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
@@ -229,6 +233,10 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
 
     logger.add_to_log("Pre-pending obs column names with the library type.")
     adata.obs = adata.obs.add_prefix("{}-".format(configs["library_type"]))
+
+    # Add the corresponding GEX library ID to the cell barcode name for the same reasons as we do for GEX (see above)
+    logger.add_to_log("Adding the corresponding GEX library ID to the cell barcode name...")
+    adata.obs_names = adata.obs_names + "_" + configs["corresponding_gex_lib"]
 
     summary.append("Final number of cells: {}.".format(adata.n_obs))
 else:
