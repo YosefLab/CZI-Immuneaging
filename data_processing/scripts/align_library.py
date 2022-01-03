@@ -144,8 +144,8 @@ h5ad_file_exists = False
 logger_file_exists = False
 
 # check if aligned files are already on the server
-# TODO update this to only look under /vX
-ls_cmd = 'aws s3 ls s3://immuneaging/aligned_libraries --recursive'
+# TODO update this to also look for the artifact from bcr/tcr alignment (filtered contig csv file)
+ls_cmd = 'aws s3 ls s3://immuneaging/aligned_libraries/{} --recursive'.format(configs_version)
 aligned_files = os.popen(ls_cmd).read()
 for f in aligned_files.rstrip().split('\n'):
     j = f.split('/')[-1]

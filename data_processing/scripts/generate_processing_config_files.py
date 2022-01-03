@@ -30,13 +30,16 @@ if config_type in ["library", "all"]:
     # create config files for library processing
     def add_lib(lib_type: str, all_libs: set) -> None:
         column_name = "{} lib".format(lib_type)
+        libs_all = samples[indices][column_name]
         gex_libs_all = samples[indices]["GEX lib"]
-        for i in samples[indices][column_name]:
+        for i in range(len(libs_all)):
+            libs = libs_all.iloc[i].split(",")
             gex_libs = gex_libs_all.iloc[i].split(",")
-            for j in i.split(","):
-                lib_version = "v3"
+            for j in range(len(libs)):
+                lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
-                all_libs.add((j,lib_type,lib_version,corresponding_gex_lib))
+                lib_version = "v3"
+                all_libs.add((lib,lib_type,lib_version,corresponding_gex_lib))
 
     all_libs = set()
     add_lib("GEX", all_libs)
@@ -87,9 +90,9 @@ if config_type in ["sample", "all"]:
         def add_libs(lib_type: str, all_libs: List, all_lib_types: List, all_lib_versions: List) -> None:
             lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
             all_libs += lib_ids
-            all_lib_types += [lib_type * len(lib_ids)]
+            all_lib_types += [lib_type] * len(lib_ids)
             lib_version = "v1"
-            all_lib_versions += [lib_version * len(lib_ids)]
+            all_lib_versions += [lib_version] * len(lib_ids)
 
         all_libs = []
         all_lib_types = []

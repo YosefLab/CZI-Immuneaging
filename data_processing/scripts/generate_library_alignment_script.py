@@ -33,7 +33,7 @@ for i in range(len(sample_indices)):
 
     def get_feature_lib_if_exists(lib_name: str) -> List[str]:
         if pd.isna(samples[lib_name][sample_indices[i]]):
-            lib = ['none' * len(gex)]
+            lib = ['none'] * len(gex)
         else:
             lib = samples[lib_name][sample_indices[i]].split(',')
             assert len(lib) == len(gex)
