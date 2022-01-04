@@ -241,19 +241,20 @@ def build_adata_from_ir_libs(lib_type: str) -> AnnData:
 
 adata_bcr = build_adata_from_ir_libs("BCR")
 adata_tcr = build_adata_from_ir_libs("TCR")
+logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, adata_bcr.n_obs, adata_tcr.n_obs))
 
 # TODO is there any point in using merge_airr_chains?
-
-# TODO add some log lines below
-
-# filter out any cells that have both BCR and TCR
+logger.add_to_log("Filtering out cells that have both BCR and TCR...")
 intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
 adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
 adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
-# then concatenate adata's
+logger.add_to_log("Filtered out {} cells that have both BCR and TCR. Unique cell count from BCR+TCR libs: {}".format(len(intersection), adata_bcr.n_obs + adata_tcr.n_obs))
+
+logger.add_to_log("Concatenating BCR and TCR lib(s)...")
 adata_ir = adata_bcr.concatenate(adata_tcr, join="outer", batch_key="temp_batch", index_unique=None)
 del adata_ir.obs["temp_batch"]
 
+logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
 ir.pp.merge_with_ir(adata, adata_ir)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
@@ -271,10 +272,14 @@ sample_index = samples["Sample_ID"] == sample_id
 for k in SAMPLES_FIELDS.keys():
     adata.obs[SAMPLES_FIELDS[k]] = samples[k][sample_index].values[0]
 
-if library_type == "GEX":
+if "GEX" in library_types:
     adata.obs["GEX_chem"] = samples["GEX chem"][sample_index].values[0]
     adata.obs["HTO_chem"] = samples["HTO chem"][sample_index].values[0]
     adata.obs["ADT_chem"] = samples["CITE chem"][sample_index].values[0]
+if "BCR" in library_types:
+    adata.obs["BCR_chem"] = samples["BCR chem"][sample_index].values[0]
+if "TCR" in library_types:
+    adata.obs["TCR_chem"] = samples["TCR chem"][sample_index].values[0]
 
 if adata.n_obs > 0:
     no_cells = False
@@ -364,6 +369,8 @@ if not no_cells:
         msg = QC_STRING_AMBIENT_RNA.format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
         logger.add_to_log(msg, level=level)
         summary.append(msg)
+        # This set of V(D)J genes are expected to express high per-individual variability that is not interesting to us as we want to get a
+        # coherent picture across all donors combined. Thus we filter these out prior to HVG selection, but keep them in the data otherwise.
         logger.add_to_log("Filtering out vdj genes...")
         rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
         logger.add_to_log("Detecting highly variable genes...")
