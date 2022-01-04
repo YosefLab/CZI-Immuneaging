@@ -6,6 +6,7 @@ import sys
 import logging
 import os
 import json
+from numpy import lib
 import scanpy as sc
 import numpy as np
 import pandas as pd
@@ -229,7 +230,7 @@ def build_adata_from_ir_libs(lib_type: str) -> AnnData:
         lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version))
         adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
-        adata_dict[library_id].obs["library_id"] = library_id
+        adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
         library_ids_ir.append(library_id)
 
     logger.add_to_log("Concatenating all cells of sample {} from available {} libraries...".format(sample_id, lib_type))
@@ -241,10 +242,17 @@ def build_adata_from_ir_libs(lib_type: str) -> AnnData:
 adata_bcr = build_adata_from_ir_libs("BCR")
 adata_tcr = build_adata_from_ir_libs("TCR")
 
-# TODO use merge_airr_chains?
-# TODO use scirpy.tl.chain_qc() here too?
-adata_bcr.obs = adata_bcr.obs.join(adata_tcr.obs, how="outer").copy()
-adata_ir = adata_bcr.copy()
+# TODO is there any point in using merge_airr_chains?
+
+# TODO add some log lines below
+
+# filter out any cells that have both BCR and TCR
+intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
+adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
+adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
+# then concatenate adata's
+adata_ir = adata_bcr.concatenate(adata_tcr, join="outer", batch_key="temp_batch", index_unique=None)
+del adata_ir.obs["temp_batch"]
 
 ir.pp.merge_with_ir(adata, adata_ir)
 
