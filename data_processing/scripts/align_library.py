@@ -164,7 +164,7 @@ logger.add_to_log("Starting time: {}".format(get_current_time()))
 with open(align_lib_script, "r") as f:
     logger.add_to_log("align_library.py md5 checksum: {}".format(hashlib.md5(bytes(f.read(), 'utf-8')).hexdigest()))
 
-logger.add_to_log("donor: {}\nSeq run: {}\lib_type: {}\nlib_ids: {}".format(donor_id, seq_run, lib_type, lib_ids))
+logger.add_to_log("donor: {}\nSeq run: {}\nlib_type: {}\nlib_ids: {}".format(donor_id, seq_run, lib_type, lib_ids))
 logger.add_to_log("using the following configurations:\n{}".format(str(configs)))
 
 logger.add_to_log("Loading metadata from the Google spreadsheet...")

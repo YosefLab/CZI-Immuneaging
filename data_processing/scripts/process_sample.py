@@ -209,8 +209,6 @@ if len(library_ids_gex)==0:
         os.system(sync_cmd)
     sys.exit()
 
-# TODO make sure concatenation doesn't produce a "batch" column that would cause issues downstream
-
 logger.add_to_log("Concatenating all cells of sample {} from available GEX libraries...".format(sample_id))
 adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
@@ -231,6 +229,8 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
         adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
         adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
         library_ids_ir.append(library_id)
+
+    # TODO make sure concatenation doesn't produce a "batch" column that would cause issues downstream
 
     logger.add_to_log("Concatenating all cells of sample {} from available {} libraries...".format(sample_id, lib_type))
     adata = adata_dict[library_ids_ir[0]]
@@ -369,7 +369,7 @@ if not no_cells:
         msg = QC_STRING_AMBIENT_RNA.format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
         logger.add_to_log(msg, level=level)
         summary.append(msg)
-        # This set of V(D)J genes are expected to express high per-individual variability that is not interesting to us as we want to get a
+        # This set of V(D)J genes are expected to express high donor-level variability that is not interesting to us as we want to get a
         # coherent picture across all donors combined. Thus we filter these out prior to HVG selection, but keep them in the data otherwise.
         logger.add_to_log("Filtering out vdj genes...")
         rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
