@@ -6,7 +6,6 @@
 "processed_libraries_dir": "/path/to/processed_libraries_dir/",
 "donor": "591C",
 "seq_run": "003",
-"library_type": "GEX",
 "sample_id": "591C-SPL-1",
 "library_ids": "CZI-IA10034924,CZI-IA10034925,CZI-IA10034926",
 "library_types": "GEX,GEX,GEX",

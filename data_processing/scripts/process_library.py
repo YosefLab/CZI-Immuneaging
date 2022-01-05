@@ -205,8 +205,6 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     n_ambiguous_cells_pct = (n_ambiguous_cells/adata.n_obs) * 100
     n_orphan_cells = sum(adata.obs["chain_pairing"].isin(["orphan VJ", "orphan VDJ"]))
     n_orphan_cells_pct = (n_orphan_cells/adata.n_obs) * 100
-    # TODO should we also filter out "single pair" and "extra V(D)J" cells?
-    # TODO should we select "cells with a single pair of productive αβ TCR chains" (same as celltypist studies)
     indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous") & (adata.obs["chain_pairing"] != "orphan VJ") & (adata.obs["chain_pairing"] != "orphan VDJ")
     adata = adata[indices].copy()
     level = "warning" if n_multichain_cells_pct > 5 else "info"

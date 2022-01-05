@@ -133,29 +133,25 @@ data_dir = os.path.join(configs["output_destination"],"S3",donor_run,"{}-{}".for
 
 configs_version = get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, VARIABLE_CONFIG_KEYS)
 
-# TODO added for debugging, delete
-print("*** DEBUG: configs_version: {}".format(configs_version))
-if configs_version != "v3":
-    sys.exit()
-
 h5ad_file = "{}.{}.{}.{}.h5ad".format(donor_run, lib_type, lib_ids[0], configs_version)
+contigs_file = "{}_{}_{}.cellranger.filtered_contig_annotations.csv".format(donor_run, lib_type, lib_ids[0])
 logger_file = os.path.join("align_library.{}.{}.{}.log".format(donor_run,lib_type,lib_ids[0],configs_version))
-h5ad_file_exists = False
+output_file_exists = False
 logger_file_exists = False
 
 # check if aligned files are already on the server
-# TODO update this to also look for the artifact from bcr/tcr alignment (filtered contig csv file)
 ls_cmd = 'aws s3 ls s3://immuneaging/aligned_libraries/{} --recursive'.format(configs_version)
 aligned_files = os.popen(ls_cmd).read()
 for f in aligned_files.rstrip().split('\n'):
     j = f.split('/')[-1]
-    if j == h5ad_file:
-        h5ad_file_exists = True
+    if (lib_type == "GEX" and j == h5ad_file) or ((lib_type == "BCR" or lib_type == "TCR") and j == contigs_file):
+        output_file = j
+        output_file_exists = True
     if j == logger_file:
         logger_file_exists = True
 
-if logger_file_exists and h5ad_file_exists:
-    print("Files {0} and {1} already exist on the S3 bucket; exiting align_library.py".format(h5ad_file, logger_file))
+if logger_file_exists and output_file_exists:
+    print("Files {0} and {1} already exist on the S3 bucket; exiting align_library.py".format(output_file, logger_file))
     sys.exit()
 
 logger_file_path = os.path.join(data_dir, logger_file)

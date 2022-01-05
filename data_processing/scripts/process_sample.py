@@ -244,7 +244,6 @@ adata_bcr = build_adata_from_ir_libs("BCR", library_ids_bcr)
 adata_tcr = build_adata_from_ir_libs("TCR", library_ids_tcr)
 logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, adata_bcr.n_obs, adata_tcr.n_obs))
 
-# TODO is there any point in using merge_airr_chains?
 logger.add_to_log("Filtering out cells that have both BCR and TCR...")
 intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
 adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
