@@ -216,11 +216,10 @@ adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
     adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
 
-def build_adata_from_ir_libs(lib_type: str) -> AnnData:
+def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnData:
     assert lib_type in ["BCR", "TCR"]
     logger.add_to_log("Reading h5ad files of processed libraries for {} libs...".format(lib_type))
     adata_dict = {}
-    library_ids_ir = []
     for j in range(len(library_ids)):
         if library_types[j] != lib_type:
             continue
@@ -239,8 +238,10 @@ def build_adata_from_ir_libs(lib_type: str) -> AnnData:
         adata = adata.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))])
     return adata
 
-adata_bcr = build_adata_from_ir_libs("BCR")
-adata_tcr = build_adata_from_ir_libs("TCR")
+library_ids_bcr = []
+library_ids_tcr = []
+adata_bcr = build_adata_from_ir_libs("BCR", library_ids_bcr)
+adata_tcr = build_adata_from_ir_libs("TCR", library_ids_tcr)
 logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, adata_bcr.n_obs, adata_tcr.n_obs))
 
 # TODO is there any point in using merge_airr_chains?
@@ -258,8 +259,8 @@ logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from 
 ir.pp.merge_with_ir(adata, adata_ir)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
-summary.append("Started with a total of {} cells and {} genes coming from {} libraries.".format(
-    initial_n_obs, adata.n_vars, len(library_ids)))
+summary.append("Started with a total of {} cells and {} genes coming from {} GEX libraries, {} BCR libraries and {} TCR libraries.".format(
+    initial_n_obs, adata.n_vars, len(library_ids_gex), len(library_ids_bcr), len(library_ids_tcr)))
 
 logger.add_to_log("Adding metadata...")
 donor_index = donors["Donor ID"] == donor
@@ -332,7 +333,7 @@ if not no_cells:
         df.index = rna.var.index
         df.columns = rna.obs.index
         df.to_csv(raw_counts_file)
-        if len(library_ids)>1:
+        if len(library_ids_gex)>1:
             batch_key = "batch"
             batch_file = os.path.join(decontx_data_dir, "{}.batch.txt".format(prefix))
             pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
@@ -431,7 +432,7 @@ if not no_cells:
                 is_cite = False
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
         logger.add_to_log("Running solo for detecting doublets...")
-        if len(library_ids)>1:
+        if len(library_ids_gex)>1:
             batches = pd.unique(rna.obs[batch_key])
             logger.add_to_log("Running solo on the following batches separately: {}".format(batches))
             is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
