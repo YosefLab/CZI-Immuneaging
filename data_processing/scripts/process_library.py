@@ -196,8 +196,8 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     ir.tl.chain_qc(adata)
     # filter out cells that are multichain or ambiguous as these likely represent doublets
     # plus, filter our "orphan chain" cells
-    # (Note: Orphan chain cells can also be matched to clonotypes on a single chain only, by
-    # using receptor_arms=”any” when running scirpy.tl.define_clonotypes(). TODO should we do this?)
+    # (Note that Orphan chain cells can also be matched to clonotypes on a single chain only, by
+    # using receptor_arms=”any” when running scirpy.tl.define_clonotypes() - see scirpy docs)
     n_cells_before = adata.n_obs
     n_multichain_cells = sum(adata.obs["multi_chain"] == "True")
     n_multichain_cells_pct = (n_multichain_cells/adata.n_obs) * 100
@@ -211,7 +211,7 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct), level=level)
     level = "warning" if n_ambiguous_cells_pct > 5 else "info"
     logger.add_to_log("Removed ambiguous cells (individual count and percentage: {}, {:.2f}%).".format(n_ambiguous_cells, n_ambiguous_cells_pct), level=level)
-    level = "warning" if n_orphan_cells_pct > 50 else "info"
+    level = "warning" if n_orphan_cells_pct > 30 else "info"
     logger.add_to_log("Removed orphan V(D)J cells (individual count and percentage: {}, {:.2f}%).".format(n_orphan_cells, n_orphan_cells_pct), level=level)
     logger.add_to_log("Original cell count: {}, cell count after all the filtering: {}.".format(n_cells_before, adata.n_obs))
 

@@ -230,12 +230,34 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
         adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
         library_ids_ir.append(library_id)
 
-    # TODO make sure concatenation doesn't produce a "batch" column that would cause issues downstream
-
+    # Note it's important that we concatenate these libs exactly in this order so that it matches the order in which the corresponding
+    # GEX libs where concatenated. This is important because the concat operation appends a -N suffix to all cells where N is the batch
+    # id (N=0..len(lib_ids)-1). If we don't do this, cells from IR libs and GEX libs won't match due to mismatching -N suffix.
     logger.add_to_log("Concatenating all cells of sample {} from available {} libraries...".format(sample_id, lib_type))
     adata = adata_dict[library_ids_ir[0]]
     if len(library_ids_ir) > 1:
-        adata = adata.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))])
+        adata = adata.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))], batch_key="temp_batch")
+
+    # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
+    # for all cells in the adata_ir and is the same as the one in adata
+    for j in range(len(library_ids_ir)):
+        lib_id = library_ids_ir[j]
+        adata_ir_lib_id = adata[adata.obs["{}-library_id".format(lib_type)] == lib_id, :].copy()
+        ir_batch = adata_ir_lib_id.obs["temp_batch"]
+        unique_ir_batch = np.unique(ir_batch)
+        assert len(unique_ir_batch) == 1
+        # grab the corresponding gex lib value
+        batch_suffix = "-{}".format(unique_ir_batch[0])
+        corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1].rstrip(batch_suffix)
+        adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
+        gex_batch = adata_lib_id.obs["batch"]
+        unique_gex_batch = np.unique(gex_batch)
+        assert len(unique_gex_batch) == 1
+        assert unique_ir_batch[0] == unique_gex_batch[0]
+
+    # we could keep this to know what batch (library) the cells are from, but we'll already have this via
+    # the batch info in adata
+    del adata.obs["temp_batch"]
     return adata
 
 library_ids_bcr = []
@@ -251,9 +273,21 @@ adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
 logger.add_to_log("Filtered out {} cells that have both BCR and TCR. Unique cell count from BCR+TCR libs: {}".format(len(intersection), adata_bcr.n_obs + adata_tcr.n_obs))
 
 logger.add_to_log("Concatenating BCR and TCR lib(s)...")
-adata_ir = adata_bcr.concatenate(adata_tcr, join="outer", batch_key="temp_batch", index_unique=None)
+adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
 del adata_ir.obs["temp_batch"]
 
+# cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that were
+# have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
+# or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
+# the ir info for those cells since we are missing gex info for them
+logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
+        adata.obs.index,
+        adata_ir.obs.index,
+        len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
+    ))
+ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
+ir_gex_diff_pct = (ir_gex_diff/adata_ir.obs.index) * 100
+logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {})".format(ir_gex_diff, ir_gex_diff_pct))
 logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
 ir.pp.merge_with_ir(adata, adata_ir)
 
