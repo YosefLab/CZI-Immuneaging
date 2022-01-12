@@ -98,6 +98,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
     else:
         # if we are here we have either TCR_lib or BCR_lib exclusive
         assert (TCR_lib is not None) ^ (BCR_lib is not None)
+        IR_lib = TCR_lib if TCR_lib else BCR_lib
         IR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib]) if TCR_lib else "_".join([donor_id, seq_run, "BCR", BCR_lib])
         outputs_to_save = [
             os.path.join(data_dir,IR_lib_name,"outs/web_summary.html"),
@@ -110,7 +111,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
             os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.json"),
             os.path.join(data_dir,IR_lib_name,"outs/airr_rearrangement.tsv"),
         ]
-        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, IR_lib_name, os.path.join(data_dir_fastq, IR_lib_name), aligner_vdj_file, IR_lib_name)
+        aligner_cmd = "{} vdj --id={} --fastqs={} --reference={} --sample={}".format(aligner_software_path, IR_lib_name, os.path.join(data_dir_fastq, IR_lib), aligner_vdj_file, IR_lib_name)
         aligned_data_dir = os.path.join(data_dir, IR_lib_name, "outs/")
 
     return (aligner_cmd, aligned_data_dir, outputs_to_save)
@@ -312,5 +313,5 @@ print(msg)
 cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, logger_file.split('/')[-1])
 os.system(cmd)
 
-## remove fastq files
-# os.system("rm -r {}".format(data_dir_fastq))
+# remove fastq files
+os.system("rm -r {}".format(data_dir_fastq))
