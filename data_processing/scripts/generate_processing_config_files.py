@@ -38,7 +38,7 @@ if config_type in ["library", "all"]:
             for j in range(len(libs)):
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
-                lib_version = "v3"
+                lib_version = "v1" if lib_type == "GEX" else "v3"
                 all_libs.add((lib,lib_type,lib_version,corresponding_gex_lib))
 
     all_libs = set()
@@ -91,7 +91,7 @@ if config_type in ["sample", "all"]:
             lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
             all_libs += lib_ids
             all_lib_types += [lib_type] * len(lib_ids)
-            lib_version = "v1"
+            lib_version = "v2"
             all_lib_versions += [lib_version] * len(lib_ids)
 
         all_libs = []
