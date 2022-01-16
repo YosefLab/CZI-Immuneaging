@@ -295,6 +295,11 @@ def _run_model_impl(
     if os.path.isdir(model_dir_path):
         os.system("rm -r " + model_dir_path)
     model.save(model_dir_path)
+    # save the data used for fitting the model; this is useful for applying reference-based integration on query data later on (based on the current model and data).
+    os.path.join(data_dir, model_file)
+    data_file = "{}.{}.{}_model.data.h5ad".format(prefix, version, model_name)
+    adata.write(os.path.join(model_dir_path,data_file), compression="lzf")
+    # zip the dir with all the model outputs
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
     zipf.close()
