@@ -101,8 +101,7 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 
 if configs["library_type"] == "GEX":
     logger.add_to_log("Downloading h5ad file of aligned library from S3...")
-    aligned_h5ad_file = "{}_{}.{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"],
-        configs["library_type"], configs["library_id"], configs["aligned_library_configs_version"])
+    aligned_h5ad_file = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"], configs["library_id"], configs["aligned_library_configs_version"])
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
         configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
         configs["library_id"], data_dir, aligned_h5ad_file)
@@ -195,24 +194,20 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Applying basic filters and chain QC using scirpy...")
     ir.tl.chain_qc(adata)
     # filter out cells that are multichain or ambiguous as these likely represent doublets
-    # plus, filter our "orphan chain" cells
-    # (Note that Orphan chain cells can also be matched to clonotypes on a single chain only, by
-    # using receptor_arms=”any” when running scirpy.tl.define_clonotypes() - see scirpy docs)
+    # (Note: We're not filtering our orphan-chain cells. They can be matched to clonotypes
+    # on a single chain only, by using receptor_arms=”any” when running scirpy.tl.define_clonotypes()
+    # - see scirpy docs)
     n_cells_before = adata.n_obs
     n_multichain_cells = sum(adata.obs["multi_chain"] == "True")
     n_multichain_cells_pct = (n_multichain_cells/adata.n_obs) * 100
     n_ambiguous_cells = sum(adata.obs["chain_pairing"] == "ambiguous")
     n_ambiguous_cells_pct = (n_ambiguous_cells/adata.n_obs) * 100
-    n_orphan_cells = sum(adata.obs["chain_pairing"].isin(["orphan VJ", "orphan VDJ"]))
-    n_orphan_cells_pct = (n_orphan_cells/adata.n_obs) * 100
-    indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous") & (adata.obs["chain_pairing"] != "orphan VJ") & (adata.obs["chain_pairing"] != "orphan VDJ")
+    indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous")
     adata = adata[indices].copy()
     level = "warning" if n_multichain_cells_pct > 5 else "info"
     logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct), level=level)
     level = "warning" if n_ambiguous_cells_pct > 5 else "info"
     logger.add_to_log("Removed ambiguous cells (individual count and percentage: {}, {:.2f}%).".format(n_ambiguous_cells, n_ambiguous_cells_pct), level=level)
-    level = "warning" if n_orphan_cells_pct > 30 else "info"
-    logger.add_to_log("Removed orphan V(D)J cells (individual count and percentage: {}, {:.2f}%).".format(n_orphan_cells, n_orphan_cells_pct), level=level)
     logger.add_to_log("Original cell count: {}, cell count after all the filtering: {}.".format(n_cells_before, adata.n_obs))
 
     logger.add_to_log("Validating that there are no non-cells, no non-IR cells, and that cells' receptor_type match the lib type.")
