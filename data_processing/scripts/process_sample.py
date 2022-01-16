@@ -281,8 +281,8 @@ del adata_ir.obs["temp_batch"]
 # or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
 # the ir info for those cells since we are missing gex info for them
 logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
-        adata.obs.index,
-        adata_ir.obs.index,
+        len(adata.obs.index),
+        len(adata_ir.obs.index),
         len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
     ))
 ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
