@@ -248,7 +248,7 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
         assert len(unique_ir_batch) == 1
         # grab the corresponding gex lib value
         batch_suffix = "-{}".format(unique_ir_batch[0])
-        corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1].rstrip(batch_suffix)
+        corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1][:-len(batch_suffix)]
         adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
         gex_batch = adata_lib_id.obs["batch"]
         unique_gex_batch = np.unique(gex_batch)
@@ -286,7 +286,7 @@ logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR I
         len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
     ))
 ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
-ir_gex_diff_pct = (ir_gex_diff/adata_ir.obs.index) * 100
+ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
 logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {})".format(ir_gex_diff, ir_gex_diff_pct))
 logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
 ir.pp.merge_with_ir(adata, adata_ir)
@@ -546,7 +546,14 @@ if not no_cells:
         sys.exit()
 
 logger.add_to_log("Saving h5ad file...")
-adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+try:
+    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+except:
+    # There can be some BCR-/TCR- columns that have dtype object due to being all NaN, thus causing
+    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of
+    # those columns can be non-string types (e.g. they can be integer counts).
+    obj_cols = adata.obs.select_dtypes(include='object').columns
+    adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan')
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
