@@ -221,7 +221,8 @@ for lib_id in lib_ids:
         logger.add_to_log("Downloading fastq files from S3 for lib {}...".format(lib_id))
         data_dir_lib = os.path.join(data_dir_fastq, lib_id)
         os.system("mkdir -p " + data_dir_lib)
-        lib_pattern = "{}_{}.*{}.*.fastq.gz".format(donor_id, seq_run, lib_id)
+        # for GEX libs, we need to grab _GEX, _ADT, _HTO, but for BCR/TCR we only need that one type
+        lib_pattern = "{}_{}_{}.*{}.*.fastq.gz".format(donor_id, seq_run, lib_type, lib_id) if lib_type in ["BCR", "TCR"] else "{}_{}.*{}.*.fastq.gz".format(donor_id, seq_run, lib_id)
         for i in re.split(' |\n',ls.rstrip()):
             if re.search(lib_pattern, i):
                 f = os.path.join(data_dir_lib,i)
