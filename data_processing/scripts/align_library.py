@@ -98,6 +98,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
     else:
         # if we are here we have either TCR_lib or BCR_lib exclusive
         assert (TCR_lib is not None) ^ (BCR_lib is not None)
+        assert(os.path.isfile(aligner_vdj_file))
         IR_lib = TCR_lib if TCR_lib else BCR_lib
         IR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib]) if TCR_lib else "_".join([donor_id, seq_run, "BCR", BCR_lib])
         outputs_to_save = [
@@ -128,15 +129,16 @@ donor_run = "_".join([donor_id,seq_run])
 aligner = configs["aligner"]
 aligner_software_path = configs["aligner_software_path"]
 aligner_genome_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_genome_file"])
-aligner_vdj_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_vdj_file"])
+# alignment_ref_vdj_file is not present in our early configs versions
+aligner_vdj_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_vdj_file"]) if "alignment_ref_vdj_file" in configs else ""
 
 data_dir = os.path.join(configs["output_destination"],"S3",donor_run,"{}-{}".format(lib_ids[0],lib_type))
 
 configs_version = get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, VARIABLE_CONFIG_KEYS)
 
-h5ad_file = "{}.{}.{}.{}.h5ad".format(donor_run, lib_type, lib_ids[0], configs_version)
+h5ad_file = "{}.{}.{}.h5ad".format(donor_run, lib_ids[0], configs_version)
 contigs_file = "{}_{}_{}.cellranger.filtered_contig_annotations.csv".format(donor_run, lib_type, lib_ids[0])
-logger_file = os.path.join("align_library.{}.{}.{}.log".format(donor_run,lib_type,lib_ids[0],configs_version))
+logger_file = os.path.join("align_library.{}.{}.{}.{}.log".format(donor_run,lib_type,lib_ids[0],configs_version))
 output_file_exists = False
 logger_file_exists = False
 
@@ -314,4 +316,4 @@ cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} 
 os.system(cmd)
 
 # remove fastq files
-os.system("rm -r {}".format(data_dir_fastq))
+# os.system("rm -r {}".format(data_dir_fastq))

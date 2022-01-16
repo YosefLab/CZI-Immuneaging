@@ -1,6 +1,6 @@
 ## This script can be used to generate config files for all libraries and all samples from a given donor; currently only GEX libraries are considered (i.e. ignores BCR/TCR libs).
 ## Note that 
-## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run>
+## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run> <processed_lib_version>
 ## where config_type can be one of "library", "sample" or "all".
 ## Note that code_path, output_destination, and s3_access_file will be set later via generate_processing_scripts.py
 ## After generating the files run the following commands to upload to aws (after setting the aws credentials as env variables):
@@ -19,6 +19,7 @@ code_path = sys.argv[2]
 output_destination = sys.argv[3]
 donor_id = sys.argv[4]
 seq_run = sys.argv[5]
+processed_lib_version = sys.argv[6]
 
 sys.path.append(code_path)
 from utils import *
@@ -38,7 +39,7 @@ if config_type in ["library", "all"]:
             for j in range(len(libs)):
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
-                lib_version = "v1" if lib_type == "GEX" else "v3"
+                lib_version = "v1"
                 all_libs.add((lib,lib_type,lib_version,corresponding_gex_lib))
 
     all_libs = set()
@@ -91,7 +92,7 @@ if config_type in ["sample", "all"]:
             lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
             all_libs += lib_ids
             all_lib_types += [lib_type] * len(lib_ids)
-            lib_version = "v2"
+            lib_version = processed_lib_version
             all_lib_versions += [lib_version] * len(lib_ids)
 
         all_libs = []
