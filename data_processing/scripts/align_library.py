@@ -98,7 +98,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
     else:
         # if we are here we have either TCR_lib or BCR_lib exclusive
         assert (TCR_lib is not None) ^ (BCR_lib is not None)
-        assert(os.path.isfile(aligner_vdj_file))
+        assert(os.path.isdir(aligner_vdj_file))
         IR_lib = TCR_lib if TCR_lib else BCR_lib
         IR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib]) if TCR_lib else "_".join([donor_id, seq_run, "BCR", BCR_lib])
         outputs_to_save = [
