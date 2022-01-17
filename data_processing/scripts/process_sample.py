@@ -268,9 +268,10 @@ logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TC
 
 logger.add_to_log("Filtering out cells that have both BCR and TCR...")
 intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
+intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
 adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
 adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
-logger.add_to_log("Filtered out {} cells that have both BCR and TCR. Unique cell count from BCR+TCR libs: {}".format(len(intersection), adata_bcr.n_obs + adata_tcr.n_obs))
+logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
 
 logger.add_to_log("Concatenating BCR and TCR lib(s)...")
 adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
@@ -287,7 +288,7 @@ logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR I
     ))
 ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
 ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
-logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {})".format(ir_gex_diff, ir_gex_diff_pct))
+logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
 logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
 ir.pp.merge_with_ir(adata, adata_ir)
 
