@@ -13,7 +13,7 @@ The configuration file is formatted as json with the following fields:
 * `"seq_run"` - Seq run, as indicated in the Google Spreadsheet
 * `"library_type"` - Can be set to `"GEX"`, `"BCR"` or `"TCR"`; `"GEX"` will automatically take into account any ADT and/or HTO libraries associated with the library provided under `library_id`
 * `"library_id"` - The library ID, as indicated in the Google Spreadsheet
-* `"corresponding_gex_lib"` - The library ID of the GEX lib that corresponds to this library (i.e. sequenced GEX data for the same cells). Relevant only for BCR and TCR libraries - for other lib types this is the same as library_id.
+* `"corresponding_gex_lib"` - The library ID of the GEX lib that corresponds to this library (i.e. sequenced GEX data for the same cells). Relevant only for BCR and TCR libraries - for other lib types this is optional (would be the same as library_id).
 * `"filter_cells_min_genes"` - Cells with number of detectable genes below this threshold will be removed
 * `"filter_genes_min_cells"` - Genes that appear in less cells than this threshold will be removed
 * `"filter_cells_max_pct_counts_mt"` - Cells with mitochondrial content above this threshold will be removed (value should be in the range [0,100])

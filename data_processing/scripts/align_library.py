@@ -129,7 +129,6 @@ donor_run = "_".join([donor_id,seq_run])
 aligner = configs["aligner"]
 aligner_software_path = configs["aligner_software_path"]
 aligner_genome_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_genome_file"])
-# alignment_ref_vdj_file is not present in our early configs versions
 aligner_vdj_file = os.path.join(configs["alignment_ref_genome_path"],configs["alignment_ref_vdj_file"]) if "alignment_ref_vdj_file" in configs else ""
 
 data_dir = os.path.join(configs["output_destination"],"S3",donor_run,"{}-{}".format(lib_ids[0],lib_type))

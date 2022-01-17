@@ -133,7 +133,11 @@ else:
         logger.add_to_log("The following h5ad file does not exist on S3: {}".format(h5ad_file))
 
 library_ids = configs["library_ids"].split(',')
-library_types = configs["library_types"].split(',')
+assert "library_types" in configs or "library_type" in configs
+if "library_types" in configs:
+    library_types = configs["library_types"].split(',')
+else:
+    library_types = [configs["library_type"]] * len(library_ids)
 library_versions = configs["processed_library_configs_version"].split(',')
 if ("processed_libraries_dir" in configs) and (len(configs.get("processed_libraries_dir")) > 0):
     processed_libraries_dir = configs["processed_libraries_dir"]
