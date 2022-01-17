@@ -17,4 +17,3 @@ The configuration file is formatted as json with the following fields:
 * `"python_env_version"` - The environment name to be used when running align_library.py
 * `"r_env_version"` - The environment name to be used when running R commands for align_library.py; this environment is currently unused in align_library.py, and should be set to `"immune_aging.r_env.v1"`
 * `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
-* `"code_path"` - Absolute path to the data processing scripts (i.e. if cloning the repository then should end with data_processing/scripts)

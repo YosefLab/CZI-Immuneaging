@@ -208,7 +208,7 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct), level=level)
     level = "warning" if n_ambiguous_cells_pct > 5 else "info"
     logger.add_to_log("Removed ambiguous cells (individual count and percentage: {}, {:.2f}%).".format(n_ambiguous_cells, n_ambiguous_cells_pct), level=level)
-    logger.add_to_log("Original cell count: {}, cell count after all the filtering: {}.".format(n_cells_before, adata.n_obs))
+    logger.add_to_log("Original cell count: {}, cell count after the filtering: {}.".format(n_cells_before, adata.n_obs))
 
     logger.add_to_log("Validating that there are no non-cells, no non-IR cells, and that cells' receptor_type match the lib type.")
     n_no_cells = sum(adata.obs["is_cell"] == "False")
@@ -224,6 +224,7 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
         logger.add_to_log("Detected {} cells with a different receptor_type than expected. unique receptor types found: {}.".format(n_unexpected_ir_type_cells, np.unique(adata.obs["receptor_type"])), level = "error")
         sys.exit()
 
+    # this is for clarity and also to distinguish similarly-named BCR and TCR obs columns
     logger.add_to_log("Pre-pending obs column names with the library type.")
     adata.obs = adata.obs.add_prefix("{}-".format(configs["library_type"]))
 

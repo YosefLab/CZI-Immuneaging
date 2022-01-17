@@ -6,7 +6,6 @@ import sys
 import logging
 import os
 import json
-from numpy import lib
 import scanpy as sc
 import numpy as np
 import pandas as pd
@@ -80,7 +79,7 @@ data_dir = os.path.join(output_destination, "_".join([donor, seq_run]))
 os.system("mkdir -p " + data_dir)
 
 # check for previous versions of the processed sample
-prefix = sample_id
+prefix = "{}_{}".format(sample_id, "GEX") # hard code "GEX" in the prefix in order to keep consistent with what we already have on AWS and not have to rename everything
 s3_path = "s3://immuneaging/processed_samples/" + prefix
 is_new_version, version = get_configs_status(configs, s3_path, "process_sample.configs." + prefix,
     VARIABLE_CONFIG_KEYS, data_dir)
@@ -260,7 +259,7 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
         assert unique_ir_batch[0] == unique_gex_batch[0]
 
     # we could keep this to know what batch (library) the cells are from, but we'll already have this via
-    # the batch info in adata
+    # the library_id info in adata
     del adata_to_return.obs["temp_batch"]
     return adata_to_return
 
@@ -281,7 +280,7 @@ logger.add_to_log("Concatenating BCR and TCR lib(s)...")
 adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
 del adata_ir.obs["temp_batch"]
 
-# cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that were
+# cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that
 # have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
 # or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
 # the ir info for those cells since we are missing gex info for them
@@ -554,9 +553,10 @@ logger.add_to_log("Saving h5ad file...")
 try:
     adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
 except:
-    # There can be some BCR-/TCR- columns that have dtype object due to being all NaN, thus causing
-    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of
-    # those columns can be non-string types (e.g. they can be integer counts).
+    # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
+    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
+    # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
+    # in future processing layers.
     obj_cols = adata.obs.select_dtypes(include='object').columns
     adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan')
 

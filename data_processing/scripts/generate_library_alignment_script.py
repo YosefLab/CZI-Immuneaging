@@ -5,7 +5,7 @@ The script gets a configuration file (for a specific donor), path to the immune 
 **NOTE**: the path to the code base and path to the configs file must be absolute paths.
 
 Example:
-python generate_library_alignment_script.py donor_id seq_run /path/to/code /path/to/align_libraries.configs.582C_001.txt python_env_version /path/to/output_dir
+python generate_library_alignment_script.py donor_id seq_run /path/to/code /path/to/align_libraries.configs.582C_001.txt /path/to/output_dir
 """
 
 import os
@@ -16,11 +16,13 @@ donor_id = sys.argv[1]
 seq_run = sys.argv[2]
 code_path = sys.argv[3]
 configs_file = sys.argv[4]
-python_env_version = sys.argv[5]
-output_dir = sys.argv[6]
+output_dir = sys.argv[5]
 
 sys.path.append(code_path)
 from utils import *
+
+configs = load_configs(configs_file)
+python_env_version = configs["python_env_version"]
 
 samples = read_immune_aging_sheet(sheet="Samples")
 sample_indices = samples.index[(samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))]
