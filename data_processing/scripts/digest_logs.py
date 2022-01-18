@@ -23,7 +23,6 @@ logging.getLogger('parse').setLevel(logging.WARNING)
 class BaseDigestClass(ABC):
     def __init__(self, args: List[str]):
         self._ingest_and_sanity_check_input(args)
-        self.library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
         self.downloaded_from_aws = self.logs_location == "aws"
 
         # set aws credentials
@@ -186,14 +185,14 @@ class DigestSampleProcessingLogs(BaseDigestClass):
         return samples_df["Sample_ID"]
 
     def _get_object_prefix(self, object_id: str):
-        return "{}_{}".format(object_id, self.library_type)
+        return "{}_GEX".format(object_id)        
 
     def _get_log_file_name(self, object_id: str):
         prefix = self._get_object_prefix(object_id)
         return "process_sample.{}.{}.log".format(prefix, self.version)
 
     def _get_object_id(self, log_file_name: str):
-        # log file name is process_sample.{prefix}.{version}.log where prefix is {object_id}_{library_type}
+        # log file name is process_sample.{prefix}.{version}.log where prefix is given by _get_object_prefix
         prefix = log_file_name.split(".")[1]
         return prefix.split("_")[0]
 
@@ -305,13 +304,14 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def _get_object_ids(self):
         object_ids = set()
         samples_df = self._get_all_samples()
-        for i in samples_df[self.library_type + " lib"]:
-            for j in i.split(","):
-                object_ids.add(j)
+        for library_type in ["GEX", "BCR", "TCR"]:
+            for i in samples_df[library_type + " lib"]:
+                for j in i.split(","):
+                    object_ids.add("{}_{}".format(library_type, j))
         return object_ids
 
     def _get_object_prefix(self, object_id: str):
-        return "{}_{}_{}_{}".format(self.donor_id, self.seq_run, self.library_type, object_id)
+        return "{}_{}_{}".format(self.donor_id, self.seq_run, object_id)
 
     def _get_log_file_name(self, object_id: str):
         prefix = self._get_object_prefix(object_id)

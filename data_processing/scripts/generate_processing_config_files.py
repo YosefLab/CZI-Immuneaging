@@ -1,8 +1,7 @@
 ## This script can be used to generate config files for all libraries and all samples from a given donor; currently only GEX libraries are considered (i.e. ignores BCR/TCR libs).
 ## Note that 
-## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run> <processed_lib_version>
+## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run>
 ## where config_type can be one of "library", "sample" or "all"
-## and "processed_lib_version" is the version for all processed libraries that we use to process a sample (if config_type is "library" this is unused)
 ## Note that code_path, output_destination, and s3_access_file will be set later via generate_processing_scripts.py
 ## After generating the files run the following commands to upload to aws (after setting the aws credentials as env variables):
 ## aws s3 sync config_files s3://immuneaging/job_queue/process_library/ --exclude "*" --include "process_library*.configs.txt"
@@ -20,7 +19,6 @@ code_path = sys.argv[2]
 output_destination = sys.argv[3]
 donor_id = sys.argv[4]
 seq_run = sys.argv[5]
-processed_lib_version = sys.argv[6]
 
 sys.path.append(code_path)
 from utils import *
@@ -40,7 +38,7 @@ if config_type in ["library", "all"]:
             for j in range(len(libs)):
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
-                aligned_lib_version = "v1" # TODO infer this from AWS since different lib types can have different aligned versions (github issue #51)
+                aligned_lib_version = "v1" if lib_type == "GEX" else "v2" # TODO infer this from AWS since different lib types can have different aligned versions (github issue #51)
                 all_libs.add((lib,lib_type,aligned_lib_version,corresponding_gex_lib))
 
     all_libs = set()
@@ -93,6 +91,7 @@ if config_type in ["sample", "all"]:
             lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
             all_libs += lib_ids
             all_lib_types += [lib_type] * len(lib_ids)
+            processed_lib_version = "v2" if lib_type == "GEX" else "v1"
             all_lib_versions += [processed_lib_version] * len(lib_ids)
 
         all_libs = []
