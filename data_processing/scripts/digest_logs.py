@@ -134,7 +134,7 @@ class BaseDigestClass(ABC):
 
             # for each object id, get all its log lines and add it to the dict
             for elem in zip(object_ids, object_versions):
-                filename = self._get_log_file_name(elem(0), elem(1))
+                filename = self._get_log_file_name(elem[0], elem[1])
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
                     logger.add_to_log("File not found: {}. Skipping.".format(filepath), level="error")
