@@ -120,10 +120,14 @@ class BaseDigestClass(ABC):
                     else:
                         version = self.version
                     filename = self._get_log_file_name(object_id, version)
-                    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, self.version, self.working_dir, filename)
+                    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, version, self.working_dir, filename)
                     logger.add_to_log("syncing {}...".format(filename))
                     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-                    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+                    resp = os.popen(sync_cmd).read()
+                    if len(resp) == 0:
+                        logger.add_to_log("empty response from aws.\n")
+                    else:
+                        logger.add_to_log("aws response: {}\n".format(resp))
             else:
                 object_versions = [self.version] * len(object_ids)
 
