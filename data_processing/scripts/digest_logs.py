@@ -14,6 +14,7 @@ import csv
 from parse import *
 import logging
 import io
+import re
 
 import utils
 from logger import RichLogger, not_found_sign
@@ -34,10 +35,11 @@ class BaseDigestClass(ABC):
         self.donor_id = args[3]
         self.seq_run = args[4]
         self.logs_location = args[5] # must be either "aws" or the absolute path to the logs location on the local disk
-        self.version = args[6] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest")
+        self.version = args[6] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest") - "latest" can only be used if logs_location is "aws"
         self.working_dir = args[7] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
         self.s3_access_file = args[8] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
 
+        assert(self.version != "latest" or self.logs_location == "aws")
         assert(self.logs_location == "aws" or os.path.isdir(self.logs_location))
         assert(self.working_dir == "" if self.logs_location != "aws" else os.path.isdir(self.working_dir))
         assert(self.s3_access_file == "" if self.logs_location != "aws" else os.path.isfile(self.s3_access_file))
@@ -60,7 +62,7 @@ class BaseDigestClass(ABC):
         pass
         
     @abstractmethod
-    def _get_log_file_name(self, object_id: str):
+    def _get_log_file_name(self, object_id: str, version: str):
         pass
 
     @abstractmethod
@@ -89,7 +91,8 @@ class BaseDigestClass(ABC):
         logger = RichLogger()
         try:
             object_ids = self._get_object_ids()
-            
+            object_versions = []
+
             # if the logs location is aws, download all log files to the local working directory
             if self.logs_location == "aws":
                 # set this first so that if we hit an exception mid-way through the loop below
@@ -97,20 +100,36 @@ class BaseDigestClass(ABC):
                 self.logs_location = self.working_dir
                 for object_id in object_ids:
                     prefix = self._get_object_prefix(object_id)
-                    filename = self._get_log_file_name(object_id)
                     aws_dir_name = self._get_aws_dir_name()
+                    # find the latest version if needed
+                    if self.version == "latest":
+                        latest_version = -1
+                        ls_cmd = "aws s3 ls s3://immuneaging/{}/{} --recursive".format(aws_dir_name, prefix)
+                        ls  = os.popen(ls_cmd).read()
+                        if len(ls) != 0:
+                            filenames = ls.split("\n")
+                            for filename in filenames:
+                                p = re.search("(.)(\d)+(.)log$", filename)
+                                if bool(p):
+                                    version = int(filename[p.span()[0]+1:-4])
+                                    if latest_version < version:
+                                        latest_version = version
+                        # will be v-1 if we could not find any log file above - this will cause
+                        # the code further below to fail to find the file and emit an error message
+                        version = "v" + str(latest_version)
+                    else:
+                        version = self.version
+                    filename = self._get_log_file_name(object_id, version)
                     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, self.version, self.working_dir, filename)
                     logger.add_to_log("syncing {}...".format(filename))
                     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
                     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-
-            if self.version == "latest":
-                # TODO issue #15
-                raise NotImplementedError
+            else:
+                object_versions = [self.version] * len(object_ids)
 
             # for each object id, get all its log lines and add it to the dict
-            for object_id in object_ids:
-                filename = self._get_log_file_name(object_id)
+            for elem in zip(object_ids, object_versions):
+                filename = self._get_log_file_name(elem(0), elem(1))
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
                     logger.add_to_log("File not found: {}. Skipping.".format(filepath), level="error")
@@ -187,9 +206,9 @@ class DigestSampleProcessingLogs(BaseDigestClass):
     def _get_object_prefix(self, object_id: str):
         return "{}_GEX".format(object_id)        
 
-    def _get_log_file_name(self, object_id: str):
+    def _get_log_file_name(self, object_id: str, version: str):
         prefix = self._get_object_prefix(object_id)
-        return "process_sample.{}.{}.log".format(prefix, self.version)
+        return "process_sample.{}.{}.log".format(prefix, version)
 
     def _get_object_id(self, log_file_name: str):
         # log file name is process_sample.{prefix}.{version}.log where prefix is given by _get_object_prefix
@@ -313,9 +332,9 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def _get_object_prefix(self, object_id: str):
         return "{}_{}_{}".format(self.donor_id, self.seq_run, object_id)
 
-    def _get_log_file_name(self, object_id: str):
+    def _get_log_file_name(self, object_id: str, version: str):
         prefix = self._get_object_prefix(object_id)
-        return "process_library.{}.{}.log".format(prefix, self.version)
+        return "process_library.{}.{}.log".format(prefix, version)
 
     def _get_aws_dir_name(self):
         return "processed_libraries"
