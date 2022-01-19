@@ -119,13 +119,14 @@ class BaseDigestClass(ABC):
                         version = "v" + str(latest_version)
                     else:
                         version = self.version
+                    object_versions.append(version)
                     filename = self._get_log_file_name(object_id, version)
                     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, version, self.working_dir, filename)
                     logger.add_to_log("syncing {}...".format(filename))
                     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
                     resp = os.popen(sync_cmd).read()
                     if len(resp) == 0:
-                        logger.add_to_log("empty response from aws.\n")
+                        logger.add_to_log("empty response from aws.\n", level="error")
                     else:
                         logger.add_to_log("aws response: {}\n".format(resp))
             else:
