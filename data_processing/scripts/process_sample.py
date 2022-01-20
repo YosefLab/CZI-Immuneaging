@@ -549,6 +549,26 @@ if not no_cells:
         print(err)
         sys.exit()
 
+# TODO remove this, used for now due to technical issues with reading adata back
+ct_T_cells = len(adata.obs[adata.obs["celltypist_predicted_labels.3"] == "T cells"])
+ir_T_cells = len(adata.obs[adata.obs["TCR-is_cell"] != "None"])
+ir_ct_T_cell_pct = -1 if ct_T_cells==0 else (ir_T_cells/ct_T_cells) * 100
+logger.add_to_log("Out of {} T cells flagged by CellTypist, {} had TCR data (i.e. {:.2f}%)".format(ct_T_cells, ir_T_cells, ir_ct_T_cell_pct))
+
+ct_B_cells = len(adata.obs[adata.obs["celltypist_predicted_labels.3"] == "B cells"])
+ir_B_cells = len(adata.obs[adata.obs["BCR-is_cell"] != "None"])
+ir_ct_B_cell_pct = -1 if ct_B_cells==0 else (ir_B_cells/ct_B_cells) * 100
+logger.add_to_log("Out of {} B cells flagged by CellTypist, {} had BCR data (i.e. {:.2f}%)".format(ct_B_cells, ir_B_cells, ir_ct_B_cell_pct))
+
+ct_non_T_cells = len(adata.obs[adata.obs["celltypist_predicted_labels.3"] != "T cells"])
+ir_ct_non_T_cell_pct = -1 if ct_non_T_cells==0 else (ir_T_cells/ct_non_T_cells) * 100
+logger.add_to_log("Out of {} non-T cells (per CellTypist), {} had TCR data (i.e. {:.2f}%)".format(ct_non_T_cells, ir_T_cells, ir_ct_non_T_cell_pct))
+
+ct_non_B_cells = len(adata.obs[adata.obs["celltypist_predicted_labels.3"] != "B cells"])
+ir_ct_non_B_cell_pct = -1 if ct_non_B_cells==0 else (ir_B_cells/ct_non_B_cells) * 100
+logger.add_to_log("Out of {} non-B cells (per CellTypist), {} had BCR data (i.e. {:.2f}%)".format(ct_non_B_cells, ir_B_cells, ir_ct_non_B_cell_pct))
+
+
 logger.add_to_log("Saving h5ad file...")
 try:
     adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
