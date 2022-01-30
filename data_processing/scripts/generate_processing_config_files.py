@@ -1,6 +1,6 @@
 ## This script can be used to generate config files for all libraries and all samples from a given donor; currently only GEX libraries are considered (i.e. ignores BCR/TCR libs).
 ## Note that 
-## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run>
+## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run> <s3_access_file>
 ## where config_type can be one of "library", "sample" or "all"
 ## Note that code_path, output_destination, and s3_access_file will be set later via generate_processing_scripts.py
 ## After generating the files run the following commands to upload to aws (after setting the aws credentials as env variables):
@@ -20,6 +20,7 @@ code_path = sys.argv[2]
 output_destination = sys.argv[3]
 donor_id = sys.argv[4]
 seq_run = sys.argv[5]
+s3_access_file = sys.argv[6]
 
 sys.path.append(code_path)
 from utils import *
@@ -40,6 +41,7 @@ if config_type in ["library", "all"]:
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
                 # find the latest aligned_lib_version
+                set_access_keys(s3_access_file)
                 latest_version = -1
                 ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
                 ls  = os.popen(ls_cmd).read()
