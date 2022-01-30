@@ -109,9 +109,11 @@ class BaseDigestClass(ABC):
                         if len(ls) != 0:
                             filenames = ls.split("\n")
                             for filename in filenames:
-                                p = re.search("(.)(\d)+(.)log$", filename)
-                                if bool(p):
-                                    version = int(filename[p.span()[0]+1:-4])
+                                # search for patterns of .vX.log. If there is a match, group
+                                # one is ".v" and group 2 is "X" (X can be any integer >=0)
+                                m = re.search("(\.v)(\d+)\.log$", filename)
+                                if bool(m):
+                                    version = int(m[2])
                                     if latest_version < version:
                                         latest_version = version
                         # will be v-1 if we could not find any log file above - this will cause

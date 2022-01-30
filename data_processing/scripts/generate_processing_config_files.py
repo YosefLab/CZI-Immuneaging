@@ -9,6 +9,7 @@
 ## assuming config_files is the directory containing the config files.
 ## Then, the script generate_processing_scripts.py can be used to create .sh files to execute the actual processing based on the config files.
 
+import re
 import sys
 import os
 import json
@@ -38,7 +39,23 @@ if config_type in ["library", "all"]:
             for j in range(len(libs)):
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
-                aligned_lib_version = "v1" if lib_type == "GEX" else "v2" # TODO infer this from AWS since different lib types can have different aligned versions (github issue #51)
+                # find the latest aligned_lib_version
+                latest_version = -1
+                ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
+                ls  = os.popen(ls_cmd).read()
+                if len(ls) != 0:
+                    filenames = ls.split("\n")
+                    for filename in filenames:
+                        # search for patterns of <lib id>.vX.h5ad. If there is a match, group
+                        # one is "<lib id>.v" and group 2 is "X" (X can be any integer >=0)
+                        m = re.search("({}\.v)(\d+)\.h5ad$".format(lib), filename)
+                        if bool(m):
+                            version = int(m[2])
+                            if latest_version < version:
+                                latest_version = version
+                if latest_version == -1:
+                    raise ValueError("No aligned libraries found on AWS")
+                aligned_lib_version = "v" + latest_version
                 all_libs.add((lib,lib_type,aligned_lib_version,corresponding_gex_lib))
 
     all_libs = set()
