@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from typing import List, Dict
 import pandas as pd
 import csv
+
+import rich
 from parse import *
 import logging
 import io
@@ -43,6 +45,10 @@ class BaseDigestClass(ABC):
         assert(self.logs_location == "aws" or os.path.isdir(self.logs_location))
         assert(self.working_dir == "" if self.logs_location != "aws" else os.path.isdir(self.working_dir))
         assert(self.s3_access_file == "" if self.logs_location != "aws" else os.path.isfile(self.s3_access_file))
+
+        if self.version == "latest":
+            logger = RichLogger()
+            logger.add_to_log("*** Be wary of using the \"latest\" option as it can hide failures. For example if you expect the latest to be N and some library failed, we would grab the latest version that succeeded (<N) and report success. If you know the version you expect, provide it explicitly. ***", level="warning")
 
     def _get_all_samples(self) -> pd.DataFrame:
         samples = utils.read_immune_aging_sheet("Samples", quiet=True)
