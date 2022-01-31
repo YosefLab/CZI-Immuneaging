@@ -14,6 +14,7 @@ import sys
 import os
 import json
 from typing import List
+from logger import RichLogger
 
 config_type = sys.argv[1]
 code_path = sys.argv[2]
@@ -36,8 +37,9 @@ if config_type in ["library", "all"]:
         column_name = "{} lib".format(lib_type)
         libs_all = samples[indices][column_name]
         gex_libs_all = samples[indices]["GEX lib"]
+        failed_libs = set()
         for i in range(len(libs_all)):
-            if libs_all.iloc[i] == np.nan:
+            if libs_all.iloc[i] is np.nan:
                 continue
             libs = libs_all.iloc[i].split(",")
             gex_libs = gex_libs_all.iloc[i].split(",")
@@ -64,9 +66,14 @@ if config_type in ["library", "all"]:
                             if latest_version < version:
                                 latest_version = version
                 if latest_version == -1:
-                    raise ValueError("No aligned libraries found on AWS")
+                    failed_libs.add(lib)
+                    # skip
+                    continue
                 aligned_lib_version = "v" + str(latest_version)
                 all_libs.add((lib,lib_type,aligned_lib_version,corresponding_gex_lib))
+        logger = RichLogger()
+        for fl in failed_libs:
+            logger.add_to_log("No aligned libraries found on AWS for lib id {} lib type {}. Skipping.".format(fl, lib_type), level="warning")
 
     all_libs = set()
     add_lib("GEX", all_libs)
