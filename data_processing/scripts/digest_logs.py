@@ -116,7 +116,7 @@ class BaseDigestClass(ABC):
                             filenames = ls.split("\n")
                             for filename in filenames:
                                 # search for patterns of .vX.log. If there is a match, group
-                                # one is ".v" and group 2 is "X" (X can be any integer >=0)
+                                # one is ".v" and group 2 is "X" (X can be any integer >0)
                                 m = re.search("(\.v)(\d+)\.log$", filename)
                                 if bool(m):
                                     version = int(m[2])

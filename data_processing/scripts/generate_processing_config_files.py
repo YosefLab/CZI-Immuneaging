@@ -31,10 +31,14 @@ indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_r
 if config_type in ["library", "all"]:
     # create config files for library processing
     def add_lib(lib_type: str, all_libs: set) -> None:
+        if lib_type not in ["GEX", "BCR", "TCR"]:
+            raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
         column_name = "{} lib".format(lib_type)
         libs_all = samples[indices][column_name]
         gex_libs_all = samples[indices]["GEX lib"]
         for i in range(len(libs_all)):
+            if libs_all.iloc[i] == np.nan:
+                continue
             libs = libs_all.iloc[i].split(",")
             gex_libs = gex_libs_all.iloc[i].split(",")
             for j in range(len(libs)):
@@ -47,17 +51,21 @@ if config_type in ["library", "all"]:
                 ls  = os.popen(ls_cmd).read()
                 if len(ls) != 0:
                     filenames = ls.split("\n")
-                    for filename in filenames:
+                    if lib_type == "GEX":
                         # search for patterns of <lib id>.vX.h5ad. If there is a match, group
-                        # one is "<lib id>.v" and group 2 is "X" (X can be any integer >=0)
-                        m = re.search("({}\.v)(\d+)\.h5ad$".format(lib), filename)
+                        # one is "<lib id>.v" and group 2 is "X" (X can be any integer >0)
+                        pattern = "({}\.v)(\d+)\.h5ad$".format(lib)
+                    else:
+                        pattern = "({}_{}\.cellranger\.filtered_contig_annotations\.v)(\d+)\.csv".format(lib_type, lib)
+                    for filename in filenames:
+                        m = re.search(pattern, filename)
                         if bool(m):
                             version = int(m[2])
                             if latest_version < version:
                                 latest_version = version
                 if latest_version == -1:
                     raise ValueError("No aligned libraries found on AWS")
-                aligned_lib_version = "v" + latest_version
+                aligned_lib_version = "v" + str(latest_version)
                 all_libs.add((lib,lib_type,aligned_lib_version,corresponding_gex_lib))
 
     all_libs = set()
