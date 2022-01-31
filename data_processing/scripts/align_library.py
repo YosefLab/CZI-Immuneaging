@@ -316,4 +316,4 @@ cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} 
 os.system(cmd)
 
 # remove fastq files
-# os.system("rm -r {}".format(data_dir_fastq))
+os.system("rm -r {}".format(data_dir_fastq))
