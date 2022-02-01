@@ -12,7 +12,6 @@ from typing import List, Dict
 import pandas as pd
 import csv
 
-import rich
 from parse import *
 import logging
 import io
