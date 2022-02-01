@@ -107,7 +107,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
             os.path.join(data_dir,IR_lib_name,"outs/metrics_summary.csv"),
             os.path.join(data_dir,IR_lib_name,"outs/vloupe.vloupe"),
             os.path.join(data_dir,IR_lib_name,"outs/filtered_contig.fasta"),
-            os.path.join(data_dir,IR_lib_name,"outs/filtered_contig_annotations"),
+            os.path.join(data_dir,IR_lib_name,"outs/filtered_contig_annotations.csv"),
             os.path.join(data_dir,IR_lib_name,"outs/all_contig.fasta"),
             os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.csv"),
             os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.json"),
