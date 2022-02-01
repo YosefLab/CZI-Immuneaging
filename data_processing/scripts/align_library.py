@@ -102,17 +102,12 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
         assert(os.path.isdir(aligner_vdj_file))
         IR_lib = TCR_lib if TCR_lib else BCR_lib
         IR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib]) if TCR_lib else "_".join([donor_id, seq_run, "BCR", BCR_lib])
-        # rename the filtered_contig_annotations file to filtered_contig_annotations.vX.csv
-        filtered_contig_base_name = os.path.join(data_dir,IR_lib_name,"outs/filtered_contig_annotations")
-        filtered_contig_old_name = "{}.csv".format(filtered_contig_base_name)
-        filtered_contig_new_name = "{}.{}.csv".format(filtered_contig_base_name, configs_version)
-        shutil.move(filtered_contig_old_name, filtered_contig_new_name)
         outputs_to_save = [
             os.path.join(data_dir,IR_lib_name,"outs/web_summary.html"),
             os.path.join(data_dir,IR_lib_name,"outs/metrics_summary.csv"),
             os.path.join(data_dir,IR_lib_name,"outs/vloupe.vloupe"),
             os.path.join(data_dir,IR_lib_name,"outs/filtered_contig.fasta"),
-            filtered_contig_new_name,
+            os.path.join(data_dir,IR_lib_name,"outs/filtered_contig_annotations"),
             os.path.join(data_dir,IR_lib_name,"outs/all_contig.fasta"),
             os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.csv"),
             os.path.join(data_dir,IR_lib_name,"outs/all_contig_annotations.json"),
@@ -297,6 +292,11 @@ for out in aligner_outputs_to_save:
     logger.add_to_log("copying file in local...")
     logger.add_to_log("cp_cmd: {}".format(cp_cmd))
     logger.add_to_log("cp_cmd result: {}".format(os.popen(cp_cmd).read()))
+    if (lib_type == "BCR" or lib_type == "TCR") and out_file.endswith("filtered_contig_annotations.cv"):
+        # rename the filtered_contig_annotations file to filtered_contig_annotations.vX.csv
+        old_name = os.path.join(data_dir, out_file)
+        new_name = "{}.{}.csv".format(os.path.splitext(old_name)[0], configs_version)
+        shutil.move(old_name, new_name)
     sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, out_file)
     logger.add_to_log("Uploading aligner output {}...".format(out_file))
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
