@@ -581,6 +581,7 @@ except:
     # in future processing layers.
     obj_cols = adata.obs.select_dtypes(include='object').columns
     adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan')
+    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
