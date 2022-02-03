@@ -15,7 +15,7 @@ s3_access_file = sys.argv[3]
 sys.path.append(code_path)
 from utils import *
 
-python_env = "immune_aging.py_env.v3"
+python_env = "immune_aging.py_env.v4"
 
 integration_configs = {
         "sandbox_mode": "False",
