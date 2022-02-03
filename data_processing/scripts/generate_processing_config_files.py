@@ -73,7 +73,7 @@ if config_type in ["library", "all"]:
             "hashsolo_priors": "0.01,0.8,0.19",
             "hashsolo_number_of_noise_barcodes": 2,
             "aligned_library_configs_version": aligned_lib_version,
-            "python_env_version": "immune_aging.py_env.v3",
+            "python_env_version": "immune_aging.py_env.v4",
             "r_setup_version": "immune_aging.R_setup.v2"
         }
         filename = os.path.join(output_destination,
@@ -131,7 +131,7 @@ if config_type in ["sample", "all"]:
             "celltypist_model_urls": "https://celltypist.cog.sanger.ac.uk/models/v6/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/v6/Immune_All_Low.pkl",
             "rbc_model_url": "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl",
             "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
-            "python_env_version": "immune_aging.py_env.v3",
+            "python_env_version": "immune_aging.py_env.v4",
             "r_setup_version": "immune_aging.R_setup.v2",
         }
         filename = os.path.join(output_destination,"process_sample.configs.{}.txt".format(sample_id))
