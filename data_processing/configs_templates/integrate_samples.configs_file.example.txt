@@ -17,5 +17,5 @@
 "umap_spread": 1.0,
 "umap_n_components": 2,
 "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
-"python_env_version": "immune_aging.py_env.v3",
+"python_env_version": "immune_aging.py_env.v4",
 "r_setup_version": "immune_aging.R_setup.v2"}
