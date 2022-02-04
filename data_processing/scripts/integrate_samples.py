@@ -18,6 +18,7 @@ import hashlib
 import traceback
 import celltypist
 import urllib.request
+import zipfile
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -328,13 +329,26 @@ except Exception as err:
     sys.exit()
 
 
-## TODO add logs
 logger.add_to_log("Using CellTypist for annotations...")
-
-def annotate(adata, model_paths, model_urls, components_key, neighbors_key, n_neighbors, resolutions, dotplot_min_frac, model_name, \
-    data_dir, save_all_outputs = False):
+## TODO remove comments below
+"""
+model_paths = celltypist_model_paths; model_urls = celltypist_model_urls; components_key = "X_scvi_integrated";
+neighbors_key = "neighbors_scvi";n_neighbors = configs["neighborhood_graph_n_neighbors"]; resolutions = leiden_resolutions; model_name = "scvi";
+dotplot_min_frac = celltypist_dotplot_min_frac; save_all_outputs = True;
+"""
+def annotate(adata, model_paths, model_urls, components_key, neighbors_key, n_neighbors, resolutions, model_name, \
+    dotplot_min_frac, data_dir, save_all_outputs = False):
     adata_new = adata.copy()
     dotplot_paths = []
+    def find_abundant_cell_types(labels, frac):
+        labels.unique()
+        ct_include = []
+        th = frac*len(labels)
+        cell_types = np.unique(labels)
+        for ct in cell_types:
+            if np.sum(labels == ct) > th:
+                ct_include.append(ct)
+        return ct_include
     for r in range(len(resolutions)):
         resolution = resolutions[r]
         logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
@@ -343,22 +357,29 @@ def annotate(adata, model_paths, model_urls, components_key, neighbors_key, n_ne
         # save the leiden clusters and majority voting results in the original anndata
         adata.obs["leiden_resolution_" + str(resolution)] = adata_new.obs["leiden"]
         for m in range(len(model_paths)):
+            celltypist_model_name = model_urls[m].split("/")[-1].split(".")[0]
             model_path = model_paths[m]
             logger.add_to_log("Running CellTypist annotation using model {0}...".format(model_path))
             predictions = celltypist.annotate(adata_new, model = model_path, majority_voting = True, over_clustering = 'leiden')
-            adata.obs["celltypist_majority_voting.{0}.leiden_resolution_{1}".format(str(m+1), str(resolution)] = predictions["majority_voting"]
-            ## TODO generate and save dotplots; paths should be under data_dir
-            ## TODO use celltypist_dotplot_min_frac
-            celltypist.dotplot(predictions, use_as_reference = 'leiden', use_as_prediction = 'predicted_labels')
-            # TODO dotplot_paths.append()
+            logger.add_to_log("Saving CellTypist outputs for model {0}...".format(model_path))
+            adata.obs["celltypist_majority_voting.{0}.{1}.leiden_resolution_{2}".format(celltypist_model_name, model_name, str(resolution))] = predictions.predicted_labels["majority_voting"]
             if r == 0:
+                # save the rest of the outputs; these outputs do not change with different leiden resolution so should save only once
                 if save_all_outputs:
-                    adata.obs["celltypist_model_url.{0}".format(str(m+1))] = model_urls[m]
-                    adata.obs["celltypist_predicted_labels.{0}"format(str(m+1))] = predictions["predicted_labels"]
-                    ## TODO is the probability matrix the same regardless of the leiden clustering?
-                    adata.obsm["celltypist_probabilities_matrix.{0}"format(str(m+1))] = predictions["probabilities_matrix"]
+                    adata.obs["celltypist_model_url.{0}".format(celltypist_model_name)] = model_urls[m]
+                    adata.obs["celltypist_predicted_labels.{0}".format(celltypist_model_name)] = predictions.predicted_labels["predicted_labels"]
+                    adata.obsm["celltypist_probability_matrix.{0}".format(celltypist_model_name)] = predictions.probability_matrix
+            # generate and save a dotplot only for the abundant cell types
+            logger.add_to_log("Generating a dotplot based on the CellTypist outputs...")
+            abundant_cell_types = find_abundant_cell_types(labels = predictions.predicted_labels["predicted_labels"], frac = celltypist_dotplot_min_frac)
+            dotplot_predictions = celltypist.annotate(adata_new[predictions.predicted_labels["predicted_labels"].isin(abundant_cell_types),:].copy() \
+                , model = model_path, majority_voting = True, over_clustering = 'leiden')
+            dotplot = celltypist.dotplot(dotplot_predictions, use_as_reference = 'leiden', use_as_prediction = 'predicted_labels', show = False, return_fig = False)
+            dotplot_filename = "celltypist_dotplot.{0}.{1}.leiden_resolution_{2}.min_frac_{3}".format(celltypist_model_name, model_name, str(resolution),str(celltypist_dotplot_min_frac))
+            sc.pl._utils.savefig_or_show(dotplot_filename, show = False, save = True)
+            # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
+            dotplot_paths.append(os.path.join(os.getcwd(),"figures",dotplot_filename + ".pdf"))
     return(dotplot_paths)
-
 
 ## remove celltypist predictions and related metadata that were added at the sample-level processing
 celltypist_cols = [j for j in adata.obs.columns if "celltypist" in j]
@@ -375,17 +396,32 @@ for celltypist_model_url in celltypist_model_urls:
     celltypist_model_path = os.path.join(data_dir, celltypist_model_url.split("/")[-1])
     urllib.request.urlretrieve(celltypist_model_url, celltypist_model_path)
     celltypist_model_paths.append(celltypist_model_path)
-
-dotplot_paths = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, components_key = "X_SCVI_integrated", \
+    
+dotplot_paths = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, components_key = "X_scvi_integrated", \
     neighbors_key = "neighbors_scvi", n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, model_name = "scvi", \
-        data_dir = data_dir, dotplot_min_frac = celltypist_dotplot_min_frac, save_all_outputs = True)
+        dotplot_min_frac = celltypist_dotplot_min_frac, data_dir = data_dir, save_all_outputs = True)
 
 if "X_totalVI_integrated" in adata.obsm:
     dotplot_paths_totalvi = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, \
         components_key = "X_totalVI_integrated", neighbors_key = "neighbors_totalvi", \
          n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, \
-             dotplot_min_frac = celltypist_dotplot_min_frac, model_name = "totalvi", data_dir = data_dir)
+             model_name = "totalvi", dotplot_min_frac = celltypist_dotplot_min_frac, data_dir = data_dir)
     dotplot_paths = dotplot_paths + dotplot_paths_totalvi
+
+
+## TODO remove figs dir if exists
+## TODO create new figs dir dotplots_path and move all figs from dotplot_paths into the new dir. then 
+# dotplots_path = ""
+dotplot_dir = os.path.join(data_dir,"dotplots")
+os.system("rm -r -f {}".format(dotplot_dir))
+os.system("mkdir {}".format(dotplot_dir))
+for dotplot_path in dotplot_paths:
+    os.system("mv {} {}".format(dotplot_path, dotplot_dir))
+
+dotplots_zipfile = "{}.{}.celltypist_dotplots.zip".format(prefix, version)
+zipf = zipfile.ZipFile(os.path.join(data_dir,dotplots_zipfile), 'w', zipfile.ZIP_DEFLATED)
+zipdir(dotplot_dir, zipf)
+zipf.close()
 
 logger.add_to_log("Saving h5ad files...")
 adata.obs["age"] = adata.obs["age"].astype(str)
@@ -408,10 +444,9 @@ if not sandbox_mode:
         data_dir, s3_url, prefix, version, scvi_model_file)
     if is_cite:
         sync_cmd += ' --include {}'.format(totalvi_model_file)
-    for dotplot_path in dotplot_paths:
-        sync_cmd += ' --include {}'.format(dotplot_path)
+    sync_cmd += ' --include {}'.format(dotplots_zipfile)         
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))    
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
 logger.add_to_log("Execution of integrate_samples.py is complete.")
 

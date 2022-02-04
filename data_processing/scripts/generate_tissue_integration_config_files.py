@@ -48,7 +48,7 @@ integration_configs = {
         "umap_spread": 1.0,
         "umap_n_components": 2,
         "celltypist_model_urls": celltypist_model_urls,
-        "celltypist_dotplot_min_frac": 0.01,
+        "celltypist_dotplot_min_frac": 0.005,
         "leiden_resolutions": leiden_resolutions,
         "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
         "python_env_version": python_env,

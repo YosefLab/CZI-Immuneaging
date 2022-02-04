@@ -336,6 +336,7 @@ if not no_cells:
         rbc_model_index = -1
         for i in range(len(model_urls)):
             model_file = model_urls[i].split("/")[-1]
+            celltypist_model_name = model_file.split(".")[0]
             model_path = os.path.join(data_dir,model_file)
             # download reference data
             if model_urls[i].startswith("s3://"):
@@ -355,10 +356,10 @@ if not no_cells:
             if model_file.startswith("RBC_model"):
                 rbc_model_index = i
             logger.add_to_log("Saving celltypist annotations for model {}, model description:\n{}".format(model_file, json.dumps(model.description, indent=2)))
-            rna.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
-            rna.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
-            rna.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
-            rna.obs["celltypist_model."+str(i+1)] = model_urls[i]
+            rna.obs["celltypist_over_clustering."+celltypist_model_name] = predictions.predicted_labels["over_clustering"]
+            rna.obs["celltypist_majority_voting."+celltypist_model_name] = predictions.predicted_labels["majority_voting"]
+            rna.obs["celltypist_predicted_labels."+celltypist_model_name] = predictions.predicted_labels["predicted_labels"]
+            rna.obs["celltypist_model."+celltypist_model_name] = model_urls[i]
         # filter out RBC's
         if rbc_model_index != -1:
             n_obs_before = rna.n_obs
