@@ -269,7 +269,7 @@ def _run_model_impl(
     logger.add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
     empirical_protein_background_prior = None if "empirical_protein_background_prior" not in configs else configs["empirical_protein_background_prior"] == "True"
-    model_params_keys = ["use_layer_norm", "use_batch_norm", "empirical_protein_background_prior"]
+    model_params_keys = ["use_layer_norm", "use_batch_norm"]
     model_params = dict()
     for i in model_params_keys:
         if i in configs:
