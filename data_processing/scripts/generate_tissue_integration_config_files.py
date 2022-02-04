@@ -15,7 +15,12 @@ s3_access_file = sys.argv[3]
 sys.path.append(code_path)
 from utils import *
 
-python_env = "immune_aging.py_env.v3"
+python_env = "immune_aging.py_env.v4"
+
+pilot_donors = ["CUIMC-457","CUIMC-471","390C"]
+
+celltypist_model_urls = "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_Conde/v1/Immune_All_PIP.pkl"
+leiden_resolutions = "0.5,0.75,1.0,1.25,1.5,2.0"
 
 integration_configs = {
         "sandbox_mode": "False",
@@ -27,8 +32,10 @@ integration_configs = {
         "protein_levels_max_sds": 5,
         "n_highly_variable_genes": 3000,
         "highly_variable_genes_flavor": "seurat_v3",
+        "batch_key": "donor_id",
         "scvi_max_epochs": 400,
         "totalvi_max_epochs": 400,
+        "empirical_protein_background_prior": "False",
         # The following non-default configurations of scvi and totalvi can be used for speed up in case of very large numbers of cells.
         #"use_layer_norm": "none",
         #"use_batch_norm": "both",
@@ -40,6 +47,9 @@ integration_configs = {
         "umap_min_dist": 0.5,
         "umap_spread": 1.0,
         "umap_n_components": 2,
+        "celltypist_model_urls": celltypist_model_urls,
+        "celltypist_dotplot_min_frac": 0.01,
+        "leiden_resolutions": leiden_resolutions,
         "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
         "python_env_version": python_env,
         "r_setup_version": "immune_aging.R_setup.v2"
@@ -59,7 +69,8 @@ for tissue in tissues:
     # get all samples from the requested tissue as appears in the google spreadsheet
     final_sample_ids = []
     versions = []
-    indices = samples["Organ"] == tissue
+    # consider all samples from the current tissue except for samples coming from pilot donor
+    indices = (samples["Organ"] == tissue) & (~samples["Donor ID"].isin(pilot_donors))
     sample_ids = samples["Sample_ID"][indices]
     for sample_id in sample_ids:
         ls_cmd = "aws s3 ls s3://immuneaging/processed_samples/{}_GEX --recursive".format(sample_id)

@@ -268,13 +268,15 @@ def _run_model_impl(
     assert model_name in ["scvi", "totalvi"]
     logger.add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
-    model_params_keys = ["use_layer_norm", "use_batch_norm"]
+    empirical_protein_background_prior = None if "empirical_protein_background_prior" not in configs else configs["empirical_protein_background_prior"] == "True"
+    model_params_keys = ["use_layer_norm", "use_batch_norm", "empirical_protein_background_prior"]
     model_params = dict()
     for i in model_params_keys:
         if i in configs:
             model_params[i] = configs[i]
     logger.add_to_log("Training {} model...".format(model_name))
-    model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, **model_params)
+    model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, \
+        empirical_protein_background_prior = empirical_protein_background_prior, **model_params)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     train_params = dict()

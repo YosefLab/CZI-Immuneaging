@@ -16,6 +16,8 @@ import pandas as pd
 import scvi
 import hashlib
 import traceback
+import celltypist
+import urllib.request
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -179,6 +181,14 @@ adata = adata_dict[sample_ids[0]]
 if len(sample_ids) > 1:
     adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer")
 
+# Move the summary statistics of the genes (under .var) to .varm
+cols_to_varm = [j for j in adata.var.columns if "n_cells" in j] + \
+[j for j in adata.var.columns if "mean_counts" in j] + \
+[j for j in adata.var.columns if "pct_dropout_by_counts" in j] + \
+[j for j in adata.var.columns if "total_counts" in j]
+adata.varm["gene_stats"] = adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)]
+adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
+
 # protein QC
 if "protein_levels_max_sds" in configs:
     protein_levels_max_sds = configs["protein_levels_max_sds"]
@@ -189,33 +199,44 @@ if (len(proteins) > 0) and protein_levels_max_sds is not None:
     logger.add_to_log("Running protein QC...")
     n_cells_before = adata.obsm["protein_expression"].shape[0]
     n_proteins_before = adata.obsm["protein_expression"].shape[1]
+    # save the qc thresholds in .uns so they can later be applied to other data if needed (specifically, in case of integrating new data into the model we learn here)
+    adata.uns["protein_qc"] = {}
     # a function for excluding cells or proteins based on extreme values (does not excludes cells that have only missing values)
     def exclude_outliers(x, num_sds):
         # a value is considered as an outlier if it is more extreme that the mean plus (or minus) num_sds times the standard deviation
-        is_outlier = np.logical_and(x >= (np.nanmean(x)-np.nanstd(x)*num_sds), x <= (np.nanmean(x)+np.nanstd(x)*num_sds))
+        assert np.sum(normalized_cell_lib_size<0) == 0
+        lower_bound = np.maximum(0, np.nanmean(x)-np.nanstd(x)*num_sds)
+        upper_bound = np.nanmean(x)+np.nanstd(x)*num_sds
+        is_outlier = np.logical_and(x >= lower_bound, x <= upper_bound)
         # do not consider missing values as outliers
-        return np.logical_or(x.isna(), is_outlier)
+        return np.logical_or(x.isna(), is_outlier), lower_bound, upper_bound
     # (1) remove cells that demonstrate extremely high (or low) protein library size; normalize library size by the total number of non NaN proteins available for the cell.
     normalized_cell_lib_size = adata.obsm["protein_expression"].sum(axis=1)/(adata.obsm["protein_expression"].shape[1]-adata.obsm["protein_expression"].isnull().sum(axis=1))
-    keep = exclude_outliers(normalized_cell_lib_size, protein_levels_max_sds)
+    keep, lower_bound, upper_bound = exclude_outliers(normalized_cell_lib_size, protein_levels_max_sds)
+    adata.uns["protein_qc"]["normalized_cell_lib_size_lower_bound"] = lower_bound
+    adata.uns["protein_qc"]["normalized_cell_lib_size_upper_bound"] = upper_bound
     logger.add_to_log("Removing {} cells with extreme protein values (normalized library size more extreme than {} standard deviations)...".format(np.sum(~keep), protein_levels_max_sds))
     adata = adata[keep,].copy()
-    # (2) remove proteins that have extreme library size (across all cells; consider only cells that have non missing values and normalize by the number of cells with no missing values for the protein)
+    # (2) remove proteins that have extreme library size (across all cells; consider only cells that have non-missing values and normalize by the number of cells with no missing values for the protein)
     normalized_protein_lib_sizes = adata.obsm["protein_expression"].sum()/(adata.obsm["protein_expression"].shape[0]-adata.obsm["protein_expression"].isnull().sum(axis=0))
-    keep = exclude_outliers(normalized_protein_lib_sizes, protein_levels_max_sds)
+    keep, lower_bound, upper_bound = exclude_outliers(normalized_protein_lib_sizes, protein_levels_max_sds)
+    adata.uns["protein_qc"]["normalized_protein_lib_size_lower_bound"] = lower_bound
+    adata.uns["protein_qc"]["normalized_protein_lib_size_upper_bound"] = upper_bound
     logger.add_to_log("Removing {} proteins with extreme total number of reads across cells (normalized levels - by the number of cells with no missing values for the protein - more extreme than {} standard deviations)...".format(
         np.sum(~keep), protein_levels_max_sds))
     adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[keep.values]]
-    # (3) remove proteins that were left with zero reads
-    non_zero_proteins = adata.obsm["protein_expression"].sum() > 0
-    num_zero_proteins = np.sum(~non_zero_proteins)
-    if num_zero_proteins:
-        logger.add_to_log("Removing {} proteins with zero reads across all cells...".format(num_zero_proteins))
-    adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[non_zero_proteins.values]]
-    # summarize
-    logger.add_to_log("Protein QC summary: a total of {} cells ({}%) and {} proteins ({}%) were filtered out owing to extreme values.".format(
-        n_cells_before-adata.n_obs, round(100*(n_cells_before-adata.n_obs)/n_cells_before,2),
-        n_proteins_before-adata.obsm["protein_expression"].shape[1], round(100*(n_proteins_before-adata.obsm["protein_expression"].shape[1])/n_proteins_before,2)))
+
+# remove proteins that were left with zero reads
+non_zero_proteins = adata.obsm["protein_expression"].sum() > 0
+num_zero_proteins = np.sum(~non_zero_proteins)
+if num_zero_proteins:
+    logger.add_to_log("Removing {} proteins with zero reads across all cells...".format(num_zero_proteins))
+
+adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[non_zero_proteins.values]]
+# summarize
+logger.add_to_log("Protein QC summary: a total of {} cells ({}%) and {} proteins ({}%) were filtered out owing to extreme values.".format(
+    n_cells_before-adata.n_obs, round(100*(n_cells_before-adata.n_obs)/n_cells_before,2),
+    n_proteins_before-adata.obsm["protein_expression"].shape[1], round(100*(n_proteins_before-adata.obsm["protein_expression"].shape[1])/n_proteins_before,2)))
 
 if "is_solo_singlet" in adata.obs:
     del adata.obs["is_solo_singlet"]
@@ -238,7 +259,8 @@ try:
     if is_cite:
         logger.add_to_log("Detected Antibody Capture features.")
     rna = adata.copy()
-    batch_key = "batch"
+    # set the batch key
+    batch_key = "batch" if "batch_key" not in configs else configs["batch_key"]
     logger.add_to_log("Filtering out vdj genes...")
     rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
     logger.add_to_log("Detecting highly variable genes...")
@@ -305,6 +327,66 @@ except Exception as err:
     print(err)
     sys.exit()
 
+
+## TODO add logs
+logger.add_to_log("Using CellTypist for annotations...")
+
+def annotate(adata, model_paths, model_urls, components_key, neighbors_key, n_neighbors, resolutions, dotplot_min_frac, model_name, \
+    data_dir, save_all_outputs = False):
+    adata_new = adata.copy()
+    dotplot_paths = []
+    for r in range(len(resolutions)):
+        resolution = resolutions[r]
+        logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
+        sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
+        sc.tl.leiden(adata_new, resolution = resolution, key_added = 'leiden', neighbors_key = neighbors_key)
+        # save the leiden clusters and majority voting results in the original anndata
+        adata.obs["leiden_resolution_" + str(resolution)] = adata_new.obs["leiden"]
+        for m in range(len(model_paths)):
+            model_path = model_paths[m]
+            logger.add_to_log("Running CellTypist annotation using model {0}...".format(model_path))
+            predictions = celltypist.annotate(adata_new, model = model_path, majority_voting = True, over_clustering = 'leiden')
+            adata.obs["celltypist_majority_voting.{0}.leiden_resolution_{1}".format(str(m+1), str(resolution)] = predictions["majority_voting"]
+            ## TODO generate and save dotplots; paths should be under data_dir
+            ## TODO use celltypist_dotplot_min_frac
+            celltypist.dotplot(predictions, use_as_reference = 'leiden', use_as_prediction = 'predicted_labels')
+            # TODO dotplot_paths.append()
+            if r == 0:
+                if save_all_outputs:
+                    adata.obs["celltypist_model_url.{0}".format(str(m+1))] = model_urls[m]
+                    adata.obs["celltypist_predicted_labels.{0}"format(str(m+1))] = predictions["predicted_labels"]
+                    ## TODO is the probability matrix the same regardless of the leiden clustering?
+                    adata.obsm["celltypist_probabilities_matrix.{0}"format(str(m+1))] = predictions["probabilities_matrix"]
+    return(dotplot_paths)
+
+
+## remove celltypist predictions and related metadata that were added at the sample-level processing
+celltypist_cols = [j for j in adata.obs.columns if "celltypist" in j]
+adata.obs = adata.obs.drop(labels = celltypist_cols, axis = "columns")
+
+leiden_resolutions = [float(j) for j in configs["leiden_resolutions"].split(",")]
+celltypist_model_urls = configs["celltypist_model_urls"].split(",")
+celltypist_dotplot_min_frac = configs["celltypist_dotplot_min_frac"]
+
+logger.add_to_log("Downloading CellTypist models...")
+# download celltypist models
+celltypist_model_paths = []
+for celltypist_model_url in celltypist_model_urls:
+    celltypist_model_path = os.path.join(data_dir, celltypist_model_url.split("/")[-1])
+    urllib.request.urlretrieve(celltypist_model_url, celltypist_model_path)
+    celltypist_model_paths.append(celltypist_model_path)
+
+dotplot_paths = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, components_key = "X_SCVI_integrated", \
+    neighbors_key = "neighbors_scvi", n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, model_name = "scvi", \
+        data_dir = data_dir, dotplot_min_frac = celltypist_dotplot_min_frac, save_all_outputs = True)
+
+if "X_totalVI_integrated" in adata.obsm:
+    dotplot_paths_totalvi = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, \
+        components_key = "X_totalVI_integrated", neighbors_key = "neighbors_totalvi", \
+         n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, \
+             dotplot_min_frac = celltypist_dotplot_min_frac, model_name = "totalvi", data_dir = data_dir)
+    dotplot_paths = dotplot_paths + dotplot_paths_totalvi
+
 logger.add_to_log("Saving h5ad files...")
 adata.obs["age"] = adata.obs["age"].astype(str)
 adata.obs["BMI"] = adata.obs["BMI"].astype(str)
@@ -321,11 +403,13 @@ if not sandbox_mode:
         data_dir, s3_url, prefix, version, output_h5ad_file)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-    logger.add_to_log("Uploading model files (a single .zip file for each model) to S3...")
+    logger.add_to_log("Uploading model files (a single .zip file for each model) and CellTypist dot plots to S3...")
     sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" --include {}'.format(
         data_dir, s3_url, prefix, version, scvi_model_file)
     if is_cite:
         sync_cmd += ' --include {}'.format(totalvi_model_file)
+    for dotplot_path in dotplot_paths:
+        sync_cmd += ' --include {}'.format(dotplot_path)
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))    
 

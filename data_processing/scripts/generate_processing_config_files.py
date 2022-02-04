@@ -22,6 +22,9 @@ seq_run = sys.argv[5]
 sys.path.append(code_path)
 from utils import *
 
+celltypist_model_urls = "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_Conde/v1/Immune_All_PIP.pkl"
+rbc_model_url = "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl"
+
 samples = read_immune_aging_sheet("Samples")
 indices = samples["Donor ID"] == donor_id
 
@@ -95,8 +98,8 @@ if config_type in ["sample", "all"]:
             "umap_min_dist": 0.5,
             "umap_spread": 1.0,
             "umap_n_components": 2,
-            "celltypist_model_urls": "https://celltypist.cog.sanger.ac.uk/models/v6/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/v6/Immune_All_Low.pkl",
-            "rbc_model_url": "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl",
+            "celltypist_model_urls": celltypist_model_urls,
+            "rbc_model_url": rbc_model_url,
             "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
             "python_env_version": "immune_aging.py_env.v3",
             "r_setup_version": "immune_aging.R_setup.v2",
