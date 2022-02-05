@@ -6,9 +6,9 @@
 "processed_libraries_dir": "/path/to/processed_libraries_dir/",
 "donor": "591C",
 "seq_run": "003",
-"library_type": "GEX",
 "sample_id": "591C-SPL-1",
 "library_ids": "CZI-IA10034924,CZI-IA10034925,CZI-IA10034926",
+"library_types": "GEX,GEX,GEX",
 "processed_library_configs_version": "v1,v1,v1",
 "min_cells_per_library": 200,
 "filter_decontaminated_cells_min_genes": 100,
@@ -26,5 +26,5 @@
 "celltypist_model_urls": "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_Conde/v1/Immune_All_PIP.pkl",
 "rbc_model_url": "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl",
 "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
-"python_env_version": "immune_aging.py_env.v3",
+"python_env_version": "immune_aging.py_env.v4",
 "r_setup_version": "immune_aging.R_setup.v2"}

@@ -7,6 +7,7 @@
 "seq_run": "003",
 "library_type": "GEX",
 "library_id": "CZI-IA10034926",
+"corresponding_gex_lib": "CZI-IA10034926",
 "filter_cells_min_genes": 200,
 "filter_genes_min_cells": 0,
 "filter_cells_max_pct_counts_mt": 20,
@@ -15,5 +16,5 @@
 "exclude_mito_genes": "True",
 "hashsolo_priors": "0.01,0.8,0.19",
 "aligned_library_configs_version": "v1",
-"python_env_version": "immune_aging.py_env.v3",
+"python_env_version": "immune_aging.py_env.v4",
 "r_setup_version": "immune_aging.R_setup.v2"}

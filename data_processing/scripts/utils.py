@@ -10,7 +10,7 @@ import zipfile
 from anndata._core.anndata import AnnData
 from math import floor
 import csv
-from typing import Type
+from typing import Type, List
 import traceback
 from datetime import datetime
 
@@ -350,3 +350,12 @@ def get_internal_protein_names(df):
     for protein_panel in protein_panels.values():
         if df.shape[1] == protein_panel.shape[0]:
             return protein_panel["internal_name"]
+
+def dir_and_files_exist(dir_name: str, file_names: List[str]) -> bool:
+    exists = os.path.isdir(dir_name)
+    if exists:
+        for fn in file_names:
+            if not os.path.isfile(fn):
+                exists = False
+                break
+    return exists

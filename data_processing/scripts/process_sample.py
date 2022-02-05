@@ -15,6 +15,7 @@ import hashlib
 import celltypist
 import urllib.request
 import traceback
+import scirpy as ir
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -32,7 +33,6 @@ output_destination = configs["output_destination"]
 donor = configs["donor"]
 seq_run = configs["seq_run"]
 sample_id = configs["sample_id"]
-library_type = configs["library_type"]
 
 sys.path.append(configs["code_path"])
 
@@ -79,7 +79,7 @@ data_dir = os.path.join(output_destination, "_".join([donor, seq_run]))
 os.system("mkdir -p " + data_dir)
 
 # check for previous versions of the processed sample
-prefix = "{}_{}".format(sample_id, library_type)
+prefix = "{}_{}".format(sample_id, "GEX") # hard code "GEX" in the prefix in order to keep consistent with what we already have on AWS and not have to rename everything
 s3_path = "s3://immuneaging/processed_samples/" + prefix
 is_new_version, version = get_configs_status(configs, s3_path, "process_sample.configs." + prefix,
     VARIABLE_CONFIG_KEYS, data_dir)
@@ -89,7 +89,7 @@ output_configs_file = "process_sample.configs.{}.{}.txt".format(prefix,version)
 logger_file = "process_sample.{}.{}.log".format(prefix,version)
 logger_file_path = os.path.join(data_dir, logger_file)
 if os.path.isfile(logger_file_path):
-	os.remove(logger_file_path)
+    os.remove(logger_file_path)
 
 logger = SimpleLogger(filename = logger_file_path)
 logger.add_to_log("Running process_sample.py...")
@@ -131,8 +131,13 @@ else:
     if not h5ad_file_exists:
         logger.add_to_log("The following h5ad file does not exist on S3: {}".format(h5ad_file))
 
-library_versions = configs["processed_library_configs_version"].split(',')
 library_ids = configs["library_ids"].split(',')
+assert "library_types" in configs or "library_type" in configs
+if "library_types" in configs:
+    library_types = configs["library_types"].split(',')
+else:
+    library_types = [configs["library_type"]] * len(library_ids)
+library_versions = configs["processed_library_configs_version"].split(',')
 if ("processed_libraries_dir" in configs) and (len(configs.get("processed_libraries_dir")) > 0):
     processed_libraries_dir = configs["processed_libraries_dir"]
     logger.add_to_log("Copying h5ad files of processed libraries from {}...".format(processed_libraries_dir))
@@ -143,6 +148,7 @@ else:
     logger.add_to_log("*** Note: This can take some time. If you already have the processed libraries, you can halt this process and provide processed_libraries_dir in the config file in order to use your existing h5ad files. ***")   
     for j in range(len(library_ids)):
         library_id = library_ids[j]
+        library_type = library_types[j]
         library_version = library_versions[j]
         lib_h5ad_file = "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version)
@@ -163,20 +169,23 @@ samples = read_immune_aging_sheet("Samples")
 ###### SAMPLE PROCESSING BEGINS HERE #######
 ############################################
 
-logger.add_to_log("Reading h5ad files of processed libraries...")
+logger.add_to_log("Reading h5ad files of processed libraries for GEX libs...")
 adata_dict = {}
 initial_n_obs = 0
 solo_genes = set()
-library_ids_keep = []
+library_ids_gex = []
 for j in range(len(library_ids)):
+    if library_types[j] != "GEX":
+        continue
     library_id = library_ids[j]
+    library_type = library_types[j]
     library_version = library_versions[j]
     lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
         library_type, library_id, library_version))
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
     if "Classification" in adata_dict[library_id].obs.columns:
-        adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id]
+        adata_dict[library_id] = adata_dict[library_id][adata_dict[library_id].obs["Classification"] == sample_id].copy()
         if "min_cells_per_library" in configs and configs["min_cells_per_library"] > adata_dict[library_id].n_obs:
             # do not consider cells from this library
             msg = "Cells from library {} were not included - there are {} cells from the sample, however, min_cells_per_library was set to {}.".format(
@@ -184,18 +193,16 @@ for j in range(len(library_ids)):
             logger.add_to_log(msg, "warning")
             del adata_dict[library_id]
             continue
-    library_ids_keep.append(library_id)
+    library_ids_gex.append(library_id)
     solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
     solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]
-    initial_n_obs = initial_n_obs + adata_dict[library_id].n_obs
+    initial_n_obs += adata_dict[library_id].n_obs
     if len(solo_genes)==0:
         solo_genes = solo_genes_j
     else:
         solo_genes = np.intersect1d(solo_genes,solo_genes_j)
 
-library_ids = library_ids_keep
-
-if len(library_ids)==0:
+if len(library_ids_gex)==0:
     logger.add_to_log("No cells passed the filtering steps. Terminating execution.", "error")
     logging.shutdown()
     if not sandbox_mode:
@@ -205,14 +212,92 @@ if len(library_ids)==0:
         os.system(sync_cmd)
     sys.exit()
 
-logger.add_to_log("Concatenating all cells of sample {} from available libraries...".format(sample_id))
-adata = adata_dict[library_ids[0]]
-if len(library_ids) > 1:
-    adata = adata.concatenate([adata_dict[library_ids[j]] for j in range(1,len(library_ids))])
+logger.add_to_log("Concatenating all cells of sample {} from available GEX libraries...".format(sample_id))
+adata = adata_dict[library_ids_gex[0]]
+if len(library_ids_gex) > 1:
+    adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
+
+def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnData:
+    assert lib_type in ["BCR", "TCR"]
+    logger.add_to_log("Reading h5ad files of processed libraries for {} libs...".format(lib_type))
+    adata_dict = {}
+    for j in range(len(library_ids)):
+        if library_types[j] != lib_type:
+            continue
+        library_id = library_ids[j]
+        library_type = library_types[j]
+        library_version = library_versions[j]
+        lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
+            library_type, library_id, library_version))
+        adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
+        adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
+        library_ids_ir.append(library_id)
+
+    # Note it's important that we concatenate these libs exactly in this order so that it matches the order in which the corresponding
+    # GEX libs where concatenated. This is important because the concat operation appends a -N suffix to all cells where N is the batch
+    # id (N=0..len(lib_ids)-1). If we don't do this, cells from IR libs and GEX libs won't match due to mismatching -N suffix.
+    logger.add_to_log("Concatenating all cells of sample {} from available {} libraries...".format(sample_id, lib_type))
+    adata_to_return = adata_dict[library_ids_ir[0]]
+    if len(library_ids_ir) > 1:
+        adata_to_return = adata_to_return.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))], batch_key="temp_batch")
+
+    # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
+    # for all cells in the adata_ir and is the same as the one in adata
+    for j in range(len(library_ids_ir)):
+        lib_id = library_ids_ir[j]
+        adata_ir_lib_id = adata_to_return[adata_to_return.obs["{}-library_id".format(lib_type)] == lib_id, :].copy()
+        ir_batch = adata_ir_lib_id.obs["temp_batch"]
+        unique_ir_batch = np.unique(ir_batch)
+        assert len(unique_ir_batch) == 1
+        # grab the corresponding gex lib value
+        batch_suffix = "-{}".format(unique_ir_batch[0])
+        corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1][:-len(batch_suffix)]
+        adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
+        gex_batch = adata_lib_id.obs["batch"]
+        unique_gex_batch = np.unique(gex_batch)
+        assert len(unique_gex_batch) == 1
+        assert unique_ir_batch[0] == unique_gex_batch[0]
+
+    # we could keep this to know what batch (library) the cells are from, but we'll already have this via
+    # the library_id info in adata
+    del adata_to_return.obs["temp_batch"]
+    return adata_to_return
+
+library_ids_bcr = []
+library_ids_tcr = []
+adata_bcr = build_adata_from_ir_libs("BCR", library_ids_bcr)
+adata_tcr = build_adata_from_ir_libs("TCR", library_ids_tcr)
+logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, adata_bcr.n_obs, adata_tcr.n_obs))
+
+logger.add_to_log("Filtering out cells that have both BCR and TCR...")
+intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
+intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
+adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
+adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
+logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
+
+logger.add_to_log("Concatenating BCR and TCR lib(s)...")
+adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
+del adata_ir.obs["temp_batch"]
+
+# cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that
+# have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
+# or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
+# the ir info for those cells since we are missing gex info for them
+logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
+        len(adata.obs.index),
+        len(adata_ir.obs.index),
+        len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
+    ))
+ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
+ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
+logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
+logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
+ir.pp.merge_with_ir(adata, adata_ir)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
-summary.append("Started with a total of {} cells and {} genes coming from {} libraries.".format(
-    initial_n_obs, adata.n_vars, len(library_ids)))
+summary.append("Started with a total of {} cells and {} genes coming from {} GEX libraries, {} BCR libraries and {} TCR libraries.".format(
+    initial_n_obs, adata.n_vars, len(library_ids_gex), len(library_ids_bcr), len(library_ids_tcr)))
 
 logger.add_to_log("Adding metadata...")
 donor_index = donors["Donor ID"] == donor
@@ -225,10 +310,14 @@ sample_index = samples["Sample_ID"] == sample_id
 for k in SAMPLES_FIELDS.keys():
     adata.obs[SAMPLES_FIELDS[k]] = samples[k][sample_index].values[0]
 
-if library_type == "GEX":
+if "GEX" in library_types:
     adata.obs["GEX_chem"] = samples["GEX chem"][sample_index].values[0]
     adata.obs["HTO_chem"] = samples["HTO chem"][sample_index].values[0]
     adata.obs["ADT_chem"] = samples["CITE chem"][sample_index].values[0]
+if "BCR" in library_types:
+    adata.obs["BCR_chem"] = samples["BCR chem"][sample_index].values[0]
+if "TCR" in library_types:
+    adata.obs["TCR_chem"] = samples["TCR chem"][sample_index].values[0]
 
 if adata.n_obs > 0:
     no_cells = False
@@ -281,7 +370,7 @@ if not no_cells:
         df.index = rna.var.index
         df.columns = rna.obs.index
         df.to_csv(raw_counts_file)
-        if len(library_ids)>1:
+        if len(library_ids_gex)>1:
             batch_key = "batch"
             batch_file = os.path.join(decontx_data_dir, "{}.batch.txt".format(prefix))
             pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
@@ -318,6 +407,8 @@ if not no_cells:
         msg = QC_STRING_AMBIENT_RNA.format(n_decon_cells_filtered, percent_removed, configs["filter_decontaminated_cells_min_genes"])
         logger.add_to_log(msg, level=level)
         summary.append(msg)
+        # This set of V(D)J genes are expected to express high donor-level variability that is not interesting to us as we want to get a
+        # coherent picture across all donors combined. Thus we filter these out prior to HVG selection, but keep them in the data otherwise.
         logger.add_to_log("Filtering out vdj genes...")
         rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
         logger.add_to_log("Detecting highly variable genes...")
@@ -379,7 +470,7 @@ if not no_cells:
                 is_cite = False
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
         logger.add_to_log("Running solo for detecting doublets...")
-        if len(library_ids)>1:
+        if len(library_ids_gex)>1:
             batches = pd.unique(rna.obs[batch_key])
             logger.add_to_log("Running solo on the following batches separately: {}".format(batches))
             is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
@@ -460,7 +551,15 @@ if not no_cells:
         sys.exit()
 
 logger.add_to_log("Saving h5ad file...")
-adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+try:
+    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+except:
+    # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
+    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
+    # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
+    # in future processing layers.
+    obj_cols = adata.obs.select_dtypes(include='object').columns
+    adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan')
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
