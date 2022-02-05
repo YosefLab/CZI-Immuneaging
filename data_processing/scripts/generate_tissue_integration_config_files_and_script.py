@@ -4,7 +4,6 @@
 import sys
 import os
 import json
-import subprocess
 import numpy as np
 import re 
 
