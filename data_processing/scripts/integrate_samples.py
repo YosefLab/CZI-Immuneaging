@@ -438,5 +438,5 @@ logging.shutdown()
 if not sandbox_mode:
     # Uploading log file to S3.
     sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
-        data_dir, s3_url, prefix, version, logger_file)
+        data_dir, s3_url, configs["output_prefix"], version, logger_file)
     os.system(sync_cmd)
