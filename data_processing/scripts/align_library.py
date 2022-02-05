@@ -29,7 +29,7 @@ VARIABLE_CONFIG_KEYS = ["donor",
 "s3_access_file",
 ]
 
-def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, configs_version, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
+def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
     assert aligner == "cellranger" # no other option is currently implemented
     assert GEX_lib or TCR_lib or BCR_lib
     if GEX_lib:
@@ -253,7 +253,7 @@ elif lib_type == "TCR":
 elif lib_type == "BCR":
     BCR_lib = lib_ids[0]
 
-alignment_cmd, aligned_data_dir, aligner_outputs_to_save = get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, configs_version, GEX_lib, ADT_lib, HTO_lib, TCR_lib, BCR_lib, protein_panel)
+alignment_cmd, aligned_data_dir, aligner_outputs_to_save = get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib, ADT_lib, HTO_lib, TCR_lib, BCR_lib, protein_panel)
 
 alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
 prefix = "_".join([donor_id, seq_run, lib_type, lib_ids[0]])
