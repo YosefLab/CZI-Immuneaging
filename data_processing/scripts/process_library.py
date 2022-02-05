@@ -173,11 +173,12 @@ if configs["library_type"] == "GEX":
     summary.append("Total UMI count (across all cells), Q25: {}, Q50: {}, Q75: {}".format(q25, q50, q75))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Downloading aligned library from S3...")
-    aligned_csv_file = "{}_{}_{}_{}.cellranger.filtered_contig_annotations.csv".format(
+    aligned_csv_file = "{}_{}_{}_{}.cellranger.filtered_contig_annotations.{}.csv".format(
         configs["donor"],
         configs["seq_run"],
         configs["library_type"],
-        configs["library_id"]
+        configs["library_id"],
+        configs["aligned_library_configs_version"]
     )
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
         configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],

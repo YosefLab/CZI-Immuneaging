@@ -1,3 +1,4 @@
+import shutil
 import sys
 import os
 import scanpy as sc
@@ -28,7 +29,7 @@ VARIABLE_CONFIG_KEYS = ["donor",
 "s3_access_file",
 ]
 
-def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
+def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, configs_version, GEX_lib = None, ADT_lib = None, HTO_lib = None, TCR_lib = None, BCR_lib = None, protein_panel = None):
     assert aligner == "cellranger" # no other option is currently implemented
     assert GEX_lib or TCR_lib or BCR_lib
     if GEX_lib:
@@ -98,7 +99,7 @@ def get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, sample
     else:
         # if we are here we have either TCR_lib or BCR_lib exclusive
         assert (TCR_lib is not None) ^ (BCR_lib is not None)
-        assert(os.path.isfile(aligner_vdj_file))
+        assert(os.path.isdir(aligner_vdj_file))
         IR_lib = TCR_lib if TCR_lib else BCR_lib
         IR_lib_name = "_".join([donor_id, seq_run, "TCR", TCR_lib]) if TCR_lib else "_".join([donor_id, seq_run, "BCR", BCR_lib])
         outputs_to_save = [
@@ -252,7 +253,7 @@ elif lib_type == "TCR":
 elif lib_type == "BCR":
     BCR_lib = lib_ids[0]
 
-alignment_cmd, aligned_data_dir, aligner_outputs_to_save = get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, GEX_lib, ADT_lib, HTO_lib, TCR_lib, BCR_lib, protein_panel)
+alignment_cmd, aligned_data_dir, aligner_outputs_to_save = get_aligner_cmd(aligner, donor_id, seq_run, data_dir, data_dir_fastq, samples, cite_key, chemistry, configs_version, GEX_lib, ADT_lib, HTO_lib, TCR_lib, BCR_lib, protein_panel)
 
 alignment_exists = dir_and_files_exist(aligned_data_dir, aligner_outputs_to_save)
 prefix = "_".join([donor_id, seq_run, lib_type, lib_ids[0]])
@@ -291,6 +292,12 @@ for out in aligner_outputs_to_save:
     logger.add_to_log("copying file in local...")
     logger.add_to_log("cp_cmd: {}".format(cp_cmd))
     logger.add_to_log("cp_cmd result: {}".format(os.popen(cp_cmd).read()))
+    if (lib_type == "BCR" or lib_type == "TCR") and out_file.endswith("filtered_contig_annotations.csv"):
+        # rename the filtered_contig_annotations file to filtered_contig_annotations.vX.csv
+        old_name = os.path.join(data_dir, out_file)
+        new_name = "{}.{}.csv".format(os.path.splitext(old_name)[0], configs_version)
+        shutil.move(old_name, new_name)
+        out_file = new_name.split("/")[-1]
     sync_cmd = 'aws s3 sync --no-progress {0} s3://immuneaging/aligned_libraries/{1}/{2} --exclude "*" --include {3}'.format(data_dir, configs_version, prefix, out_file)
     logger.add_to_log("Uploading aligner output {}...".format(out_file))
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
