@@ -69,7 +69,7 @@ add_lib("BCR", ir_libs)
 add_lib("TCR", ir_libs)
 
 # create a new directory for the outputs
-data_dir = os.path.join(output_destination, "_".join(donor_id, seq_run))
+data_dir = os.path.join(output_destination, "_".join([donor_id, seq_run]))
 os.system("mkdir -p " + data_dir)
 gex_data_dir = os.path.join(data_dir, "GEX")
 os.system("mkdir -p " + gex_data_dir)
@@ -82,12 +82,13 @@ for lib in gex_libs:
     lib_type = lib[1]
     aligned_lib_version = lib[2]
     logger.add_to_log("Downloading metrics.csv file for lib id {}, lib type {} from S3...".format(lib_id, lib_type))
-    metrics_csv_file = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(donor_id, seq_run, lib_type, lib_id)
+    metrics_csv_file_name = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(donor_id, seq_run, lib_type, lib_id)
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
-        aligned_lib_version, donor_id, seq_run, lib_type, lib_id, gex_data_dir, metrics_csv_file
+        aligned_lib_version, donor_id, seq_run, lib_type, lib_id, gex_data_dir, metrics_csv_file_name
     )
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    metrics_csv_file = os.path.join(gex_data_dir, metrics_csv_file_name)
     if not os.path.isfile(metrics_csv_file):
         logger.add_to_log("Failed to download file {} from S3. Exiting.".format(metrics_csv_file), level="error")
         raise ValueError("Failed to download file {} from S3")
@@ -101,12 +102,11 @@ for f in all_gex_metrics_files:
     df["Aligned Lib Version"] = f[2]
     all_gex_dfs.append(df)
 all_gex_df = pd.concat(all_gex_dfs, ignore_index=True)
-filename = os.path.join(output_destination, "{}_{}_all_GEX_metrics.csv".format(donor_id,seq_run))
-with open(filename, 'w') as f:
+combined_metrics = os.path.join(data_dir, "{}_{}_all_GEX_metrics.csv".format(donor_id,seq_run))
+with open(combined_metrics, 'w') as f:
     all_gex_df.to_csv(f)
 # upload the combined csv file to AWS
-# logger.add_to_log("Uploading combined metrics file {} to S3...".format(all_gex_df))
-# metrics_csv_file = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(donor_id, seq_run, lib_type, lib_id)
-# sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/GEX/ --exclude "*" --include {}'.format(gex_data_dir, all_gex_df)
-# logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-# logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+logger.add_to_log("Uploading combined metrics file {} to S3...".format(combined_metrics.split("/")[-1]))
+sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/GEX/ --exclude "*" --include {}'.format(data_dir, combined_metrics.split("/")[-1])
+logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
