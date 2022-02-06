@@ -11,9 +11,11 @@ from abc import ABC, abstractmethod
 from typing import List, Dict
 import pandas as pd
 import csv
+
 from parse import *
 import logging
 import io
+import re
 
 import utils
 from logger import RichLogger, not_found_sign
@@ -23,7 +25,6 @@ logging.getLogger('parse').setLevel(logging.WARNING)
 class BaseDigestClass(ABC):
     def __init__(self, args: List[str]):
         self._ingest_and_sanity_check_input(args)
-        self.library_type = "GEX" # we assume this for now, if this changes we can have it be passed as a command line param
         self.downloaded_from_aws = self.logs_location == "aws"
 
         # set aws credentials
@@ -35,13 +36,18 @@ class BaseDigestClass(ABC):
         self.donor_id = args[3]
         self.seq_run = args[4]
         self.logs_location = args[5] # must be either "aws" or the absolute path to the logs location on the local disk
-        self.version = args[6] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest")
+        self.version = args[6] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest") - "latest" can only be used if logs_location is "aws"
         self.working_dir = args[7] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
         self.s3_access_file = args[8] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
 
+        assert(self.version != "latest" or self.logs_location == "aws")
         assert(self.logs_location == "aws" or os.path.isdir(self.logs_location))
         assert(self.working_dir == "" if self.logs_location != "aws" else os.path.isdir(self.working_dir))
         assert(self.s3_access_file == "" if self.logs_location != "aws" else os.path.isfile(self.s3_access_file))
+
+        if self.version == "latest":
+            logger = RichLogger()
+            logger.add_to_log("*** Be wary of using the \"latest\" option as it can hide failures. For example if you expect the latest to be N and some library failed, we would grab the latest version that succeeded (<N) and report success. If you know the version you expect, provide it explicitly. ***", level="warning")
 
     def _get_all_samples(self) -> pd.DataFrame:
         samples = utils.read_immune_aging_sheet("Samples", quiet=True)
@@ -61,7 +67,7 @@ class BaseDigestClass(ABC):
         pass
         
     @abstractmethod
-    def _get_log_file_name(self, object_id: str):
+    def _get_log_file_name(self, object_id: str, version: str):
         pass
 
     @abstractmethod
@@ -90,7 +96,8 @@ class BaseDigestClass(ABC):
         logger = RichLogger()
         try:
             object_ids = self._get_object_ids()
-            
+            object_versions = []
+
             # if the logs location is aws, download all log files to the local working directory
             if self.logs_location == "aws":
                 # set this first so that if we hit an exception mid-way through the loop below
@@ -98,20 +105,43 @@ class BaseDigestClass(ABC):
                 self.logs_location = self.working_dir
                 for object_id in object_ids:
                     prefix = self._get_object_prefix(object_id)
-                    filename = self._get_log_file_name(object_id)
                     aws_dir_name = self._get_aws_dir_name()
-                    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, self.version, self.working_dir, filename)
+                    # find the latest version if needed
+                    if self.version == "latest":
+                        latest_version = -1
+                        ls_cmd = "aws s3 ls s3://immuneaging/{}/{} --recursive".format(aws_dir_name, prefix)
+                        ls  = os.popen(ls_cmd).read()
+                        if len(ls) != 0:
+                            filenames = ls.split("\n")
+                            for filename in filenames:
+                                # search for patterns of .vX.log. If there is a match, group
+                                # one is ".v" and group 2 is "X" (X can be any integer >0)
+                                m = re.search("(\.v)(\d+)\.log$", filename)
+                                if bool(m):
+                                    version = int(m[2])
+                                    if latest_version < version:
+                                        latest_version = version
+                        # will be v-1 if we could not find any log file above - this will cause
+                        # the code further below to fail to find the file and emit an error message
+                        version = "v" + str(latest_version)
+                    else:
+                        version = self.version
+                    object_versions.append(version)
+                    filename = self._get_log_file_name(object_id, version)
+                    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, version, self.working_dir, filename)
                     logger.add_to_log("syncing {}...".format(filename))
                     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-                    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-
-            if self.version == "latest":
-                # TODO issue #15
-                raise NotImplementedError
+                    resp = os.popen(sync_cmd).read()
+                    if len(resp) == 0:
+                        logger.add_to_log("empty response from aws.\n", level="error")
+                    else:
+                        logger.add_to_log("aws response: {}\n".format(resp))
+            else:
+                object_versions = [self.version] * len(object_ids)
 
             # for each object id, get all its log lines and add it to the dict
-            for object_id in object_ids:
-                filename = self._get_log_file_name(object_id)
+            for elem in zip(object_ids, object_versions):
+                filename = self._get_log_file_name(elem[0], elem[1])
                 filepath = os.path.join(self.logs_location, filename)
                 if not os.path.isfile(filepath):
                     logger.add_to_log("File not found: {}. Skipping.".format(filepath), level="error")
@@ -186,14 +216,14 @@ class DigestSampleProcessingLogs(BaseDigestClass):
         return samples_df["Sample_ID"]
 
     def _get_object_prefix(self, object_id: str):
-        return "{}_{}".format(object_id, self.library_type)
+        return "{}_GEX".format(object_id)        
 
-    def _get_log_file_name(self, object_id: str):
+    def _get_log_file_name(self, object_id: str, version: str):
         prefix = self._get_object_prefix(object_id)
-        return "process_sample.{}.{}.log".format(prefix, self.version)
+        return "process_sample.{}.{}.log".format(prefix, version)
 
     def _get_object_id(self, log_file_name: str):
-        # log file name is process_sample.{prefix}.{version}.log where prefix is {object_id}_{library_type}
+        # log file name is process_sample.{prefix}.{version}.log where prefix is given by _get_object_prefix
         prefix = log_file_name.split(".")[1]
         return prefix.split("_")[0]
 
@@ -305,17 +335,18 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def _get_object_ids(self):
         object_ids = set()
         samples_df = self._get_all_samples()
-        for i in samples_df[self.library_type + " lib"]:
-            for j in i.split(","):
-                object_ids.add(j)
+        for library_type in ["GEX", "BCR", "TCR"]:
+            for i in samples_df[library_type + " lib"]:
+                for j in i.split(","):
+                    object_ids.add("{}_{}".format(library_type, j))
         return object_ids
 
     def _get_object_prefix(self, object_id: str):
-        return "{}_{}_{}_{}".format(self.donor_id, self.seq_run, self.library_type, object_id)
+        return "{}_{}_{}".format(self.donor_id, self.seq_run, object_id)
 
-    def _get_log_file_name(self, object_id: str):
+    def _get_log_file_name(self, object_id: str, version: str):
         prefix = self._get_object_prefix(object_id)
-        return "process_library.{}.{}.log".format(prefix, self.version)
+        return "process_library.{}.{}.log".format(prefix, version)
 
     def _get_aws_dir_name(self):
         return "processed_libraries"

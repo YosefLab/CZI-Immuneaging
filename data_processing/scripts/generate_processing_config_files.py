@@ -1,8 +1,8 @@
 ## This script can be used to generate config files for all libraries and all samples from a given donor; currently only GEX libraries are considered (i.e. ignores BCR/TCR libs).
 ## Note that 
-## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run> <processed_lib_version>
+## Run as follows: python generate_processing_config_files.py <config_type> <code_path> <output_destination> <donor_id> <seq_run> <s3_access_file> <processed_gex_lib_version> <processed_ir_lib_version>
 ## where config_type can be one of "library", "sample" or "all"
-## and "processed_lib_version" is the version for all processed libraries that we use to process a sample (if config_type is "library" this is unused)
+## processed_._lib_version args are only required if config_type is "sample", otherwise you can pass any string 
 ## Note that code_path, output_destination, and s3_access_file will be set later via generate_processing_scripts.py
 ## After generating the files run the following commands to upload to aws (after setting the aws credentials as env variables):
 ## aws s3 sync config_files s3://immuneaging/job_queue/process_library/ --exclude "*" --include "process_library*.configs.txt"
@@ -10,17 +10,21 @@
 ## assuming config_files is the directory containing the config files.
 ## Then, the script generate_processing_scripts.py can be used to create .sh files to execute the actual processing based on the config files.
 
+import re
 import sys
 import os
 import json
 from typing import List
+from logger import RichLogger
 
 config_type = sys.argv[1]
 code_path = sys.argv[2]
 output_destination = sys.argv[3]
 donor_id = sys.argv[4]
 seq_run = sys.argv[5]
-processed_lib_version = sys.argv[6]
+s3_access_file = sys.argv[6]
+processed_gex_lib_version = sys.argv[7]
+processed_ir_lib_version = sys.argv[8]
 
 sys.path.append(code_path)
 from utils import *
@@ -34,17 +38,48 @@ indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_r
 if config_type in ["library", "all"]:
     # create config files for library processing
     def add_lib(lib_type: str, all_libs: set) -> None:
+        if lib_type not in ["GEX", "BCR", "TCR"]:
+            raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
         column_name = "{} lib".format(lib_type)
         libs_all = samples[indices][column_name]
         gex_libs_all = samples[indices]["GEX lib"]
+        failed_libs = set()
         for i in range(len(libs_all)):
+            if libs_all.iloc[i] is np.nan:
+                continue
             libs = libs_all.iloc[i].split(",")
             gex_libs = gex_libs_all.iloc[i].split(",")
             for j in range(len(libs)):
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
-                aligned_lib_version = "v1" # TODO infer this from AWS since different lib types can have different aligned versions (github issue #51)
+                # find the latest aligned_lib_version
+                set_access_keys(s3_access_file)
+                latest_version = -1
+                ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
+                ls  = os.popen(ls_cmd).read()
+                if len(ls) != 0:
+                    filenames = ls.split("\n")
+                    if lib_type == "GEX":
+                        # search for patterns of <lib id>.vX.h5ad. If there is a match, group
+                        # one is "<lib id>.v" and group 2 is "X" (X can be any integer >0)
+                        pattern = "({}\.v)(\d+)\.h5ad$".format(lib)
+                    else:
+                        pattern = "({}_{}\.cellranger\.filtered_contig_annotations\.v)(\d+)\.csv".format(lib_type, lib)
+                    for filename in filenames:
+                        m = re.search(pattern, filename)
+                        if bool(m):
+                            version = int(m[2])
+                            if latest_version < version:
+                                latest_version = version
+                if latest_version == -1:
+                    failed_libs.add(lib)
+                    # skip
+                    continue
+                aligned_lib_version = "v" + str(latest_version)
                 all_libs.add((lib,lib_type,aligned_lib_version,corresponding_gex_lib))
+        logger = RichLogger()
+        for fl in failed_libs:
+            logger.add_to_log("No aligned libraries found on AWS for lib id {} lib type {}. Skipping.".format(fl, lib_type), level="warning")
 
     all_libs = set()
     add_lib("GEX", all_libs)
@@ -96,6 +131,7 @@ if config_type in ["sample", "all"]:
             lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
             all_libs += lib_ids
             all_lib_types += [lib_type] * len(lib_ids)
+            processed_lib_version = processed_gex_lib_version if lib_type == "GEX" else processed_ir_lib_version
             all_lib_versions += [processed_lib_version] * len(lib_ids)
 
         all_libs = []
