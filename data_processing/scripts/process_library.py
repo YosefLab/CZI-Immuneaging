@@ -168,9 +168,6 @@ if configs["library_type"] == "GEX":
     adata.obs_names = adata.obs_names + "_" + configs["library_id"]
 
     summary.append("Final number of cells: {}, final number of genes: {}.".format(adata.n_obs, adata.n_vars))
-    umis = adata.X.sum(dim=-1)
-    q25, q50, q75 = np.quantile(umis, 0.25), np.quantile(umis, 0.5), np.quantile(umis, 0.75) 
-    summary.append("Total UMI count (across all cells), Q25: {}, Q50: {}, Q75: {}".format(q25, q50, q75))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Downloading aligned library from S3...")
     aligned_csv_file = "{}_{}_{}_{}.cellranger.filtered_contig_annotations.{}.csv".format(

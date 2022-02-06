@@ -1,4 +1,4 @@
-## Run as follows: python gather_lib_alignment_qcs.py <lib_type> <code_path> <output_destination> <donor_id> <seq_run> <s3_access_file>
+## Run as follows: python gather_lib_alignment_qcs.py <code_path> <output_destination> <donor_id> <seq_run> <s3_access_file>
 
 import re
 import sys
@@ -7,12 +7,11 @@ import json
 from typing import List
 from logger import RichLogger
 
-lib_type = sys.argv[1]
-code_path = sys.argv[2]
-output_destination = sys.argv[3]
-donor_id = sys.argv[4]
-seq_run = sys.argv[5]
-s3_access_file = sys.argv[6]
+code_path = sys.argv[1]
+output_destination = sys.argv[2]
+donor_id = sys.argv[3]
+seq_run = sys.argv[4]
+s3_access_file = sys.argv[5]
 
 sys.path.append(code_path)
 from utils import *
@@ -20,21 +19,21 @@ from utils import *
 samples = read_immune_aging_sheet("Samples")
 indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))
 
+logger = RichLogger()
+
+# TODO crawl through all donors and merge them in all in a single csv per lib type
+
 def add_lib(lib_type: str, all_libs: set) -> None:
     if lib_type not in ["GEX", "BCR", "TCR"]:
         raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
     column_name = "{} lib".format(lib_type)
     libs_all = samples[indices][column_name]
-    gex_libs_all = samples[indices]["GEX lib"]
     failed_libs = set()
     for i in range(len(libs_all)):
         if libs_all.iloc[i] is np.nan:
             continue
         libs = libs_all.iloc[i].split(",")
-        gex_libs = gex_libs_all.iloc[i].split(",")
-        for j in range(len(libs)):
-            lib = libs[j]
-            corresponding_gex_lib = gex_libs[j]
+        for lib in libs:
             # find the latest aligned_lib_version
             set_access_keys(s3_access_file)
             latest_version = -1
@@ -59,8 +58,7 @@ def add_lib(lib_type: str, all_libs: set) -> None:
                 # skip
                 continue
             aligned_lib_version = "v" + str(latest_version)
-            all_libs.add((lib,lib_type,aligned_lib_version,corresponding_gex_lib))
-    logger = RichLogger()
+            all_libs.add((lib,lib_type,aligned_lib_version))
     for fl in failed_libs:
         logger.add_to_log("No aligned libraries found on AWS for lib id {} lib type {}. Skipping.".format(fl, lib_type), level="warning")
 
@@ -70,36 +68,45 @@ add_lib("GEX", gex_libs)
 add_lib("BCR", ir_libs)
 add_lib("TCR", ir_libs)
 
-for lib in all_libs:
+# create a new directory for the outputs
+data_dir = os.path.join(output_destination, "_".join(donor_id, seq_run))
+os.system("mkdir -p " + data_dir)
+gex_data_dir = os.path.join(data_dir, "GEX")
+os.system("mkdir -p " + gex_data_dir)
+ir_data_dir = os.path.join(data_dir, "IR")
+os.system("mkdir -p " + ir_data_dir)
+
+all_gex_metrics_files = []
+for lib in gex_libs:
     lib_id = lib[0]
     lib_type = lib[1]
     aligned_lib_version = lib[2]
-    corresponding_gex_lib = lib[3]
-    lib_configs = {
-        "sandbox_mode": "False",
-        "data_owner": "valehvpa",
-        "code_path": "./",
-        "output_destination": "./",
-        "s3_access_file": "./",
-        "donor": donor_id,
-        "seq_run": seq_run,
-        "library_type": lib_type,
-        "library_id": lib_id,
-        "corresponding_gex_lib": corresponding_gex_lib,
-        "filter_cells_min_genes": 600,
-        "filter_cells_min_umi": 1000,
-        "filter_genes_min_cells": 0,
-        "filter_cells_max_pct_counts_mt": 20,
-        "filter_cells_min_pct_counts_ribo": 0,
-        "genes_to_exclude": "MALAT1",
-        "exclude_mito_genes": "True",
-        "hashsolo_priors": "0.01,0.8,0.19",
-        "hashsolo_number_of_noise_barcodes": 2,
-        "aligned_library_configs_version": aligned_lib_version,
-        "python_env_version": "immune_aging.py_env.v4",
-        "r_setup_version": "immune_aging.R_setup.v2"
-    }
-    filename = os.path.join(output_destination,
-        "process_library.{}.{}.{}.{}.configs.txt".format(donor_id,seq_run,lib_id, lib_type))
-    with open(filename, 'w') as f:
-        json.dump(lib_configs, f)
+    logger.add_to_log("Downloading metrics.csv file for lib id {}, lib type {} from S3...".format(lib_id, lib_type))
+    metrics_csv_file = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(donor_id, seq_run, lib_type, lib_id)
+    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
+        aligned_lib_version, donor_id, seq_run, lib_type, lib_id, gex_data_dir, metrics_csv_file
+    )
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    if not os.path.isfile(metrics_csv_file):
+        logger.add_to_log("Failed to download file {} from S3. Exiting.".format(metrics_csv_file), level="error")
+        raise ValueError("Failed to download file {} from S3")
+    all_gex_metrics_files.append((metrics_csv_file,lib_id,aligned_lib_version))
+
+# create the combined csv metrics file
+all_gex_dfs = []
+for f in all_gex_metrics_files:
+    df = pd.read_csv(f[0])
+    df["Lib Id"] = f[1]
+    df["Aligned Lib Version"] = f[2]
+    all_gex_dfs.append(df)
+all_gex_df = pd.concat(all_gex_dfs, ignore_index=True)
+filename = os.path.join(output_destination, "{}_{}_all_GEX_metrics.csv".format(donor_id,seq_run))
+with open(filename, 'w') as f:
+    all_gex_df.to_csv(f)
+# upload the combined csv file to AWS
+# logger.add_to_log("Uploading combined metrics file {} to S3...".format(all_gex_df))
+# metrics_csv_file = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(donor_id, seq_run, lib_type, lib_id)
+# sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/GEX/ --exclude "*" --include {}'.format(gex_data_dir, all_gex_df)
+# logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+# logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
