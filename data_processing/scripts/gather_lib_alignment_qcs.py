@@ -62,8 +62,8 @@ def add_lib(lib_type: str, all_libs: set) -> None:
     for fl in failed_libs:
         logger.add_to_log("No aligned libraries found on AWS for lib id {} lib type {}. Skipping.".format(fl, lib_type), level="warning")
 
-def combine_metrics_for_lib(libs: set, lib_type: str, data_dir: str):
-    lib_data_dir = os.path.join(data_dir, lib_type)
+def combine_metrics_for_lib(libs: set, generic_lib_type: str, data_dir: str):
+    lib_data_dir = os.path.join(data_dir, generic_lib_type)
     os.system("mkdir -p " + lib_data_dir)
     all_metrics_files = []
     for lib in libs:
@@ -82,23 +82,24 @@ def combine_metrics_for_lib(libs: set, lib_type: str, data_dir: str):
             msg = "Failed to download file {} from S3.".format(metrics_csv_file)
             logger.add_to_log(msg, level="error")
             raise ValueError(msg)
-        all_metrics_files.append((metrics_csv_file,lib_id,aligned_lib_version))
+        all_metrics_files.append((metrics_csv_file,lib_id,lib_type,aligned_lib_version))
 
     # create the combined csv metrics file
     all_dfs = []
     for f in all_metrics_files:
         df = pd.read_csv(f[0])
         df["Lib Id"] = f[1]
-        df["Aligned Lib Version"] = f[2]
+        df["Lib Type"] = f[2]
+        df["Aligned Lib Version"] = f[3]
         # TODO del any df columns that we don't want, if we only desire to keep a subset
         all_dfs.append(df)
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    combined_metrics = os.path.join(data_dir, "{}_{}_all_{}_metrics.csv".format(donor_id,seq_run,lib_type))
+    combined_metrics = os.path.join(data_dir, "{}_{}_all_{}_metrics.csv".format(donor_id,seq_run,generic_lib_type))
     with open(combined_metrics, 'w') as f:
         combined_df.to_csv(f)
     # upload the combined csv file to AWS
     logger.add_to_log("Uploading combined metrics file {} to S3...".format(combined_metrics.split("/")[-1]))
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(data_dir, lib_type, combined_metrics.split("/")[-1])
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(data_dir, generic_lib_type, combined_metrics.split("/")[-1])
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
