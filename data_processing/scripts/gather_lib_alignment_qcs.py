@@ -23,6 +23,34 @@ logger = RichLogger()
 
 # TODO crawl through all donors and merge them in all in a single csv per lib type
 
+CSV_FIELDS_FOR_GEX = {
+    "Estimated Number of Cells",
+    "Mean Reads per Cell",
+    "Median Genes per Cell",
+    "Number of Reads",
+    "Sequencing Saturation",
+    "Median UMI Counts per Cell",
+    # the below are only present if we have CITE or HTO data
+    "Antibody: Number of Reads",
+    "Antibody: Mean Reads per Cell",
+    "Antibody: Sequencing Saturation",
+    "Antibody: Median UMIs per Cell (summed over all recognized antibody barcodes)",
+}
+
+CSV_FIELDS_FOR_IR = {
+    "Estimated Number of Cells",
+    "Mean Read Pairs per Cell",
+    "Number of Read Pairs",
+    "Reads Mapped to Any V(D)J Gene",
+    # BCR
+    "Median IGH UMIs per Cell",
+    "Median IGK UMIs per Cell",
+    "Median IGL UMIs per Cell",
+    # TCR
+    "Median TRA UMIs per Cell",
+    "Median TRB UMIs per Cell",
+}
+
 def add_lib(lib_type: str, all_libs: set) -> None:
     if lib_type not in ["GEX", "BCR", "TCR"]:
         raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
@@ -88,10 +116,13 @@ def combine_metrics_for_lib(libs: set, generic_lib_type: str, data_dir: str):
     all_dfs = []
     for f in all_metrics_files:
         df = pd.read_csv(f[0])
+        fields_to_keep = CSV_FIELDS_FOR_GEX if generic_lib_type == "GEX" else CSV_FIELDS_FOR_IR
+        for c in df.columns:
+            if c not in fields_to_keep:
+                del df[c]
         df["Lib Id"] = f[1]
         df["Lib Type"] = f[2]
         df["Aligned Lib Version"] = f[3]
-        # TODO del any df columns that we don't want, if we only desire to keep a subset
         all_dfs.append(df)
     combined_df = pd.concat(all_dfs, ignore_index=True)
     combined_metrics = os.path.join(data_dir, "{}_{}_all_{}_metrics.csv".format(donor_id,seq_run,generic_lib_type))
