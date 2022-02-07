@@ -425,9 +425,10 @@ if not no_cells:
         if configs["rbc_model_url"] != "":
             model_urls.append(configs["rbc_model_url"])
         # run prediction using every specified model (url)
-        rbc_model_index = -1
+        rbc_model_name = None
         for i in range(len(model_urls)):
             model_file = model_urls[i].split("/")[-1]
+            celltypist_model_name = model_file.split(".")[0]
             model_path = os.path.join(data_dir,model_file)
             # download reference data
             if model_urls[i].startswith("s3://"):
@@ -445,16 +446,16 @@ if not no_cells:
             predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
             # save the index for the RBC model if one exists, since we will need it further below
             if model_file.startswith("RBC_model"):
-                rbc_model_index = i
+                rbc_model_name = celltypist_model_name
             logger.add_to_log("Saving celltypist annotations for model {}, model description:\n{}".format(model_file, json.dumps(model.description, indent=2)))
-            rna.obs["celltypist_predicted_labels."+str(i+1)] = predictions.predicted_labels["predicted_labels"]
-            rna.obs["celltypist_over_clustering."+str(i+1)] = predictions.predicted_labels["over_clustering"]
-            rna.obs["celltypist_majority_voting."+str(i+1)] = predictions.predicted_labels["majority_voting"]
-            rna.obs["celltypist_model."+str(i+1)] = model_urls[i]
+            rna.obs["celltypist_over_clustering."+celltypist_model_name] = predictions.predicted_labels["over_clustering"]
+            rna.obs["celltypist_majority_voting."+celltypist_model_name] = predictions.predicted_labels["majority_voting"]
+            rna.obs["celltypist_predicted_labels."+celltypist_model_name] = predictions.predicted_labels["predicted_labels"]
+            rna.obs["celltypist_model."+celltypist_model_name] = model_urls[i]
         # filter out RBC's
-        if rbc_model_index != -1:
+        if rbc_model_name:
             n_obs_before = rna.n_obs
-            rna = rna[rna.obs["celltypist_predicted_labels."+str(rbc_model_index+1)] != "RBC", :].copy()
+            rna = rna[rna.obs["celltypist_predicted_labels."+rbc_model_name] != "RBC", :].copy()
             percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
             level = "warning" if percent_removed > 20 else "info"
             logger.add_to_log(QC_STRING_RBC.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
