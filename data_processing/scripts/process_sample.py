@@ -68,7 +68,7 @@ SAMPLES_FIELDS = {"Sample_ID": "sample_id",
     "Cell type": "sample_cell_type",
     "Sorting": "sorting",
     "Stimulation": "stimulation",
-    "Notes": "Free text"}
+    "Free text": "Notes"}
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(configs["s3_access_file"], return_dict = True)

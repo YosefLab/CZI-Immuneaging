@@ -13,8 +13,6 @@ s3_access_file = sys.argv[3]
 sys.path.append(code_path)
 from utils import *
 
-# TODO crawl through all donors and merge them in all in a single csv per lib type
-
 logger = RichLogger()
 
 CSV_FIELDS_FOR_GEX = {
@@ -45,8 +43,8 @@ CSV_FIELDS_FOR_IR = {
     "Median TRB UMIs per Cell",
 }
 
-def combine_csv(samples, donor_id, seq_run, site) -> tuple(str, str):
-    indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == seq_run)
+def combine_csv(samples, donor_id, seq_run, site):
+    indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))
 
     def add_lib(lib_type: str, all_libs: set) -> None:
         if lib_type not in ["GEX", "BCR", "TCR"]:
@@ -123,15 +121,18 @@ def combine_csv(samples, donor_id, seq_run, site) -> tuple(str, str):
             df["Lib Type"] = f[2]
             df["Aligned Lib Version"] = f[3]
             all_dfs.append(df)
-        combined_df = pd.concat(all_dfs, ignore_index=True)
-        combined_metrics = os.path.join(data_dir, "{}_{}_all_{}_metrics.csv".format(donor_id,seq_run,generic_lib_type))
-        with open(combined_metrics, 'w') as f:
-            combined_df.to_csv(f)
-        # upload the combined csv file to AWS
-        logger.add_to_log("Uploading combined metrics file {} to S3...".format(combined_metrics.split("/")[-1]))
-        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(data_dir, generic_lib_type, combined_metrics.split("/")[-1])
-        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        if len(all_dfs) > 0:
+            combined_df = pd.concat(all_dfs, ignore_index=True)
+            combined_metrics = os.path.join(data_dir, "{}_{}_all_{}_metrics.csv".format(donor_id,seq_run,generic_lib_type))
+            with open(combined_metrics, 'w') as f:
+                combined_df.to_csv(f)
+            # upload the combined csv file to AWS
+            logger.add_to_log("Uploading combined metrics file {} to S3...".format(combined_metrics.split("/")[-1]))
+            sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(data_dir, generic_lib_type, combined_metrics.split("/")[-1])
+            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+            logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        else:
+            combined_metrics = ""
 
         return combined_metrics
 
@@ -150,9 +151,9 @@ def combine_csv(samples, donor_id, seq_run, site) -> tuple(str, str):
 
     return combined_gex, combined_ir
 
-def combine_csv_all_donors(lib_type: str, per_donor_files: List(str)):
-    per_donor_csv = [pd.read_csv(f) for f in per_donor_files]
-    combined_df = pd.concat(per_donor_csv)
+def combine_csv_all_donors(lib_type: str, per_donor_files: List[str]):
+    per_donor_csv = [pd.read_csv(f) for f in per_donor_files if os.path.isfile(f)]
+    combined_df = pd.concat(per_donor_csv, ignore_index=True)
     all_donors_metrics = os.path.join(output_destination, "all_donors_{}_metrics.csv".format(lib_type))
     with open(all_donors_metrics, 'w') as f:
         combined_df.to_csv(f)
@@ -172,6 +173,7 @@ for donor in np.unique(donors["Donor ID"]):
         indices = samples["Donor ID"] == donor
         seq_runs = np.unique(samples[indices]["Seq run"])
         for seq_run in seq_runs:
+            seq_run = "00" + str(seq_run)
             combined_gex, combined_ir = combine_csv(samples, donor, seq_run, site)
             per_donor_gex_files.append(combined_gex)
             per_donor_ir_files.append(combined_ir)
