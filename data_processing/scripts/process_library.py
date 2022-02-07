@@ -119,7 +119,7 @@ if configs["library_type"] == "GEX":
     logger.add_to_log("Filtered out {} cells that have less than {} genes expressed.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_genes"]))
     if "filter_cells_min_umi" in configs:
         n_cells_before = adata.n_obs
-        adata = adata[adata.X.sum(dim=-1) > configs["filter_cells_min_umi"]].copy()
+        adata = adata[adata.X.sum(axis=-1) > configs["filter_cells_min_umi"]].copy()
         logger.add_to_log("Filtered out {} cells that have less than {} total umi's.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_umi"]))
     n_genes_before = adata.n_vars
     sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"])
