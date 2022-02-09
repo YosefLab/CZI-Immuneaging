@@ -10,6 +10,8 @@ code_path = sys.argv[1]
 output_destination = sys.argv[2]
 s3_access_file = sys.argv[3]
 
+set_access_keys(s3_access_file)
+
 sys.path.append(code_path)
 from utils import *
 
@@ -52,16 +54,15 @@ def combine_csv(samples, donor_id, seq_run, site):
         column_name = "{} lib".format(lib_type)
         libs_all = samples[indices][column_name]
         failed_libs = set()
+        ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
+        ls  = os.popen(ls_cmd).read()
         for i in range(len(libs_all)):
             if libs_all.iloc[i] is np.nan:
                 continue
             libs = libs_all.iloc[i].split(",")
             for lib in libs:
                 # find the latest aligned_lib_version
-                set_access_keys(s3_access_file)
                 latest_version = -1
-                ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
-                ls  = os.popen(ls_cmd).read()
                 if len(ls) != 0:
                     filenames = ls.split("\n")
                     if lib_type == "GEX":

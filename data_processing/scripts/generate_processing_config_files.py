@@ -162,6 +162,7 @@ if config_type in ["sample", "all"]:
             "highly_variable_genes_flavor": "seurat_v3",
             "scvi_max_epochs": 400,
             "totalvi_max_epochs": 400,
+            "empirical_protein_background_prior": "False",
             "solo_filter_genes_min_cells": 5,
             "solo_max_epochs": 400,
             "neighborhood_graph_n_neighbors": 15,
