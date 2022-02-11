@@ -194,6 +194,22 @@ for j in range(len(library_ids)):
             logger.add_to_log(msg, "warning")
             del adata_dict[library_id]
             continue
+    # filter out libs that have a median gene per cell that is lower than the set threshold, if any
+    lib_medgpc = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_GENES_PER_CELL]
+    if "min_MGPC_per_library" in configs and configs["min_MedGPC_per_library"] > lib_medgpc:
+            # do not consider cells from this library
+            msg = "Cells from library {} were not included - library's median gene per cell value is {}, however min_MedGPC_per_library was set to {}.".format(lib_medgpc, configs["min_MedGPC_per_library"])
+            logger.add_to_log(msg, "warning")
+            del adata_dict[library_id]
+            continue
+    # filter out libs that have a median UMI per cell that is lower than the set threshold, if any
+    lib_medupc = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_UMI_COUNTS_PER_CELL]
+    if "min_MedUPC_per_library" in configs and configs["min_MedUPC_per_library"] > lib_medupc:
+            # do not consider cells from this library
+            msg = "Cells from library {} were not included - library's median UMI per cell value is {}, however min_MedUPC_per_library was set to {}.".format(lib_medupc, configs["min_MedUPC_per_library"])
+            logger.add_to_log(msg, "warning")
+            del adata_dict[library_id]
+            continue
     library_ids_gex.append(library_id)
     solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
     solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]

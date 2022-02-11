@@ -99,20 +99,41 @@ summary = ["\n{0}\nExecution summary\n{0}".format("="*25)]
 ###### LIBRARY PROCESSING BEGINS HERE ######
 ############################################
 
-if configs["library_type"] == "GEX":
-    logger.add_to_log("Downloading h5ad file of aligned library from S3...")
-    aligned_h5ad_file = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"], configs["library_id"], configs["aligned_library_configs_version"])
+def download_aligned_lib_artifact(file_name: str, data_dir: str) -> str:
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
         configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
-        configs["library_id"], data_dir, aligned_h5ad_file)
+        configs["library_id"], data_dir, file_name
+    )
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    file_path = os.path.join(data_dir, file_name)
+    if not os.path.isfile(file_path):
+        msg = "Failed to download file {} from S3.".format(file_name)
+        logger.add_to_log(msg, level="error")
+        raise ValueError(msg)
+    return file_path
+
+def store_lib_alignment_metrics(adata):
+    logger.add_to_log("Downloading cellranger metrics csv file of aligned library from S3...")
+    metrics_csv_file_name = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(configs["donor"], configs["seq_run"], configs["library_type"], configs["library_id"])
+    metrics_csv_file = download_aligned_lib_artifact(metrics_csv_file_name)
+
+    logger.add_to_log("Storing alignment metrics from cellranger in adata.uns...")
+    lib_metrics = pd.read_csv(metrics_csv_file)
+    for metric in lib_metrics.columns:
+        adata.uns["lib_metrics"][metric] = lib_metrics[metric]
+
+if configs["library_type"] == "GEX":
+    logger.add_to_log("Downloading h5ad file of aligned library from S3...")
+    aligned_h5ad_file_name = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"], configs["library_id"], configs["aligned_library_configs_version"])
+    aligned_h5ad_file = download_aligned_lib_artifact(aligned_h5ad_file_name)
 
     logger.add_to_log("Reading aligned h5ad file...")
-    aligned_h5ad_file = os.path.join(data_dir, aligned_h5ad_file)
     adata = sc.read_h5ad(aligned_h5ad_file)
     summary.append("Started with a total of {} cells and {} genes.".format(adata.n_obs, adata.n_vars))
 
+    store_lib_alignment_metrics(adata)
+    
     logger.add_to_log("Applying basic filters...")
     n_cells_before = adata.n_obs
     sc.pp.filter_cells(adata, min_genes=configs["filter_cells_min_genes"])
@@ -170,23 +191,20 @@ if configs["library_type"] == "GEX":
     summary.append("Final number of cells: {}, final number of genes: {}.".format(adata.n_obs, adata.n_vars))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     logger.add_to_log("Downloading aligned library from S3...")
-    aligned_csv_file = "{}_{}_{}_{}.cellranger.filtered_contig_annotations.{}.csv".format(
+    aligned_csv_file_name = "{}_{}_{}_{}.cellranger.filtered_contig_annotations.{}.csv".format(
         configs["donor"],
         configs["seq_run"],
         configs["library_type"],
         configs["library_id"],
         configs["aligned_library_configs_version"]
     )
-    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
-        configs["aligned_library_configs_version"], configs["donor"], configs["seq_run"], configs["library_type"],
-        configs["library_id"], data_dir, aligned_csv_file)
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    aligned_csv_file = download_aligned_lib_artifact(aligned_csv_file_name)
 
     logger.add_to_log("Reading aligned csv file...")
-    aligned_csv_file = os.path.join(data_dir, aligned_csv_file)
     adata = ir.io.read_10x_vdj(aligned_csv_file)
     summary.append("Started with a total of {} cells.".format(adata.n_obs))
+
+    store_lib_alignment_metrics(adata)
 
     logger.add_to_log("Filtering out cell calls that are marked low confidence by cellranger.")
     # for more info about what this and other cellranger vdj output fields mean, see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/output/annotation

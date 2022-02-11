@@ -10,13 +10,20 @@ import zipfile
 from anndata._core.anndata import AnnData
 from math import floor
 import csv
-from typing import Type, List
+from typing import Type, List, NamedTuple
 import traceback
 from datetime import datetime
 
 from logger import BaseLogger
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
+
+class CELLRANGER_METRICS_NT(NamedTuple):
+    MEDIAN_GENES_PER_CELL: str = "Median Genes per Cell"
+    MEDIAN_UMI_COUNTS_PER_CELL: str = "Median UMI Counts per Cell"
+    SEQUENCING_SATURATION: str = "Sequencing Saturation"
+
+CELLRANGER_METRICS = CELLRANGER_METRICS_NT()
 
 # these are formatted strings that we use to log QC stats and use them to parse those lines back
 # if you edit these make sure to update all call sites that use them
