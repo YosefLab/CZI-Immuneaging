@@ -11,6 +11,8 @@
 "library_types": "GEX,GEX,GEX",
 "processed_library_configs_version": "v1,v1,v1",
 "min_cells_per_library": 200,
+"min_MedGPC_per_library": 700,
+"min_MedUPC_per_library": 1500,
 "filter_decontaminated_cells_min_genes": 100,
 "normalize_total_target_sum": 10000,
 "n_highly_variable_genes": 3000,

@@ -196,7 +196,7 @@ for j in range(len(library_ids)):
             continue
     # filter out libs that have a median gene per cell that is lower than the set threshold, if any
     lib_medgpc = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_GENES_PER_CELL]
-    if "min_MGPC_per_library" in configs and configs["min_MedGPC_per_library"] > lib_medgpc:
+    if "min_MedGPC_per_library" in configs and configs["min_MedGPC_per_library"] > lib_medgpc:
             # do not consider cells from this library
             msg = "Cells from library {} were not included - library's median gene per cell value is {}, however min_MedGPC_per_library was set to {}.".format(lib_medgpc, configs["min_MedGPC_per_library"])
             logger.add_to_log(msg, "warning")
