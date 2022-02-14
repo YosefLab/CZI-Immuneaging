@@ -195,20 +195,20 @@ for j in range(len(library_ids)):
             del adata_dict[library_id]
             continue
     # filter out libs that have a median gene per cell that is lower than the set threshold, if any
-    lib_medgpc_str = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_GENES_PER_CELL]
+    lib_medgpc_str = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_GENES_PER_CELL].astype(str)
     lib_medgpc = int(lib_medgpc_str.replace(",", ""))
     if "min_MedGPC_per_library" in configs and configs["min_MedGPC_per_library"] > lib_medgpc:
             # do not consider cells from this library
-            msg = "Cells from library {} were not included - library's median gene per cell value is {}, however min_MedGPC_per_library was set to {}.".format(lib_medgpc, configs["min_MedGPC_per_library"])
+            msg = "Cells from library {} were not included - library's median gene per cell value is {}, however min_MedGPC_per_library was set to {}.".format(library_id, lib_medgpc, configs["min_MedGPC_per_library"])
             logger.add_to_log(msg, "warning")
             del adata_dict[library_id]
             continue
     # filter out libs that have a median UMI per cell that is lower than the set threshold, if any
-    lib_medupc_str = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_UMI_COUNTS_PER_CELL]
+    lib_medupc_str = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_UMI_COUNTS_PER_CELL].astype(str)
     lib_medupc = int(lib_medupc_str.replace(",", ""))
     if "min_MedUPC_per_library" in configs and configs["min_MedUPC_per_library"] > lib_medupc:
             # do not consider cells from this library
-            msg = "Cells from library {} were not included - library's median UMI per cell value is {}, however min_MedUPC_per_library was set to {}.".format(lib_medupc, configs["min_MedUPC_per_library"])
+            msg = "Cells from library {} were not included - library's median UMI per cell value is {}, however min_MedUPC_per_library was set to {}.".format(library_id, lib_medupc, configs["min_MedUPC_per_library"])
             logger.add_to_log(msg, "warning")
             del adata_dict[library_id]
             continue
