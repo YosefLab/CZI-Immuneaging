@@ -113,26 +113,27 @@ def download_aligned_lib_artifact(file_name: str, data_dir: str) -> str:
         raise ValueError(msg)
     return file_path
 
-def store_lib_alignment_metrics(adata):
+def store_lib_alignment_metrics(adata, data_dir):
     logger.add_to_log("Downloading cellranger metrics csv file of aligned library from S3...")
     metrics_csv_file_name = "{}_{}_{}_{}.cellranger.metrics_summary.csv".format(configs["donor"], configs["seq_run"], configs["library_type"], configs["library_id"])
-    metrics_csv_file = download_aligned_lib_artifact(metrics_csv_file_name)
+    metrics_csv_file = download_aligned_lib_artifact(metrics_csv_file_name, data_dir)
 
     logger.add_to_log("Storing alignment metrics from cellranger in adata.uns...")
     lib_metrics = pd.read_csv(metrics_csv_file)
+    adata.uns["lib_metrics"] = {}
     for metric in lib_metrics.columns:
-        adata.uns["lib_metrics"][metric] = lib_metrics[metric]
+        adata.uns["lib_metrics"][metric] = lib_metrics[metric][0] # lib_metrics[metric] is a pandas series with a single row 
 
 if configs["library_type"] == "GEX":
     logger.add_to_log("Downloading h5ad file of aligned library from S3...")
     aligned_h5ad_file_name = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"], configs["library_id"], configs["aligned_library_configs_version"])
-    aligned_h5ad_file = download_aligned_lib_artifact(aligned_h5ad_file_name)
+    aligned_h5ad_file = download_aligned_lib_artifact(aligned_h5ad_file_name, data_dir)
 
     logger.add_to_log("Reading aligned h5ad file...")
     adata = sc.read_h5ad(aligned_h5ad_file)
     summary.append("Started with a total of {} cells and {} genes.".format(adata.n_obs, adata.n_vars))
 
-    store_lib_alignment_metrics(adata)
+    store_lib_alignment_metrics(adata, data_dir)
     
     logger.add_to_log("Applying basic filters...")
     n_cells_before = adata.n_obs
@@ -198,13 +199,13 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
         configs["library_id"],
         configs["aligned_library_configs_version"]
     )
-    aligned_csv_file = download_aligned_lib_artifact(aligned_csv_file_name)
+    aligned_csv_file = download_aligned_lib_artifact(aligned_csv_file_name, data_dir)
 
     logger.add_to_log("Reading aligned csv file...")
     adata = ir.io.read_10x_vdj(aligned_csv_file)
     summary.append("Started with a total of {} cells.".format(adata.n_obs))
 
-    store_lib_alignment_metrics(adata)
+    store_lib_alignment_metrics(adata, data_dir)
 
     logger.add_to_log("Filtering out cell calls that are marked low confidence by cellranger.")
     # for more info about what this and other cellranger vdj output fields mean, see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/output/annotation
