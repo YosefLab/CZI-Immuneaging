@@ -16,6 +16,7 @@ import celltypist
 import urllib.request
 import traceback
 import scirpy as ir
+from typing import Optional
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -236,7 +237,7 @@ adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
     adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
 
-def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnData:
+def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Optional[AnnData]:
     assert lib_type in ["BCR", "TCR"]
     logger.add_to_log("Reading h5ad files of processed libraries for {} libs...".format(lib_type))
     adata_dict = {}
@@ -251,6 +252,10 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
         adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
         adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
         library_ids_ir.append(library_id)
+
+    if len(library_ids_ir) == 0:
+        logger.add_to_log("No libraries of type {} were found.".format(lib_type))
+        return None
 
     # Note it's important that we concatenate these libs exactly in this order so that it matches the order in which the corresponding
     # GEX libs where concatenated. This is important because the concat operation appends a -N suffix to all cells where N is the batch
@@ -286,33 +291,45 @@ library_ids_bcr = []
 library_ids_tcr = []
 adata_bcr = build_adata_from_ir_libs("BCR", library_ids_bcr)
 adata_tcr = build_adata_from_ir_libs("TCR", library_ids_tcr)
-logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, adata_bcr.n_obs, adata_tcr.n_obs))
+bcr_cells = 0 if adata_bcr is None else adata_bcr.n_obs
+tcr_cells = 0 if adata_tcr is None else adata_tcr.n_obs
+logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, bcr_cells, tcr_cells))
 
-logger.add_to_log("Filtering out cells that have both BCR and TCR...")
-intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
-intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
-adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
-adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
-logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
+if adata_bcr is not None and adata_tcr is not None:
+    logger.add_to_log("Filtering out cells that have both BCR and TCR...")
+    intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
+    intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
+    adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
+    adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
+    logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
 
-logger.add_to_log("Concatenating BCR and TCR lib(s)...")
-adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
-del adata_ir.obs["temp_batch"]
+    logger.add_to_log("Concatenating BCR and TCR lib(s)...")
+    adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
+    del adata_ir.obs["temp_batch"]
+elif adata_bcr is not None:
+    adata_ir = adata_bcr
+elif adata_tcr is not None:
+    adata_ir = adata_tcr
+else:
+    adata_ir = None
 
-# cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that
-# have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
-# or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
-# the ir info for those cells since we are missing gex info for them
-logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
-        len(adata.obs.index),
-        len(adata_ir.obs.index),
-        len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
-    ))
-ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
-ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
-logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
-logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
-ir.pp.merge_with_ir(adata, adata_ir)
+if adata_ir is None:
+    logger.add_to_log("No anndata with BCR/TCR data")
+else:
+    # cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that
+    # have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
+    # or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
+    # the ir info for those cells since we are missing gex info for them
+    logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
+            len(adata.obs.index),
+            len(adata_ir.obs.index),
+            len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
+        ))
+    ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
+    ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
+    logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
+    logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
+    ir.pp.merge_with_ir(adata, adata_ir)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 summary.append("Started with a total of {} cells and {} genes coming from {} GEX libraries, {} BCR libraries and {} TCR libraries.".format(
