@@ -267,23 +267,22 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Option
     adata_to_return = adata_dict[library_ids_ir[0]]
     if len(library_ids_ir) > 1:
         adata_to_return = adata_to_return.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))], batch_key="temp_batch")
-
-    # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
-    # for all cells in the adata_ir and is the same as the one in adata
-    for j in range(len(library_ids_ir)):
-        lib_id = library_ids_ir[j]
-        adata_ir_lib_id = adata_to_return[adata_to_return.obs["{}-library_id".format(lib_type)] == lib_id, :].copy()
-        ir_batch = adata_ir_lib_id.obs["temp_batch"]
-        unique_ir_batch = np.unique(ir_batch)
-        assert len(unique_ir_batch) == 1
-        # grab the corresponding gex lib value
-        batch_suffix = "-{}".format(unique_ir_batch[0])
-        corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1][:-len(batch_suffix)]
-        adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
-        gex_batch = adata_lib_id.obs["batch"]
-        unique_gex_batch = np.unique(gex_batch)
-        assert len(unique_gex_batch) == 1
-        assert unique_ir_batch[0] == unique_gex_batch[0]
+        # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
+        # for all cells in the adata_ir and is the same as the one in adata
+        for j in range(len(library_ids_ir)):
+            lib_id = library_ids_ir[j]
+            adata_ir_lib_id = adata_to_return[adata_to_return.obs["{}-library_id".format(lib_type)] == lib_id, :].copy()
+            ir_batch = adata_ir_lib_id.obs["temp_batch"]
+            unique_ir_batch = np.unique(ir_batch)
+            assert len(unique_ir_batch) == 1
+            # grab the corresponding gex lib value
+            batch_suffix = "-{}".format(unique_ir_batch[0])
+            corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1][:-len(batch_suffix)]
+            adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
+            gex_batch = adata_lib_id.obs["batch"]
+            unique_gex_batch = np.unique(gex_batch)
+            assert len(unique_gex_batch) == 1
+            assert unique_ir_batch[0] == unique_gex_batch[0]
 
     # we could keep this to know what batch (library) the cells are from, but we'll already have this via
     # the library_id info in adata
