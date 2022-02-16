@@ -249,6 +249,9 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Option
         library_version = library_versions[j]
         lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version))
+        if not os.path.isfile(lib_h5ad_file):
+            logger.add_to_log("Failed to find library with id {} of type {}. Moving on...".format(library_id, lib_type), level="warning")
+            continue
         adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
         adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
         library_ids_ir.append(library_id)
