@@ -308,16 +308,17 @@ def _run_model_impl(
     logger.add_to_log("Saving the data used for fitting the model...")
     os.path.join(data_dir, model_file)
     data_file = "{}.{}.{}_model.data.h5ad".format(prefix, version, model_name)
+    adata_copy = adata.copy()
     try:
-        adata.write(os.path.join(model_dir_path,data_file), compression="lzf")
+        adata_copy.write(os.path.join(model_dir_path,data_file), compression="lzf")
     except:
         # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
         # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
         # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
         # in future processing layers.
-        obj_cols = adata.obs.select_dtypes(include='object').columns
-        adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan')
-        adata.write(os.path.join(model_dir_path,data_file), compression="lzf")
+        obj_cols = adata_copy.obs.select_dtypes(include='object').columns
+        adata_copy.obs.loc[:, obj_cols] = adata_copy.obs.loc[:, obj_cols].fillna('nan')
+        adata_copy.write(os.path.join(model_dir_path,data_file), compression="lzf")
     # zip the dir with all the model outputs
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
