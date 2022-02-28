@@ -233,7 +233,7 @@ def plot_data_all_donors(lib_type: str, per_donor_data: List[pd.DataFrame]):
             concat_dfs.append(df)
             # sns.boxplot(x="Count type", y="Counts", data=df).set_title(lib_id)
     d = pd.concat(concat_dfs)
-    d_file = os.path.join(output_destination, "all_donors_per_{}_lib_counts.csv".format(lib_type))
+    d_file = os.path.join(output_destination, "all_donors_per_{}_lib_counts_data.csv".format(lib_type))
     with open(d_file, 'w') as f:
         d.to_csv(f)
     logger.add_to_log("☑ Uploading combined lib data across all donors for lib type {} to S3...".format(lib_type))
