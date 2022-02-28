@@ -233,11 +233,11 @@ def plot_data_all_donors(lib_type: str, per_donor_data: List[pd.DataFrame]):
             concat_dfs.append(df)
             # sns.boxplot(x="Count type", y="Counts", data=df).set_title(lib_id)
     d = pd.concat(concat_dfs)
-    d_file = os.path.join(output_destination, "all_donors_per_{}_lib_counts.svg".format(lib_type))
+    d_file = os.path.join(output_destination, "all_donors_per_{}_lib_counts_data.csv".format(lib_type))
     with open(d_file, 'w') as f:
         d.to_csv(f)
     logger.add_to_log("☑ Uploading combined lib data across all donors for lib type {} to S3...".format(lib_type))
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(output_destination, lib_type, fig_path.split("/")[-1])
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(output_destination, lib_type, d_file.split("/")[-1])
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     # now plot
