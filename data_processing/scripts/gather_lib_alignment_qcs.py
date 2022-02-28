@@ -1,19 +1,30 @@
-## Run as follows: python gather_lib_alignment_qcs.py <code_path> <output_destination> <s3_access_file>
+## Run as follows: python gather_lib_alignment_qcs.py <code_path> <output_destination> <s3_access_file> <task_type>
 
 import re
 import sys
 import os
 from typing import List
+import pandas as pd
+import seaborn as sns
+import scanpy as sc
+import matplotlib.pyplot as plt
+import logging
+
 from logger import RichLogger
+
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 code_path = sys.argv[1]
 output_destination = sys.argv[2]
 s3_access_file = sys.argv[3]
+task_type = sys.argv[4]
 
-set_access_keys(s3_access_file)
+assert task_type in ["csv", "adata"]
 
 sys.path.append(code_path)
 from utils import *
+
+set_access_keys(s3_access_file)
 
 logger = RichLogger()
 
@@ -45,7 +56,7 @@ CSV_FIELDS_FOR_IR = {
     "Median TRB UMIs per Cell",
 }
 
-def combine_csv(samples, donor_id, seq_run, site):
+def combine_data(samples, donor_id, seq_run, site):
     indices = (samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))
 
     def add_lib(lib_type: str, all_libs: set) -> None:
@@ -137,6 +148,38 @@ def combine_csv(samples, donor_id, seq_run, site):
 
         return combined_metrics
 
+    def combine_adatas_for_lib(libs: set, generic_lib_type: str, data_dir: str):
+        if generic_lib_type != "GEX":
+            raise NotImplementedError
+        lib_data_dir = os.path.join(data_dir, generic_lib_type)
+        os.system("mkdir -p " + lib_data_dir)
+        all_adata_dfs = []
+        for lib in libs:
+            lib_id = lib[0]
+            lib_type = lib[1]
+            aligned_lib_version = lib[2]
+            logger.add_to_log("Downloading aligned h5ad file for lib id {}, lib type {} from S3...".format(lib_id, lib_type))
+            aligned_h5ad_file_name = "{}_{}.{}.{}.h5ad".format(donor_id, seq_run, lib_id, aligned_lib_version)
+            sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/aligned_libraries/{}/{}_{}_{}_{}/ {} --exclude "*" --include {}'.format(
+                aligned_lib_version, donor_id, seq_run, lib_type, lib_id, lib_data_dir, aligned_h5ad_file_name
+            )
+            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+            logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+            aligned_h5ad_file = os.path.join(lib_data_dir, aligned_h5ad_file_name)
+            if not os.path.isfile(aligned_h5ad_file):
+                msg = "Failed to download file {} from S3.".format(aligned_h5ad_file)
+                logger.add_to_log(msg, level="error")
+                raise ValueError(msg)
+            logger.add_to_log("Reading aligned h5ad file...")
+            adata = sc.read_h5ad(aligned_h5ad_file)
+            a = adata.X.toarray()
+            umi_counts = a.sum(axis=-1)
+            gene_counts = np.count_nonzero(a, axis=-1)
+            df = pd.DataFrame(data={'Gene Counts': gene_counts, "UMI Counts": umi_counts}, index=adata.obs.index)
+            all_adata_dfs.append((df,lib_id,lib_type,aligned_lib_version))
+
+        return all_adata_dfs
+
     gex_libs = set()
     ir_libs = set()
     add_lib("GEX", gex_libs)
@@ -147,8 +190,13 @@ def combine_csv(samples, donor_id, seq_run, site):
     data_dir = os.path.join(output_destination, "_".join([donor_id, seq_run]))
     os.system("mkdir -p " + data_dir)
 
-    combined_gex = combine_metrics_for_lib(gex_libs, "GEX", data_dir)
-    combined_ir = combine_metrics_for_lib(ir_libs, "IR", data_dir)
+    if task_type == "csv":
+        combined_gex = combine_metrics_for_lib(gex_libs, "GEX", data_dir)
+        combined_ir = combine_metrics_for_lib(ir_libs, "IR", data_dir)
+    else:
+        combined_gex = combine_adatas_for_lib(gex_libs, "GEX", data_dir)
+        # no IR for now
+        combined_ir = []
 
     return combined_gex, combined_ir
 
@@ -163,10 +211,49 @@ def combine_csv_all_donors(lib_type: str, per_donor_files: List[str]):
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
+def plot_data_all_donors(lib_type: str, per_donor_data: List[pd.DataFrame]):
+    if lib_type != "GEX":
+        raise NotImplementedError
+    concat_dfs = []
+    for l in per_donor_data :
+        # l (one per donor) is a list of Dataframes, each of which has data for a given lib id that we need to plot
+        for lib in l:
+            df = lib[0]
+            lib_id = lib[1]
+            # cut out outliers
+            q = df["Gene Counts"].quantile(0.99)
+            df = df[df["Gene Counts"] < q]
+            q = df["UMI Counts"].quantile(0.99)
+            df = df[df["UMI Counts"] < q]
+            # melt
+            df = df.melt(var_name="Count type", value_name="Counts")
+            # add lib id
+            df["Lib id"] = lib_id
+            # add it to the list
+            concat_dfs.append(df)
+            # sns.boxplot(x="Count type", y="Counts", data=df).set_title(lib_id)
+    d = pd.concat(concat_dfs)
+    d_file = os.path.join(output_destination, "all_donors_per_{}_lib_counts_data.csv".format(lib_type))
+    with open(d_file, 'w') as f:
+        d.to_csv(f)
+    logger.add_to_log("☑ Uploading combined lib data across all donors for lib type {} to S3...".format(lib_type))
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(output_destination, lib_type, d_file.split("/")[-1])
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    # now plot
+    g = sns.catplot(x="Count type", y="Counts", col="Lib id", data=d, kind="violin", col_wrap=4).set(xlabel=None, ylabel=None)
+    plt.show()
+    fig_path = os.path.join(output_destination, "all_donors_per_{}_lib_counts.pdf".format(lib_type))
+    g.fig.savefig(fig_path, dpi=100)
+    logger.add_to_log("☑ Uploading combined lib plots across all donors for lib type {} to S3...".format(lib_type))
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(output_destination, lib_type, fig_path.split("/")[-1])
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+
 donors = read_immune_aging_sheet("Donors")
 samples = read_immune_aging_sheet("Samples")
-per_donor_gex_files = []
-per_donor_ir_files = []
+per_donor_gex_combined = []
+per_donor_ir_combined = []
 for donor in np.unique(donors["Donor ID"]):
     indices = donors["Donor ID"] == donor
     sites = np.unique(donors[indices]["Site (UK/ NY)"])
@@ -175,8 +262,11 @@ for donor in np.unique(donors["Donor ID"]):
         seq_runs = np.unique(samples[indices]["Seq run"])
         for seq_run in seq_runs:
             seq_run = "00" + str(seq_run)
-            combined_gex, combined_ir = combine_csv(samples, donor, seq_run, site)
-            per_donor_gex_files.append(combined_gex)
-            per_donor_ir_files.append(combined_ir)
-combine_csv_all_donors("GEX", per_donor_gex_files)
-combine_csv_all_donors("IR", per_donor_ir_files)
+            combined_gex, combined_ir = combine_data(samples, donor, seq_run, site)
+            per_donor_gex_combined.append(combined_gex)
+            per_donor_ir_combined.append(combined_ir)
+if task_type == "csv":
+    combine_csv_all_donors("GEX", per_donor_gex_combined)
+    combine_csv_all_donors("IR", per_donor_ir_combined)
+else:
+    plot_data_all_donors("GEX", per_donor_gex_combined)
