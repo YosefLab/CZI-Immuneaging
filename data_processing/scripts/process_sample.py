@@ -599,6 +599,8 @@ except:
     # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
     # in future processing layers.
     obj_cols = adata.obs.select_dtypes(include='object').columns
+    # Also call .astype("str") since there can be other values than NaN in the column that contribute to
+    # the "object" type
     adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
     adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
 

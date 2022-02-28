@@ -159,8 +159,6 @@ if config_type in ["sample", "all"]:
             "library_types": ",".join(all_lib_types),
             "processed_library_configs_version": ",".join(all_lib_versions),
             "min_cells_per_library": 50 if is_jejunum else 200, # jejunum samples are generally less enriched as they are less available to sequence
-            "min_MedGPC_per_library": 700,
-            "min_MedUPC_per_library": 1500,
             "filter_decontaminated_cells_min_genes": 100,
             "normalize_total_target_sum": 10000,
             "n_highly_variable_genes": 3000,
