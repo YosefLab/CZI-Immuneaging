@@ -8,8 +8,11 @@ import pandas as pd
 import seaborn as sns
 import scanpy as sc
 import matplotlib.pyplot as plt
+import logging
 
 from logger import RichLogger
+
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 code_path = sys.argv[1]
 output_destination = sys.argv[2]
@@ -18,10 +21,10 @@ task_type = sys.argv[4]
 
 assert task_type in ["csv", "adata"]
 
-set_access_keys(s3_access_file)
-
 sys.path.append(code_path)
 from utils import *
+
+set_access_keys(s3_access_file)
 
 logger = RichLogger()
 
@@ -230,9 +233,14 @@ def plot_data_all_donors(lib_type: str, per_donor_data: List[pd.DataFrame]):
             concat_dfs.append(df)
             # sns.boxplot(x="Count type", y="Counts", data=df).set_title(lib_id)
     d = pd.concat(concat_dfs)
-    g = sns.catplot(x="Count type", y="Counts", col="Lib id", data=d, kind="box")
-    plt.tight_layout()
+    g = sns.catplot(x="Count type", y="Counts", col="Lib id", data=d, kind="violin", col_wrap=4).set(xlabel=None, ylabel=None)
     plt.show()
+    fig_path = os.path.join(output_destination, "all_donors_per_{}_lib_counts.svg".format(lib_type))
+    g.fig.savefig(fig_path, dpi=100)
+    logger.add_to_log("☑ Uploading combined lib plots across all donors for lib type {} to S3...".format(lib_type))
+    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/combined_lib_alignment_metrics/{}/ --exclude "*" --include {}'.format(output_destination, lib_type, fig_path.split("/")[-1])
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
 
 donors = read_immune_aging_sheet("Donors")
 samples = read_immune_aging_sheet("Samples")
