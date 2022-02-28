@@ -16,6 +16,7 @@ import celltypist
 import urllib.request
 import traceback
 import scirpy as ir
+from typing import Optional
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -194,6 +195,24 @@ for j in range(len(library_ids)):
             logger.add_to_log(msg, "warning")
             del adata_dict[library_id]
             continue
+    # filter out libs that have a median gene per cell that is lower than the set threshold, if any
+    lib_medgpc_value = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_GENES_PER_CELL]
+    lib_medgpc = int(lib_medgpc_value.replace(",", "")) if type(lib_medgpc_value) == str else lib_medgpc_value
+    if "min_MedGPC_per_library" in configs and configs["min_MedGPC_per_library"] > lib_medgpc:
+            # do not consider cells from this library
+            msg = "Cells from library {} were not included - library's median gene per cell value is {}, however min_MedGPC_per_library was set to {}.".format(library_id, lib_medgpc, configs["min_MedGPC_per_library"])
+            logger.add_to_log(msg, "warning")
+            del adata_dict[library_id]
+            continue
+    # filter out libs that have a median UMI per cell that is lower than the set threshold, if any
+    lib_medupc_value = adata_dict[library_id].uns["lib_metrics"][CELLRANGER_METRICS.MEDIAN_UMI_COUNTS_PER_CELL]
+    lib_medupc = int(lib_medupc_value.replace(",", "")) if type(lib_medupc_value) == str else lib_medupc_value
+    if "min_MedUPC_per_library" in configs and configs["min_MedUPC_per_library"] > lib_medupc:
+            # do not consider cells from this library
+            msg = "Cells from library {} were not included - library's median UMI per cell value is {}, however min_MedUPC_per_library was set to {}.".format(library_id, lib_medupc, configs["min_MedUPC_per_library"])
+            logger.add_to_log(msg, "warning")
+            del adata_dict[library_id]
+            continue
     library_ids_gex.append(library_id)
     solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
     solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]
@@ -218,7 +237,7 @@ adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
     adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
 
-def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnData:
+def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Optional[AnnData]:
     assert lib_type in ["BCR", "TCR"]
     logger.add_to_log("Reading h5ad files of processed libraries for {} libs...".format(lib_type))
     adata_dict = {}
@@ -230,9 +249,16 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
         library_version = library_versions[j]
         lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version))
+        if not os.path.isfile(lib_h5ad_file):
+            logger.add_to_log("Failed to find library with id {} of type {}. Moving on...".format(library_id, lib_type), level="warning")
+            continue
         adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
         adata_dict[library_id].obs["{}-library_id".format(lib_type)] = library_id
         library_ids_ir.append(library_id)
+
+    if len(library_ids_ir) == 0:
+        logger.add_to_log("No libraries of type {} were found.".format(lib_type))
+        return None
 
     # Note it's important that we concatenate these libs exactly in this order so that it matches the order in which the corresponding
     # GEX libs where concatenated. This is important because the concat operation appends a -N suffix to all cells where N is the batch
@@ -242,59 +268,72 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> AnnDat
     if len(library_ids_ir) > 1:
         adata_to_return = adata_to_return.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))], batch_key="temp_batch")
 
-    # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
-    # for all cells in the adata_ir and is the same as the one in adata
-    for j in range(len(library_ids_ir)):
-        lib_id = library_ids_ir[j]
-        adata_ir_lib_id = adata_to_return[adata_to_return.obs["{}-library_id".format(lib_type)] == lib_id, :].copy()
-        ir_batch = adata_ir_lib_id.obs["temp_batch"]
-        unique_ir_batch = np.unique(ir_batch)
-        assert len(unique_ir_batch) == 1
-        # grab the corresponding gex lib value
-        batch_suffix = "-{}".format(unique_ir_batch[0])
-        corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1][:-len(batch_suffix)]
-        adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
-        gex_batch = adata_lib_id.obs["batch"]
-        unique_gex_batch = np.unique(gex_batch)
-        assert len(unique_gex_batch) == 1
-        assert unique_ir_batch[0] == unique_gex_batch[0]
+        # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
+        # for all cells in the adata_ir and is the same as the one in adata
+        for j in range(len(library_ids_ir)):
+            lib_id = library_ids_ir[j]
+            adata_ir_lib_id = adata_to_return[adata_to_return.obs["{}-library_id".format(lib_type)] == lib_id, :].copy()
+            ir_batch = adata_ir_lib_id.obs["temp_batch"]
+            unique_ir_batch = np.unique(ir_batch)
+            assert len(unique_ir_batch) == 1
+            # grab the corresponding gex lib value
+            batch_suffix = "-{}".format(unique_ir_batch[0])
+            corresponding_gex_lib = adata_ir_lib_id.obs.iloc[0].name.split("_")[1][:-len(batch_suffix)]
+            adata_lib_id = adata[adata.obs["library_id"] == corresponding_gex_lib, :].copy()
+            gex_batch = adata_lib_id.obs["batch"]
+            unique_gex_batch = np.unique(gex_batch)
+            assert len(unique_gex_batch) == 1
+            assert unique_ir_batch[0] == unique_gex_batch[0]
 
-    # we could keep this to know what batch (library) the cells are from, but we'll already have this via
-    # the library_id info in adata
-    del adata_to_return.obs["temp_batch"]
+        # we could keep this to know what batch (library) the cells are from, but we'll already have this via
+        # the library_id info in adata
+        del adata_to_return.obs["temp_batch"]
+
     return adata_to_return
 
 library_ids_bcr = []
 library_ids_tcr = []
 adata_bcr = build_adata_from_ir_libs("BCR", library_ids_bcr)
 adata_tcr = build_adata_from_ir_libs("TCR", library_ids_tcr)
-logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, adata_bcr.n_obs, adata_tcr.n_obs))
+bcr_cells = 0 if adata_bcr is None else adata_bcr.n_obs
+tcr_cells = 0 if adata_tcr is None else adata_tcr.n_obs
+logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, bcr_cells, tcr_cells))
 
-logger.add_to_log("Filtering out cells that have both BCR and TCR...")
-intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
-intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
-adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
-adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
-logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
+if adata_bcr is not None and adata_tcr is not None:
+    logger.add_to_log("Filtering out cells that have both BCR and TCR...")
+    intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
+    intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
+    adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
+    adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
+    logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
 
-logger.add_to_log("Concatenating BCR and TCR lib(s)...")
-adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
-del adata_ir.obs["temp_batch"]
+    logger.add_to_log("Concatenating BCR and TCR lib(s)...")
+    adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
+    del adata_ir.obs["temp_batch"]
+elif adata_bcr is not None:
+    adata_ir = adata_bcr
+elif adata_tcr is not None:
+    adata_ir = adata_tcr
+else:
+    adata_ir = None
 
-# cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that
-# have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
-# or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
-# the ir info for those cells since we are missing gex info for them
-logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
-        len(adata.obs.index),
-        len(adata_ir.obs.index),
-        len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
-    ))
-ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
-ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
-logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
-logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
-ir.pp.merge_with_ir(adata, adata_ir)
+if adata_ir is None:
+    logger.add_to_log("No anndata with BCR/TCR data")
+else:
+    # cells that are outside the intersection of adata and adata_ir are either cells that don't have ir data (no bcr or tcr), or are cells that
+    # have ir info but no gex. the latter can be due to cellranger miscalling a cell (see https://support.10xgenomics.com/single-cell-vdj/software/pipelines/latest/using/multi#why),
+    # or it could be that we didn't sequence those cells for gex as a consequence of the experimental setup - in either case, we are not interested in
+    # the ir info for those cells since we are missing gex info for them
+    logger.add_to_log("{} cells coming from GEX libs, {} cells coming from BCR+TCR IR libs, {} cells are in the intersection of both.".format(
+            len(adata.obs.index),
+            len(adata_ir.obs.index),
+            len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
+        ))
+    ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
+    ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
+    logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
+    logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
+    ir.pp.merge_with_ir(adata, adata_ir)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 summary.append("Started with a total of {} cells and {} genes coming from {} GEX libraries, {} BCR libraries and {} TCR libraries.".format(
@@ -560,7 +599,9 @@ except:
     # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
     # in future processing layers.
     obj_cols = adata.obs.select_dtypes(include='object').columns
-    adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan')
+    # Also call .astype("str") since there can be other values than NaN in the column that contribute to
+    # the "object" type
+    adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
     adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
 
 ###############################################################

@@ -9,6 +9,7 @@ import os
 import traceback
 from abc import ABC, abstractmethod
 from typing import List, Dict
+import numpy as np
 import pandas as pd
 import csv
 
@@ -337,6 +338,8 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
         samples_df = self._get_all_samples()
         for library_type in ["GEX", "BCR", "TCR"]:
             for i in samples_df[library_type + " lib"]:
+                if i is np.nan:
+                    continue
                 for j in i.split(","):
                     object_ids.add("{}_{}".format(library_type, j))
         return object_ids

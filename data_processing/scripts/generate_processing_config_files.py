@@ -129,7 +129,10 @@ if config_type in ["sample", "all"]:
         is_jejunum = organs.iloc[i] in ["JEJ", "JEJEPI", "JEJLP"]
 
         def add_libs(lib_type: str, all_libs: List[str], all_lib_types: List[str], all_lib_versions: List[str]) -> None:
-            lib_ids = [i for i in samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0].split(",")]
+            comma_sep_libs = samples[samples["Sample_ID"] == sample_id]["{} lib".format(lib_type)].iloc[0]
+            if comma_sep_libs is np.nan:
+                return
+            lib_ids = [i for i in comma_sep_libs.split(",")]
             all_libs += lib_ids
             all_lib_types += [lib_type] * len(lib_ids)
             processed_lib_version = processed_gex_lib_version if lib_type == "GEX" else processed_ir_lib_version
