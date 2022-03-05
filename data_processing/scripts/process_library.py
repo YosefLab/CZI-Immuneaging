@@ -6,6 +6,7 @@ import scanpy as sc
 import numpy as np
 import hashlib
 import scirpy as ir
+from typing import List
 
 process_lib_script = sys.argv[0]
 configs_file = sys.argv[1]
@@ -124,6 +125,17 @@ def store_lib_alignment_metrics(adata, data_dir):
     for metric in lib_metrics.columns:
         adata.uns["lib_metrics"][metric] = lib_metrics[metric][0] # lib_metrics[metric] is a pandas series with a single row 
 
+def flush_logs_and_upload():
+    for i in summary:
+        logger.add_to_log(i)
+    logging.shutdown()
+    if not sandbox_mode:
+        sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
+            data_dir, prefix, version, logger_file)
+        os.system(sync_cmd)
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+
 if configs["library_type"] == "GEX":
     logger.add_to_log("Downloading h5ad file of aligned library from S3...")
     aligned_h5ad_file_name = "{}_{}.{}.{}.h5ad".format(configs["donor"], configs["seq_run"], configs["library_id"], configs["aligned_library_configs_version"])
@@ -147,6 +159,11 @@ if configs["library_type"] == "GEX":
     sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"])
     logger.add_to_log("Filtered out {} genes that are detected in less than {} cells.".format(n_genes_before-adata.n_vars, configs["filter_genes_min_cells"]))
 
+    if adata.n_obs == 0:
+        logger.add_to_log("No cells left after basic filtering steps. Exiting...", level="error")
+        flush_logs_and_upload()
+        sys.exit()
+
     adata.var['mt'] = adata.var_names.str.startswith('MT-') # mitochondrial genes
     adata.var['ribo'] = adata.var_names.str.startswith(("RPS","RPL")) # ribosomal genes
     sc.pp.calculate_qc_metrics(adata, qc_vars=['mt','ribo'], percent_top=None, log1p=False, inplace=True)
@@ -156,6 +173,11 @@ if configs["library_type"] == "GEX":
     n_cells_before = adata.n_obs
     adata = adata[adata.obs['pct_counts_ribo'] >= configs["filter_cells_min_pct_counts_ribo"], :].copy()
     logger.add_to_log("Filtered out {} cells with less than {}\% counts coming from ribosomal genes.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_pct_counts_ribo"]))
+
+    if adata.n_obs == 0:
+        logger.add_to_log("No cells left after filtering. Exiting...", level="error")
+        flush_logs_and_upload()
+        sys.exit()
 
     genes_to_exclude = np.zeros((adata.n_vars,), dtype=bool)
     if configs["genes_to_exclude"] != "None":
@@ -274,13 +296,4 @@ if not sandbox_mode:
 
 logger.add_to_log("Execution of process_library.py is complete.")
 
-for i in summary:
-    logger.add_to_log(i)
-
-logging.shutdown()
-if not sandbox_mode:
-    sync_cmd = 'aws s3 sync --no-progress {} s3://immuneaging/processed_libraries/{}/{}/ --exclude "*" --include {}'.format(
-        data_dir, prefix, version, logger_file)
-    os.system(sync_cmd)
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+flush_logs_and_upload()
