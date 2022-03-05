@@ -247,6 +247,17 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Option
         library_id = library_ids[j]
         library_type = library_types[j]
         library_version = library_versions[j]
+        # find the corresponding gex lib id and see if it is in library_ids_gex. If not,
+        # we should exclude it here as well
+        lib_to_type = dict(zip(library_ids,library_types))
+        ir_libs = [elem[0] for elem in lib_to_type.items() if elem[1] == lib_type]
+        gex_libs = [elem[0] for elem in lib_to_type.items() if elem[1] == "GEX"]
+        assert len(ir_libs) == len(gex_libs)
+        idx = ir_libs.index(library_id)
+        gex_lib = gex_libs[idx]
+        if gex_lib not in library_ids_gex:
+            logger.add_to_log("No GEX counterpart found for library id {} of type {}. Ignoring it...".format(library_id, lib_type), level="warning")
+            continue
         lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version))
         if not os.path.isfile(lib_h5ad_file):
