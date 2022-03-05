@@ -184,6 +184,12 @@ for j in range(len(library_ids)):
     library_version = library_versions[j]
     lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
         library_type, library_id, library_version))
+    if not os.path.isfile(lib_h5ad_file):
+        # This could either be an error or a legitimate case of missing library (for example if say all cells from that
+        # lib were filtered out during lib processing). We want to know about it in either case but this is not the place
+        # for it. In both of the aforementioned cases, we'd get to know about it at the outcome of lib processing.
+        logger.add_to_log("Library {} not found. Skipping...".format(library_id), level="warning")
+        continue
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
     if "Classification" in adata_dict[library_id].obs.columns:
