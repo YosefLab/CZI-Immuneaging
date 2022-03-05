@@ -249,10 +249,14 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Option
         library_version = library_versions[j]
         # find the corresponding gex lib id and see if it is in library_ids_gex. If not,
         # we should exclude it here as well
-        lib_to_type = dict(zip(library_ids,library_types))
-        ir_libs = [elem[0] for elem in lib_to_type.items() if elem[1] == lib_type]
-        gex_libs = [elem[0] for elem in lib_to_type.items() if elem[1] == "GEX"]
-        assert len(ir_libs) == len(gex_libs)
+        ir_libs = []
+        gex_libs = []
+        for elem in zip(library_ids, library_types):
+            if elem[1] == lib_type:
+                ir_libs.append(elem[0])
+            elif elem[1] == "GEX":
+                gex_libs.append(elem[0])
+        assert len(ir_libs) == len(gex_libs) and len(ir_libs) != 0
         idx = ir_libs.index(library_id)
         gex_lib = gex_libs[idx]
         if gex_lib not in library_ids_gex:
