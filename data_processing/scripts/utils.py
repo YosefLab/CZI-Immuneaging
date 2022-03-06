@@ -317,7 +317,7 @@ def _run_model_impl(
         # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
         # in future processing layers.
         obj_cols = adata_copy.obs.select_dtypes(include='object').columns
-        adata_copy.obs.loc[:, obj_cols] = adata_copy.obs.loc[:, obj_cols].fillna('nan')
+        adata_copy.obs.loc[:, obj_cols] = adata_copy.obs.loc[:, obj_cols].fillna('nan').astype("str")
         adata_copy.write(os.path.join(model_dir_path,data_file), compression="lzf")
     # zip the dir with all the model outputs
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)

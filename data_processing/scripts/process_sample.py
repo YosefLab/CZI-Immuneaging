@@ -184,6 +184,12 @@ for j in range(len(library_ids)):
     library_version = library_versions[j]
     lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
         library_type, library_id, library_version))
+    if not os.path.isfile(lib_h5ad_file):
+        # This could either be an error or a legitimate case of missing library (for example if say all cells from that
+        # lib were filtered out during lib processing). We want to know about it in either case but this is not the place
+        # for it. In both of the aforementioned cases, we'd get to know about it at the outcome of lib processing.
+        logger.add_to_log("Library {} not found. Skipping...".format(library_id), level="warning")
+        continue
     adata_dict[library_id] = sc.read_h5ad(lib_h5ad_file)
     adata_dict[library_id].obs["library_id"] = library_id
     if "Classification" in adata_dict[library_id].obs.columns:
@@ -247,6 +253,21 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Option
         library_id = library_ids[j]
         library_type = library_types[j]
         library_version = library_versions[j]
+        # find the corresponding gex lib id and see if it is in library_ids_gex. If not,
+        # we should exclude it here as well
+        ir_libs = []
+        gex_libs = []
+        for elem in zip(library_ids, library_types):
+            if elem[1] == lib_type:
+                ir_libs.append(elem[0])
+            elif elem[1] == "GEX":
+                gex_libs.append(elem[0])
+        assert len(ir_libs) == len(gex_libs) and len(ir_libs) != 0
+        idx = ir_libs.index(library_id)
+        gex_lib = gex_libs[idx]
+        if gex_lib not in library_ids_gex:
+            logger.add_to_log("No GEX counterpart found for library id {} of type {}. Ignoring it...".format(library_id, lib_type), level="warning")
+            continue
         lib_h5ad_file = os.path.join(data_dir, "{}_{}_{}_{}.processed.{}.h5ad".format(donor, seq_run,
             library_type, library_id, library_version))
         if not os.path.isfile(lib_h5ad_file):

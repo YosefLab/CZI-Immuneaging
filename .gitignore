@@ -12,6 +12,8 @@ __pycache__/
 
 # Environments
 envs/v*.zip
+envs/.RData
+envs/.Rhistory
 
 # test data for the upload script
 data_management/test_data/good/*
