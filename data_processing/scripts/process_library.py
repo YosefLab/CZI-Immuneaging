@@ -196,9 +196,7 @@ if configs["library_type"] == "GEX":
         logger.add_to_log("Demultiplexing is needed; using hashsolo...")
         # add the HTO counts to .obs
         adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
-        logger.add_to_log("Here 1")
         hashsolo_priors = [float(i) for i in configs["hashsolo_priors"].split(',')]
-        logger.add_to_log("Here 2")
         sc.external.pp.hashsolo(adata, cell_hashing_columns = cell_hashing, priors = hashsolo_priors, inplace = True,
             number_of_noise_barcodes = len(cell_hashing)-1)
         num_doublets = sum(adata.obs["Classification"] == "Doublet")
