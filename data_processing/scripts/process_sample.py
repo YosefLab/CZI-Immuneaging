@@ -612,18 +612,7 @@ if not no_cells:
         sys.exit()
 
 logger.add_to_log("Saving h5ad file...")
-try:
-    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
-except:
-    # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
-    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
-    # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
-    # in future processing layers.
-    obj_cols = adata.obs.select_dtypes(include='object').columns
-    # Also call .astype("str") since there can be other values than NaN in the column that contribute to
-    # the "object" type
-    adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
-    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 ###############################################################
 ###### OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE ######
