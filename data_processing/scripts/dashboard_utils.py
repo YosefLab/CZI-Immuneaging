@@ -2,7 +2,7 @@
 # - To get tissue coverage csv, run as follows:
 #   python dashboard_utils.py tissue_coverage
 # - To get tissue integration results csv, run as follows:
-#   python dashboard_utils.py tissue_integration_results <working_dir> <s3_access_file> <rm_working_dir>
+#   python dashboard_utils.py tissue_integration_results <working_dir> <s3_access_file> <version> <rm_working_dir>
 #   where <rm_working_dir> is "True" or "False" for indicating whether the working dir should be removed at the end; this argument is optional (default value is "True").
 
 import sys
@@ -162,7 +162,7 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     figures_url = "[{}]".format(" ".join(figures_urls))
     return figures_url
 
-def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm_working_dir: bool):
+def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm_working_dir: bool, version: str):
     logger.add_to_log("Downloading the Samples sheet from Google drive...")
     samples = utils.read_immune_aging_sheet("Samples")
     tissues = np.unique(samples["Organ"])
@@ -184,7 +184,6 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm
     BASE_AWS_URL = "https://s3.console.aws.amazon.com/s3/object/immuneaging?prefix="
     BASE_S3_URL = "s3://immuneaging"
     BASE_S3_DIR = "integrated_samples/tissue_level"
-    version = "v1" # TODO add ability to get the latest version (github issue #32)
 
     csv_rows = []
     for tissue in tissues:
@@ -279,10 +278,11 @@ if action == "tissue_coverage":
 else:
     working_dir = sys.argv[2] # must be the absolute path to the local directory where we will place artifacts downloaded from aws
     s3_access_file = sys.argv[3] # must be the absolute path to the aws credentials file
+    version = sys.argv[4] # TODO add ability to get the latest version (github issue #32)
     assert(os.path.isdir(working_dir))
     assert(os.path.isfile(s3_access_file))
     rm_working_dir = True
-    if len(sys.argv) > 4:
-        assert(sys.argv[4] == "True" or sys.argv[4] == "False")
-        rm_working_dir = sys.argv[4] == "True"
-    get_tissue_integration_results_csv(working_dir, s3_access_file, rm_working_dir)
+    if len(sys.argv) > 5:
+        assert(sys.argv[5] == "True" or sys.argv[5] == "False")
+        rm_working_dir = sys.argv[5] == "True"
+    get_tissue_integration_results_csv(working_dir, s3_access_file, rm_working_dir, version)

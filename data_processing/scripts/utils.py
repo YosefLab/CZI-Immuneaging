@@ -193,6 +193,20 @@ def draw_separator_line():
         width = 50
         print("\u2014" * width + "\n")
 
+def write_anndata_with_object_cols(adata: AnnData, data_dir: str, h5ad_file: str) -> None:
+    try:
+        adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+    except:
+        # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
+        # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
+        # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
+        # in future processing layers.
+        obj_cols = adata.obs.select_dtypes(include='object').columns
+        # Also call .astype("str") since there can be other values than NaN in the column that contribute to
+        # the "object" type
+        adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
+        adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+        
 def run_model(
         adata: AnnData,
         configs: dict,
@@ -309,16 +323,7 @@ def _run_model_impl(
     os.path.join(data_dir, model_file)
     data_file = "{}.{}.{}_model.data.h5ad".format(prefix, version, model_name)
     adata_copy = adata.copy()
-    try:
-        adata_copy.write(os.path.join(model_dir_path,data_file), compression="lzf")
-    except:
-        # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
-        # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
-        # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
-        # in future processing layers.
-        obj_cols = adata_copy.obs.select_dtypes(include='object').columns
-        adata_copy.obs.loc[:, obj_cols] = adata_copy.obs.loc[:, obj_cols].fillna('nan').astype("str")
-        adata_copy.write(os.path.join(model_dir_path,data_file), compression="lzf")
+    write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
     # zip the dir with all the model outputs
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
