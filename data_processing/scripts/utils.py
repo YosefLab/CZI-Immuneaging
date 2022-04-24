@@ -10,7 +10,7 @@ import zipfile
 from anndata._core.anndata import AnnData
 from math import floor
 import csv
-from typing import Type, List, NamedTuple
+from typing import Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
 
@@ -382,3 +382,61 @@ def dir_and_files_exist(dir_name: str, file_names: List[str]) -> bool:
                 exists = False
                 break
     return exists
+
+def report_vdj_to_cell_label_mismatch(adata: AnnData):
+    ct_key_high = "celltypist_predicted_labels.Immune_All_High"
+    ct_key_low = "celltypist_predicted_labels.Immune_All_Low"
+
+    # Define known cell label categories
+    # high hierarchy aka low resolution
+    known_b_cells_high = ["B cells", "B-cell lineage", "Plasma cells"]
+    known_t_cells_high = ["Double-negative thymocytes", "Double-positive thymocytes", "ETP", "T cells"]
+    known_non_b_non_t_cells_high = [
+        "DC",
+        "DC precursor",
+        "Endothelial cells",
+        "Epithelial cells",
+        "Erythrocytes",
+        "Erythroid",
+        "Fibroblasts",
+        "Granulocytes",
+        "ILC",
+        "Monocyte precursor",
+        "Monocytes"
+    ]
+    known_non_b_cells_high = known_t_cells_high + known_non_b_non_t_cells_high
+    known_non_t_cells_high = known_b_cells_high + known_non_b_non_t_cells_high
+    unknown_cell_types_high = ["Early MK"] # consider these as non_b_non_t_cells
+    # low hierarchy aka high resolution
+    known_b_cells_low = ["Cycling B cells"]
+    known_t_cells_low = ["Cycling gamma-delta T cells", "Cycling T cells"]
+    known_non_b_non_t_cells_low = [
+        "Cycling DCs",
+        "Cycling monocytes",
+    ]
+    unknown_cell_types_low = ["Cycling NK cells"] # consider these as non_b_non_t_cells
+
+    # Look at labels of cells that have BC receptors 
+    b_cells_by_receptor = adata[adata.obs["BCR-has_ir"] == "True", :].copy()
+    num_b_cells_by_receptor = len(b_cells_by_receptor)
+    b_cells_by_type = b_cells_by_receptor.obs[ct_key_high]
+    # unknown types high
+    indices = b_cells_by_type.isin(unknown_cell_types_high)
+    num_unknown_cell_types_high = indices.sum()
+    b_cells_by_type = b_cells_by_type[~indices, :]
+    # known b types high
+    indices = b_cells_by_type.isin(known_b_cells_high)
+    num_known_b_cells_high = indices.sum()
+    b_cells_by_type = b_cells_by_type[~indices, :]
+    # known non b types types high
+    indices = b_cells_by_type.isin(known_non_b_cells_high)
+    num_known_non_b_non_t_cells_high = indices.sum()
+    # unknown types low
+    b_cells_by_type_low = b_cells_by_receptor[~indices, :].obs[ct_key_low]
+    indices = b_cells_by_type_low.isin(unknown_cell_types_low)
+    num_unknown_cell_types_low = indices.sum()
+    b_cells_by_type_low = b_cells_by_type_low[~indices, :]
+    # ...
+
+    
+
