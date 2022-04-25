@@ -485,12 +485,12 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool
         # look at b/t cell receptors
         ir_cells_by_receptor = ir_cells_by_type[ir_cells_by_type.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
         num_ir_cells_by_receptor_2 = len(ir_cells_by_receptor)
-        pct_ir_cells_by_receptor_2 = (num_ir_cells_by_receptor_2 * 100) / num_ir_cells_by_type
+        pct_ir_cells_by_receptor_2 = -1 if num_ir_cells_by_type == 0 else (num_ir_cells_by_receptor_2 * 100) / num_ir_cells_by_type
         # look for any cell receptors of the "opposite" cell type
         key = "TCR-has_ir" if is_b else "BCR-has_ir"
         opposite_cells_by_receptor = ir_cells_by_type[ir_cells_by_type.obs[key] == "True", :].copy()
         num_opposite_cells_by_receptor = len(opposite_cells_by_receptor)
-        pct_opposite_cells_by_receptor = (num_opposite_cells_by_receptor * 100) / num_ir_cells_by_type
+        pct_opposite_cells_by_receptor = -1 if num_ir_cells_by_type == 0 else (num_opposite_cells_by_receptor * 100) / num_ir_cells_by_type
 
         print("-----")
 
