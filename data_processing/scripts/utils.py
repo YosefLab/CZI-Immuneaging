@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import time
@@ -387,7 +388,7 @@ def is_immune_type(df: pd.DataFrame) -> pd.DataFrame:
     known_immune_types = ["ILC", "T cells", "B cells", "monocytes", "Monocytes", "Macrophages", "macrophages", "NK cells", "T\(", "Mast cells", "Treg\(diff\)", "DC"]
     return df.isin(known_immune_types)
 
-def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, csv: bool = False):
+def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool = False):
     ct_key_high = "celltypist_majority_voting.Immune_All_High.totalvi.leiden_resolution_2.0"
     ct_key_low = "celltypist_majority_voting.Immune_All_Low.totalvi.leiden_resolution_2.0"
 
@@ -437,67 +438,104 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, csv: bool = F
         if receptor_type not in ["BCR", "TCR"]:
             raise ValueError("Unknown receptor_type passed: {}".format(receptor_type))
         cell_type = "b" if receptor_type == "BCR" else "t"
+        is_b = receptor_type == "BCR"
         print("Running for {}...".format(receptor_type))
 
-        # Look at labels of cells that have BC receptors 
+        # Look at labels of cells that have receptors of the given type 
         print("Looking at labels of cells that have {} cell receptors...".format(cell_type))
-        b_cells_by_receptor = adata[adata.obs["BCR-has_ir"] == "True", :].copy()
-        num_b_cells_by_receptor = len(b_cells_by_receptor)
+        ir_cells_by_receptor = adata[adata.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
+        num_ir_cells_by_receptor_1 = len(ir_cells_by_receptor)
         print("Examining high hierarchy cell type labels...")
-        b_cells_by_type = b_cells_by_receptor.obs[ct_key_high]
-        # known b types high
-        indices = b_cells_by_type.isin(known_b_cells_high)
-        num_known_b_cells_high = indices.sum()
-        b_cells_by_type = b_cells_by_type[~indices]
-        # known non b types high
-        indices = b_cells_by_type.isin(known_non_b_cells_high)
-        num_known_non_b_non_t_cells_high = indices.sum()
-        b_cells_by_type = b_cells_by_type[~indices]
-        if len(b_cells_by_type) == 0:
-            print("No cells left to examine in low hierarchy".format(num_b_cells_by_receptor))
+        ir_cells_by_type = ir_cells_by_receptor.obs[ct_key_high]
+        # known b/t cell types high
+        indices = ir_cells_by_type.isin(known_b_cells_high if is_b else known_t_cells_high)
+        num_known_ir_cells_high = indices.sum()
+        ir_cells_by_type = ir_cells_by_type[~indices]
+        # known non b/t cell types high
+        indices = ir_cells_by_type.isin(known_non_b_cells_high if is_b else known_non_t_cells_high)
+        num_known_non_ir_cells_high = indices.sum()
+        ir_cells_by_type = ir_cells_by_type[~indices]
+        if len(ir_cells_by_type) == 0:
+            print("No cells left to examine in low hierarchy")
             # continue anyway - all the steps below will just return 0 in this case
         else:
             print("Examining low hierarchy cell type labels...")
         # low hierarchy
-        b_cells_by_type_low = b_cells_by_receptor[b_cells_by_type.index, :].obs[ct_key_low]
-        # known b types low
-        indices = b_cells_by_type_low.isin(known_b_cells_low)
-        num_known_b_cells_low = indices.sum()
-        b_cells_by_type_low = b_cells_by_type_low[~indices]
-        # known non b types low
-        indices = b_cells_by_type_low.isin(known_non_b_cells_low)
-        num_known_non_b_non_t_cells_low = indices.sum()
+        ir_cells_by_type_low = ir_cells_by_receptor[ir_cells_by_type.index, :].obs[ct_key_low]
+        # known b/t cell types low
+        indices = ir_cells_by_type_low.isin(known_b_cells_low if is_b else known_t_cells_low)
+        num_known_ir_cells_low = indices.sum()
+        ir_cells_by_type_low = ir_cells_by_type_low[~indices]
+        # known non b/t cell types low
+        indices = ir_cells_by_type_low.isin(known_non_b_cells_low if is_b else known_non_t_cells_low)
+        num_known_non_ir_cells_low = indices.sum()
+        pct_known_ir_cells_high_n_low = ((num_known_ir_cells_high + num_known_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
+        pct_known_non_ir_cells_high_n_low = ((num_known_non_ir_cells_high + num_known_non_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
 
         print("-----")
 
-        # Look at presence of b cell receptors for cells that have b cell labels 
+        # Look at presence of b/t cell receptors for cells that have b/t cell labels 
         print("Looking at presence of {}'s for cells that have {} cell labels ...".format(receptor_type, cell_type))
-        # known b types high and low
-        indices_high = adata.obs[ct_key_high].isin(known_b_cells_high)
-        indices_low = adata.obs[ct_key_low].isin(known_b_cells_low)
+        # known b/t cell types high and low
+        indices_high = adata.obs[ct_key_high].isin(known_b_cells_high if is_b else known_t_cells_high)
+        indices_low = adata.obs[ct_key_low].isin(known_b_cells_low if is_b else known_t_cells_low)
         indices = indices_high | indices_low
-        b_cells_by_type = adata[indices, :].copy()
-        num_b_cells_by_type = len(b_cells_by_type)
-        # look at b cell receptors
-        b_cells_by_receptor = b_cells_by_type[b_cells_by_type.obs["BCR-has_ir"] == "True", :].copy()
-        num_b_cells_by_receptor = len(b_cells_by_receptor)
-        # look for any t cell receptors
-        t_cells_by_receptor = b_cells_by_type[b_cells_by_type.obs["TCR-has_ir"] == "True", :].copy()
-        num_t_cells_by_receptor = len(t_cells_by_receptor)
+        ir_cells_by_type = adata[indices, :].copy()
+        num_ir_cells_by_type = len(ir_cells_by_type)
+        # look at b/t cell receptors
+        ir_cells_by_receptor = ir_cells_by_type[ir_cells_by_type.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
+        num_ir_cells_by_receptor_2 = len(ir_cells_by_receptor)
+        pct_ir_cells_by_receptor_2 = (num_ir_cells_by_receptor_2 * 100) / num_ir_cells_by_type
+        # look for any cell receptors of the "opposite" cell type
+        key = "TCR-has_ir" if is_b else "BCR-has_ir"
+        opposite_cells_by_receptor = ir_cells_by_type[ir_cells_by_type.obs[key] == "True", :].copy()
+        num_opposite_cells_by_receptor = len(opposite_cells_by_receptor)
+        pct_opposite_cells_by_receptor = (num_opposite_cells_by_receptor * 100) / num_ir_cells_by_type
+
+        print("-----")
 
         print("Results:")
-        if not csv:
-            print("Of {} b cells by receptor:".format(num_b_cells_by_receptor))
-            print("\t{} cells are of neither b or t cell type in high hierarchy".format(num_known_non_b_non_t_cells_high))
-            print("\t{} cells are of b type in high hierarchy".format(num_known_b_cells_high))
-            print("\t{} cells are of neither b or t cell type in low hierarchy".format(num_known_non_b_non_t_cells_low))
-            print("\t{} cells are of b type in low hierarchy".format(num_known_b_cells_low))
+        if not get_csv:
+            print("Of {} {} cells by receptor:".format(num_ir_cells_by_receptor_1, cell_type))
+            print("\t{} cells are of {} type in high hierarchy".format(num_known_ir_cells_high, cell_type))
+            print("\t{} cells are not of {} cell type in high hierarchy".format(num_known_non_ir_cells_high, cell_type))
+            print("\t{} cells are of {} type in low hierarchy".format(num_known_ir_cells_low, cell_type))
+            print("\t{} cells are not of {} cell type in low hierarchy".format(num_known_non_ir_cells_low, cell_type))
 
-            print("Of {} b cells by type:".format(num_b_cells_by_type))
-            print("\t{} cells have b cell receptors".format(num_b_cells_by_receptor))
-            print("\t{} cells have t cell receptors".format(num_t_cells_by_receptor))
+            print("Of {} {} cells by type (high or low):".format(num_ir_cells_by_type, cell_type))
+            print("\t{} cells have {} cell receptors".format(num_ir_cells_by_receptor_2, cell_type))
+            print("\t{} cells have {} cell receptors".format(num_opposite_cells_by_receptor, "t" if is_b else "b"))
+
             print("cell label keys used: {}, {}".format(ct_key_high, ct_key_low))
-        elif csv:
-            raise NotImplementedError()
-    
+        elif get_csv:
+            csv_rows = [
+                {
+                    "Tissue": tissue,
+                    
+                    "# {} cells by receptor".format(cell_type): num_ir_cells_by_receptor_1,
+                    "Out of {} cells by receptor: # {} cells (high)".format(cell_type, cell_type): num_known_ir_cells_high,
+                    "Out of {} cells by receptor: # {} cells (low)".format(cell_type, cell_type): num_known_ir_cells_low,
+                    "Out of {} cells by receptor: pct {} cells (high&low)".format(cell_type, cell_type): pct_known_ir_cells_high_n_low,
+
+                    "Out of {} cells by receptor: # non {} cells (high)".format(cell_type, cell_type): num_known_non_ir_cells_high,
+                    "Out of {} cells by receptor: # non {} cells (low)".format(cell_type, cell_type): num_known_non_ir_cells_low,
+                    "Out of {} cells by receptor: pct non {} cells (high&low)".format(cell_type, cell_type): pct_known_non_ir_cells_high_n_low,
+
+                    "# {} cells by type".format(cell_type): num_ir_cells_by_type,
+                    "Out of {} cells by type: # cells w/ {} cr".format(cell_type, cell_type): num_ir_cells_by_receptor_2,
+                    "Out of {} cells by type: pct cells w/ {} cr".format(cell_type, cell_type): pct_ir_cells_by_receptor_2,
+                    "Out of {} cells by type: # cells w/ {} cr".format(cell_type, "t" if is_b else "b"): num_opposite_cells_by_receptor,
+                    "Out of {} cells by type: pct cells w/ {} cr".format(cell_type, "t" if is_b else "b"): pct_opposite_cells_by_receptor,
+                }
+            ]
+            csv_file = io.StringIO()
+            field_names = list(csv_rows[0].keys())
+            writer = csv.DictWriter(csv_file, fieldnames=field_names)
+            writer.writeheader()
+            writer.writerows(csv_rows)
+            print(csv_file.getvalue())
+            csv_file.close()
+
     run_analysis("BCR")
+    print("-.-.-.-.-.-.-.-.-.")
+    run_analysis("TCR")
