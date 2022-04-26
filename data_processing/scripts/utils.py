@@ -1,5 +1,6 @@
 import io
 import json
+from multiprocessing.sharedctypes import Value
 import os
 import time
 import glob
@@ -17,6 +18,7 @@ from typing import Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
 from data_processing.scripts.logger import SimpleLogger
+import gc
 
 from logger import BaseLogger
 
@@ -186,21 +188,6 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
     data = pd.read_csv(output_fn)
     os.remove(output_fn)
     return data
-
-# def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False):
-#     url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(sheet)
-#     output_fn = gdown.download(url, output_fn, quiet=quiet)
-#     data = pd.read_csv(output_fn)
-#     os.remove(output_fn)
-#     return data
-
-# import os
-# import pandas as pd
-# import numpy as np
-# import anndata
-# from anndata import AnnData
-# from typing import Type, List, NamedTuple, Optional
-# import gdown
 
 def draw_separator_line():
     try:
@@ -406,19 +393,6 @@ def is_immune_type(df: pd.DataFrame) -> pd.DataFrame:
     known_immune_types = ["ILC", "T cells", "B cells", "monocytes", "Monocytes", "Macrophages", "macrophages", "NK cells", "T\(", "Mast cells", "Treg\(diff\)", "DC"]
     return df.isin(known_immune_types)
 
-# def get_cells_for_lib_from_integrated_tissues(library_id: str, tissues_dir: str, tissues_list: List[str]) -> AnnData:
-#     files = os.listdir(tissues_dir)
-#     files = [f for f in files if f.endswith(".h5ad")]
-#     adatas = []
-#     for file in files:
-#         file_path = os.path.join(tissues_dir, file)
-#         adata = anndata.read_h5ad(file_path)
-#         adata_s = adata[adata.obs["library_id"] == library_id, :].copy()
-#         if len(adata_s) > 0:
-#             adatas.append(adata_s)
-#     adata = anndata.concatenate(adatas, join="outer").copy()
-#     return adata
-
 def add_vdj_lib_ids_to_integrated_data(tissues_dir: str):
     bcr_to_gex, tcr_to_gex = get_vdj_lib_to_gex_lib_mapping()
 
@@ -442,6 +416,7 @@ def add_vdj_lib_ids_to_integrated_data(tissues_dir: str):
         adata.obs["tcr_library_id"] = np.array([gex_to_tcr[l] if l in gex_to_tcr else "NA" for l in adata.obs["library_id"].values])
         adata.write(file_path, compression="lzf")
         del adata
+        gc.collect()
 
 def get_vdj_lib_to_gex_lib_mapping():
     # Returns a mapping of all vdj libraries to their corresponding gex libraries
@@ -472,7 +447,63 @@ def get_vdj_lib_to_gex_lib_mapping():
 
     return all_bcr_libs, all_tcr_libs
 
-def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool = False):
+def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissues_dir: str):
+    if ir_lib_type not in ["BCR", "TCR"]:
+        raise ValueError("Unsupported lib_type: {}. Must be one of: BCR, TCR".format(ir_lib_type))
+    is_b = ir_lib_type == "BCR"
+    ir_libs = list(get_vdj_lib_to_gex_lib_mapping()[0 if is_b else 1].keys())
+    samples = read_immune_aging_sheet("Samples")
+    first = True
+    for lib in ir_libs:
+        # get some other metadata associated with this lib
+        col_name = "{} lib".format(ir_lib_type)
+        samples["Pick?"] = samples[col_name].fillna('').apply(lambda x: "Yes" if lib in x.split(",") else "No")
+        idx = samples["Pick?"] == "Yes"
+        sites = samples[idx]["Site"]
+        donors = samples[idx]["Donor ID"]
+        if len(set(sites)) > 1:
+            raise ValueError("More than one site was found for lib id {} of type {}".format(lib, ir_lib_type))
+        if len(set(donors)) > 1:
+            raise ValueError("More than one donor was found for lib id {} of type {}".format(lib, ir_lib_type))
+        site, donor = set(sites).pop(), set(donors).pop()
+        # get adatas
+        adatas = []
+        files = os.listdir(tissues_dir)
+        files = [f for f in files if f.endswith(".h5ad")]
+        for file in files:
+            file_path = os.path.join(tissues_dir, file)
+            adata = anndata.read_h5ad(file_path)
+            lib_id_col = "{}cr_library_id".format("b" if is_b else "t")
+            if lib_id_col not in adata.obs.columns.values:
+                raise ValueError("Make sure all tissue adata objects have {}".format(lib_id_col))
+            adata_s = adata[adata.obs[lib_id_col] == lib, :].copy()
+            if len(adata_s) > 0:
+                adatas.append(adata_s)
+            del adata
+            gc.collect()
+        if len(adatas) == 0:
+            print("No cells found for library {}, moving on to the next library".format(lib))
+            continue
+        elif len(adatas) == 1:
+            adata = adatas[0]
+        else:
+            adata = adatas[0].concatenate(adatas[1:], join="outer")
+        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, get_csv=True, skip_header=~first)
+        if first:
+            first = False
+        del adata
+        del adatas
+        gc.collect()
+
+def report_vdj_vs_cell_label_metrics(
+    adata: AnnData,
+    ir_lib_id: str,
+    ir_lib_type: str,
+    site: str,
+    donor: str,
+    get_csv: bool = False,
+    skip_header: bool = False
+):
     ct_key_high = "celltypist_majority_voting.Immune_All_High.totalvi.leiden_resolution_2.0"
     ct_key_low = "celltypist_majority_voting.Immune_All_Low.totalvi.leiden_resolution_2.0"
 
@@ -518,12 +549,12 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool
     known_non_b_cells_low = known_t_cells_low + known_non_b_non_t_cells_low
     known_non_t_cells_low = known_b_cells_low + known_non_b_non_t_cells_low
 
-    def run_analysis(receptor_type: str):
+    def run_analysis(lib_id: str, receptor_type: str):
         if receptor_type not in ["BCR", "TCR"]:
             raise ValueError("Unknown receptor_type passed: {}".format(receptor_type))
         cell_type = "b" if receptor_type == "BCR" else "t"
         is_b = receptor_type == "BCR"
-        print("Running for {}...".format(receptor_type))
+        print("Running for {} of type {}...".format(lib_id, receptor_type))
 
         # Look at labels of cells that have receptors of the given type 
         print("Looking at labels of cells that have {} cell receptors...".format(cell_type))
@@ -553,10 +584,13 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool
         # known non b/t cell types low
         indices = ir_cells_by_type_low.isin(known_non_b_cells_low if is_b else known_non_t_cells_low)
         num_known_non_ir_cells_low = indices.sum()
-        pct_known_ir_cells_high_n_low = ((num_known_ir_cells_high + num_known_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
-        pct_known_non_ir_cells_high_n_low = ((num_known_non_ir_cells_high + num_known_non_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
+        if num_ir_cells_by_receptor_1 == 0:
+            pct_known_ir_cells_high_n_low, pct_known_non_ir_cells_high_n_low = -1, -1
+        else:
+            pct_known_ir_cells_high_n_low = ((num_known_ir_cells_high + num_known_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
+            pct_known_non_ir_cells_high_n_low = ((num_known_non_ir_cells_high + num_known_non_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
 
-        print("-----")
+        draw_separator_line()
 
         # Look at presence of b/t cell receptors for cells that have b/t cell labels (will give us a hint about V(D)J library seq. saturation)
         print("Looking at presence of {}'s for cells that have {} cell labels ...".format(receptor_type, cell_type))
@@ -590,7 +624,7 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool
         num_ir_cells_by_receptor_3 = len(ir_cells_by_receptor)
         pct_ir_cells_by_receptor_3 = -1 if num_non_ir_cells_by_type == 0 else (num_ir_cells_by_receptor_3 * 100) / num_non_ir_cells_by_type
 
-        print("-----")
+        draw_separator_line()
 
         print("Results:")
         if not get_csv:
@@ -611,8 +645,10 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool
         elif get_csv:
             csv_rows = [
                 {
-                    "Tissue": tissue,
-                    
+                    "Lib Id": lib_id,
+                    "Site": site,
+                    "Donor ID": donor,
+
                     "# {} cells by receptor".format(cell_type): num_ir_cells_by_receptor_1,
                     "Out of {} cells by receptor: # {} cells (high)".format(cell_type, cell_type): num_known_ir_cells_high,
                     "Out of {} cells by receptor: # {} cells (low)".format(cell_type, cell_type): num_known_ir_cells_low,
@@ -636,11 +672,10 @@ def report_vdj_to_cell_label_mismatch(adata: AnnData, tissue: str, get_csv: bool
             csv_file = io.StringIO()
             field_names = list(csv_rows[0].keys())
             writer = csv.DictWriter(csv_file, fieldnames=field_names)
-            writer.writeheader()
+            if not skip_header:
+                writer.writeheader()
             writer.writerows(csv_rows)
             print(csv_file.getvalue())
             csv_file.close()
 
-    run_analysis("BCR")
-    print("-.-.-.-.-.-.-.-.-.")
-    run_analysis("TCR")
+    run_analysis(ir_lib_id, ir_lib_type)
