@@ -447,55 +447,7 @@ def get_vdj_lib_to_gex_lib_mapping():
 
     return all_bcr_libs, all_tcr_libs
 
-def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissues_dir: str):
-    if ir_lib_type not in ["BCR", "TCR"]:
-        raise ValueError("Unsupported lib_type: {}. Must be one of: BCR, TCR".format(ir_lib_type))
-    is_b = ir_lib_type == "BCR"
-    ir_libs = list(get_vdj_lib_to_gex_lib_mapping()[0 if is_b else 1].keys())
-    samples = read_immune_aging_sheet("Samples")
-    first = True
-    for lib in ir_libs:
-        # get some other metadata associated with this lib
-        col_name = "{} lib".format(ir_lib_type)
-        samples["Pick?"] = samples[col_name].fillna('').apply(lambda x: "Yes" if lib in x.split(",") else "No")
-        idx = samples["Pick?"] == "Yes"
-        sites = samples[idx]["Site"]
-        donors = samples[idx]["Donor ID"]
-        if len(set(sites)) > 1:
-            raise ValueError("More than one site was found for lib id {} of type {}".format(lib, ir_lib_type))
-        if len(set(donors)) > 1:
-            raise ValueError("More than one donor was found for lib id {} of type {}".format(lib, ir_lib_type))
-        site, donor = set(sites).pop(), set(donors).pop()
-        # get adatas
-        adatas = []
-        files = os.listdir(tissues_dir)
-        files = [f for f in files if f.endswith(".h5ad")]
-        for file in files:
-            file_path = os.path.join(tissues_dir, file)
-            adata = anndata.read_h5ad(file_path)
-            lib_id_col = "{}cr_library_id".format("b" if is_b else "t")
-            if lib_id_col not in adata.obs.columns.values:
-                raise ValueError("Make sure all tissue adata objects have {}".format(lib_id_col))
-            adata_s = adata[adata.obs[lib_id_col] == lib, :].copy()
-            if len(adata_s) > 0:
-                adatas.append(adata_s)
-            del adata
-            gc.collect()
-        if len(adatas) == 0:
-            print("No cells found for library {}, moving on to the next library".format(lib))
-            continue
-        elif len(adatas) == 1:
-            adata = adatas[0]
-        else:
-            adata = adatas[0].concatenate(adatas[1:], join="outer")
-        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, get_csv=True, skip_header=not first)
-        if first:
-            first = False
-        del adata
-        del adatas
-        gc.collect()
-
-def report_vdj_vs_cell_label_metrics_all_libs_v2(ir_lib_type: str, tissue_adatas: List[AnnData]):
+def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissue_adatas: List[AnnData]):
     if ir_lib_type not in ["BCR", "TCR"]:
         raise ValueError("Unsupported lib_type: {}. Must be one of: BCR, TCR".format(ir_lib_type))
     is_b = ir_lib_type == "BCR"
