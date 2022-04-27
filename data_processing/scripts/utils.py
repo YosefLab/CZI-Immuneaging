@@ -488,7 +488,49 @@ def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissues_dir: str
             adata = adatas[0]
         else:
             adata = adatas[0].concatenate(adatas[1:], join="outer")
-        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, get_csv=True, skip_header=~first)
+        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, get_csv=True, skip_header=not first)
+        if first:
+            first = False
+        del adata
+        del adatas
+        gc.collect()
+
+def report_vdj_vs_cell_label_metrics_all_libs_v2(ir_lib_type: str, tissue_adatas: List[AnnData]):
+    if ir_lib_type not in ["BCR", "TCR"]:
+        raise ValueError("Unsupported lib_type: {}. Must be one of: BCR, TCR".format(ir_lib_type))
+    is_b = ir_lib_type == "BCR"
+    ir_libs = list(get_vdj_lib_to_gex_lib_mapping()[0 if is_b else 1].keys())
+    samples = read_immune_aging_sheet("Samples")
+    first = True
+    for lib in ir_libs:
+        # get some other metadata associated with this lib
+        col_name = "{} lib".format(ir_lib_type)
+        samples["Pick?"] = samples[col_name].fillna('').apply(lambda x: "Yes" if lib in x.split(",") else "No")
+        idx = samples["Pick?"] == "Yes"
+        sites = samples[idx]["Site"]
+        donors = samples[idx]["Donor ID"]
+        if len(set(sites)) > 1:
+            raise ValueError("More than one site was found for lib id {} of type {}".format(lib, ir_lib_type))
+        if len(set(donors)) > 1:
+            raise ValueError("More than one donor was found for lib id {} of type {}".format(lib, ir_lib_type))
+        site, donor = set(sites).pop(), set(donors).pop()
+        # get adatas
+        adatas = []
+        for tdata in tissue_adatas:
+            lib_id_col = "{}cr_library_id".format("b" if is_b else "t")
+            if lib_id_col not in tdata.obs.columns.values:
+                raise ValueError("Make sure all tissue adata objects have {}".format(lib_id_col))
+            adata_s = tdata[tdata.obs[lib_id_col] == lib, :].copy()
+            if len(adata_s) > 0:
+                adatas.append(adata_s)
+        if len(adatas) == 0:
+            print("No cells found for library {}".format(lib))
+            continue
+        elif len(adatas) == 1:
+            adata = adatas[0]
+        else:
+            adata = adatas[0].concatenate(adatas[1:], join="outer")
+        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, get_csv=True, skip_header=not first, skip_debug_print=True)
         if first:
             first = False
         del adata
@@ -502,8 +544,13 @@ def report_vdj_vs_cell_label_metrics(
     site: str,
     donor: str,
     get_csv: bool = False,
-    skip_header: bool = False
+    skip_header: bool = False,
+    skip_debug_print: bool = False
 ):
+    def debug_print(msg: str):
+        if not skip_debug_print:
+            print(msg)
+
     ct_key_high = "celltypist_majority_voting.Immune_All_High.totalvi.leiden_resolution_2.0"
     ct_key_low = "celltypist_majority_voting.Immune_All_Low.totalvi.leiden_resolution_2.0"
 
@@ -554,13 +601,13 @@ def report_vdj_vs_cell_label_metrics(
             raise ValueError("Unknown receptor_type passed: {}".format(receptor_type))
         cell_type = "b" if receptor_type == "BCR" else "t"
         is_b = receptor_type == "BCR"
-        print("Running for {} of type {}...".format(lib_id, receptor_type))
+        debug_print("Running for {} of type {}...".format(lib_id, receptor_type))
 
         # Look at labels of cells that have receptors of the given type 
-        print("Looking at labels of cells that have {} cell receptors...".format(cell_type))
+        debug_print("Looking at labels of cells that have {} cell receptors...".format(cell_type))
         ir_cells_by_receptor = adata[adata.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
         num_ir_cells_by_receptor_1 = len(ir_cells_by_receptor)
-        print("Examining high hierarchy cell type labels...")
+        debug_print("Examining high hierarchy cell type labels...")
         ir_cells_by_type = ir_cells_by_receptor.obs[ct_key_high]
         # known b/t cell types high
         indices = ir_cells_by_type.isin(known_b_cells_high if is_b else known_t_cells_high)
@@ -571,10 +618,10 @@ def report_vdj_vs_cell_label_metrics(
         num_known_non_ir_cells_high = indices.sum()
         ir_cells_by_type = ir_cells_by_type[~indices]
         if len(ir_cells_by_type) == 0:
-            print("No cells left to examine in low hierarchy")
+            debug_print("No cells left to examine in low hierarchy")
             # continue anyway - all the steps below will just return 0 in this case
         else:
-            print("Examining low hierarchy cell type labels...")
+            debug_print("Examining low hierarchy cell type labels...")
         # low hierarchy
         ir_cells_by_type_low = ir_cells_by_receptor[ir_cells_by_type.index, :].obs[ct_key_low]
         # known b/t cell types low
@@ -593,7 +640,7 @@ def report_vdj_vs_cell_label_metrics(
         draw_separator_line()
 
         # Look at presence of b/t cell receptors for cells that have b/t cell labels (will give us a hint about V(D)J library seq. saturation)
-        print("Looking at presence of {}'s for cells that have {} cell labels ...".format(receptor_type, cell_type))
+        debug_print("Looking at presence of {}'s for cells that have {} cell labels ...".format(receptor_type, cell_type))
         # known b/t cell types high and low
         indices_high = adata.obs[ct_key_high].isin(known_b_cells_high if is_b else known_t_cells_high)
         indices_low = adata.obs[ct_key_low].isin(known_b_cells_low if is_b else known_t_cells_low)
@@ -612,7 +659,7 @@ def report_vdj_vs_cell_label_metrics(
         pct_opposite_cells_by_receptor = -1 if num_ir_cells_by_type == 0 else (num_opposite_cells_by_receptor * 100) / num_ir_cells_by_type
 
         # Look at presence of b/t cell receptors for cells that DO NOT have b/t cell labels  (will give us a hint about false positive receptors)
-        print("Looking at presence of {}'s for cells that DO NOT have {} cell labels ...".format(receptor_type, cell_type))
+        debug_print("Looking at presence of {}'s for cells that DO NOT have {} cell labels ...".format(receptor_type, cell_type))
         # known non b/t cell types high and low
         indices_high = adata.obs[ct_key_high].isin(known_b_cells_high if is_b else known_t_cells_high)
         indices_low = adata.obs[ct_key_low].isin(known_b_cells_low if is_b else known_t_cells_low)
@@ -626,7 +673,7 @@ def report_vdj_vs_cell_label_metrics(
 
         draw_separator_line()
 
-        print("Results:")
+        debug_print("Results:")
         if not get_csv:
             print("Of {} {} cells by receptor:".format(num_ir_cells_by_receptor_1, cell_type))
             print("\t{} cells are of {} type in high hierarchy".format(num_known_ir_cells_high, cell_type))
@@ -660,13 +707,13 @@ def report_vdj_vs_cell_label_metrics(
 
                     "# {} cells by type".format(cell_type): num_ir_cells_by_type,
                     "Out of {} cells by type: # cells w/ {} cr".format(cell_type, cell_type): num_ir_cells_by_receptor_2,
-                    "Out of {} cells by type: pct cells w/ {} cr".format(cell_type, cell_type): pct_ir_cells_by_receptor_2,
+                    "Out of {} cells by type: pct cells w/ {} cr (aka seq. saturation)".format(cell_type, cell_type): pct_ir_cells_by_receptor_2,
                     "Out of {} cells by type: # cells w/ {} cr".format(cell_type, "t" if is_b else "b"): num_opposite_cells_by_receptor,
                     "Out of {} cells by type: pct cells w/ {} cr".format(cell_type, "t" if is_b else "b"): pct_opposite_cells_by_receptor,
 
                     "# non {} cells by type".format(cell_type): num_non_ir_cells_by_type,
                     "Out of non {} cells by type: # cells w/ {} cr".format(cell_type, cell_type): num_ir_cells_by_receptor_3,
-                    "Out of non {} cells by type: pct cells w/ {} cr".format(cell_type, cell_type): pct_ir_cells_by_receptor_3,
+                    "Out of non {} cells by type: pct cells w/ {} cr (aka false positive)".format(cell_type, cell_type): pct_ir_cells_by_receptor_3,
                 }
             ]
             csv_file = io.StringIO()
