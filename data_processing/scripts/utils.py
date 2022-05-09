@@ -461,6 +461,7 @@ def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissue_adatas: L
         idx = samples["Pick?"] == "Yes"
         sites = samples[idx]["Site"]
         donors = samples[idx]["Donor ID"]
+        organs = set(samples[idx]["Organ"])
         if len(set(sites)) > 1:
             raise ValueError("More than one site was found for lib id {} of type {}".format(lib, ir_lib_type))
         if len(set(donors)) > 1:
@@ -482,7 +483,7 @@ def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissue_adatas: L
             adata = adatas[0]
         else:
             adata = adatas[0].concatenate(adatas[1:], join="outer")
-        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, get_csv=True, skip_header=not first, skip_debug_print=True)
+        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, organs, get_csv=True, skip_header=not first, skip_debug_print=True)
         if first:
             first = False
         del adata
@@ -495,6 +496,7 @@ def report_vdj_vs_cell_label_metrics(
     ir_lib_type: str,
     site: str,
     donor: str,
+    organs,
     get_csv: bool = False,
     skip_header: bool = False,
     skip_debug_print: bool = False
@@ -647,6 +649,7 @@ def report_vdj_vs_cell_label_metrics(
                     "Lib Id": lib_id,
                     "Site": site,
                     "Donor ID": donor,
+                    "Organ(s)": ",".join([str(o) for o in organs]),
 
                     "# {} cells by receptor".format(cell_type): num_ir_cells_by_receptor_1,
                     "Out of {} cells by receptor: # {} cells (high)".format(cell_type, cell_type): num_known_ir_cells_high,

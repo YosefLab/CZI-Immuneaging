@@ -18,3 +18,7 @@ envs/.Rhistory
 # test data for the upload script
 data_management/test_data/good/*
 data_management/test_data/bad/*
+
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints/
