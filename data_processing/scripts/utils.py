@@ -1,11 +1,9 @@
 import io
 import json
-from multiprocessing.sharedctypes import Value
 import os
 import time
 import glob
 import warnings
-from jax import value_and_grad
 import pandas as pd
 import numpy as np
 import scvi
@@ -14,10 +12,9 @@ import anndata
 from anndata import AnnData
 from math import floor
 import csv
-from typing import Type, List, NamedTuple, Optional
+from typing import Type, List, NamedTuple
 import traceback
 from datetime import datetime
-from data_processing.scripts.logger import SimpleLogger
 import gc
 
 from logger import BaseLogger
