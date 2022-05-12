@@ -19,6 +19,5 @@ envs/.Rhistory
 data_management/test_data/good/*
 data_management/test_data/bad/*
 
-# Jupyter Notebooks
-*.ipynb
-.ipynb_checkpoints/
+# local
+local/
