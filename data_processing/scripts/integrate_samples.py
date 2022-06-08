@@ -195,7 +195,7 @@ for integration_mode in integration_modes:
     logger.add_to_log("Concatenating all cells from all samples...")
     adata = adata_dict[sample_ids[0]]
     if len(sample_ids) > 1:
-        adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer")
+        adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
     # Move the summary statistics of the genes (under .var) to .varm
     cols_to_varm = [j for j in adata.var.columns if "n_cells" in j] + \
     [j for j in adata.var.columns if "mean_counts" in j] + \
@@ -376,7 +376,7 @@ for integration_mode in integration_modes:
                 # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
                 dotplot_paths.append(os.path.join(os.getcwd(),"figures",dotplot_filename + ".pdf"))
         return(dotplot_paths)
-    ## remove celltypist predictions and related metadata that were added at the sample-level processing
+    # remove celltypist predictions and related metadata that were added at the sample-level processing
     celltypist_cols = [j for j in adata.obs.columns if "celltypist" in j]
     adata.obs = adata.obs.drop(labels = celltypist_cols, axis = "columns")
     leiden_resolutions = [float(j) for j in configs["leiden_resolutions"].split(",")]
@@ -410,6 +410,9 @@ for integration_mode in integration_modes:
     zipf = zipfile.ZipFile(os.path.join(data_dir,dotplots_zipfile), 'w', zipfile.ZIP_DEFLATED)
     zipdir(dotplot_dir, zipf)
     zipf.close()
+    logger.add_to_log("Adding bcr_lib_id and tcr_lib_id to adata where applicable...")
+    gex_to_bcr, gex_to_tcr = get_gex_lib_to_vdj_lib_mapping()
+    add_vdj_lib_ids_to_adata(adata, gex_to_bcr, gex_to_tcr)
     logger.add_to_log("Saving h5ad files...")
     adata.obs["age"] = adata.obs["age"].astype(str)
     adata.obs["BMI"] = adata.obs["BMI"].astype(str)

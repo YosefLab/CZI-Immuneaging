@@ -148,8 +148,18 @@ if configs["library_type"] == "GEX":
     store_lib_alignment_metrics(adata, data_dir)
     
     logger.add_to_log("Dropping out if this is a known poor quality library...")
-    poor_quality_libs_df = pd.DataFrame() # TODO fetch it from S3
-    if configs["library_id"] in poor_quality_libs_df.values:
+    logger.add_to_log("Downloading list of poor_quality libraries from AWS...")
+    filename = "poor_quality_libs.csv"
+    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/cell_filtering/ {} --exclude "*" --include {}'.format(data_dir, filename)
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    file_path = os.path.join(data_dir, filename)
+    if not os.path.isfile(file_path):
+        msg = "Failed to download file {} from S3.".format(filename)
+        logger.add_to_log(msg, level="error")
+        raise ValueError(msg)
+    poor_quality_libs_df = pd.read_csv(file_path)
+    if configs["library_id"] in poor_quality_libs_df.columns:
         logger.add_to_log("This is a known poor quality library: {}. Exiting...".format(configs["library_id"]), level="warning")
         flush_logs_and_upload()
         sys.exit()
@@ -180,7 +190,12 @@ if configs["library_type"] == "GEX":
         # example). In such cases, only remove the cells that are marked "exclude from the dataset".
         if "Exclude from dataset" in non_immune_cells_df.columns:
             exclude_cells_barcodes = non_immune_cells_df[non_immune_cells_df["Exclude from dataset"] == "Yes"]["cell_barcode"]
-            adata[non_immune_cells_df["cell_barcode"]].obs["Exclude from Aging analysis"] = non_immune_cells_df["Exclude from Aging analysis"]
+            # also add the "Exclude from Aging analysis" as an obs column to adata
+            exclude_key = "Exclude from Aging analysis"
+            inter = np.intersect1d(adata.obs_names, non_immune_cells_df["cell_barcode"])
+            adata_t = adata[inter, :].copy()
+            adata_t.obs[exclude_key] = non_immune_cells_df.loc[inter][exclude_key]
+            adata.obs[exclude_key] = adata_t.obs[exclude_key]
         else:
             exclude_cells_barcodes = non_immune_cells_df["cell_barcode"]
         n_obs_before = adata.n_obs

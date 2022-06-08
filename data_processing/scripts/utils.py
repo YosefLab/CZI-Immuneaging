@@ -410,53 +410,6 @@ def is_immune_type(df: pd.DataFrame) -> pd.DataFrame:
     known_immune_types = ["ILC", "T cells", "B cells", "monocytes", "Monocytes", "Macrophages", "macrophages", "NK cells", "T\(", "Mast cells", "Treg\(diff\)", "DC"]
     return df.isin(known_immune_types)
 
-def add_vdj_lib_ids_to_integrated_data(tissues_dir: str):
-    bcr_to_gex, tcr_to_gex = get_vdj_lib_to_gex_lib_mapping()
-
-    # make sure there is a 1:1 mapping betwen gex and bcr, and same for tcr
-    gex = list(bcr_to_gex.values())
-    if len(gex) != len(np.unique(gex)):
-        raise ValueError("There is not a 1:1 mapping between gex libs and bcr libs")
-    gex = list(tcr_to_gex.values())
-    if len(gex) != len(np.unique(gex)):
-        raise ValueError("There is not a 1:1 mapping between gex libs and tcr libs")
-
-    gex_to_bcr = {v:k for k,v in bcr_to_gex.items()}
-    gex_to_tcr = {v:k for k,v in tcr_to_gex.items()}
-
-    files = os.listdir(tissues_dir)
-    files = [f for f in files if f.endswith(".h5ad")]
-    for file in files:
-        file_path = os.path.join(tissues_dir, file)
-        adata = anndata.read_h5ad(file_path)
-        adata.obs["bcr_library_id"] = np.array([gex_to_bcr[l] if l in gex_to_bcr else "NA" for l in adata.obs["library_id"].values])
-        adata.obs["tcr_library_id"] = np.array([gex_to_tcr[l] if l in gex_to_tcr else "NA" for l in adata.obs["library_id"].values])
-        adata.write(file_path, compression="lzf")
-        del adata
-        gc.collect()
-
-def strip_integration_markers(barcode: str) -> str:
-    # for example from "AACTGTCAAGTCGT-1_CZI-IA11512684-1-2-10" returns "AACTGTCAAGTCGT-1_CZI-IA11512684"
-    parts = barcode.split("_")
-    cell_barcode = parts[0]
-    lib_id_plus_integration_markers = parts[1].split("-")
-    lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
-    return "_".join([cell_barcode, lib_id])
-   
-def get_all_libs(lib_type: str) -> set:
-    if lib_type not in ["GEX", "BCR", "TCR"]:
-        raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
-    all_libs = set()
-    samples = read_immune_aging_sheet("Samples")
-    column_name = "{} lib".format(lib_type)
-    libs_all = samples[column_name]
-    for i in range(len(libs_all)):
-        if libs_all.iloc[i] is np.nan:
-            continue
-        libs = libs_all.iloc[i].split(",")
-        all_libs.update(libs)
-    return all_libs
-
 def get_vdj_lib_to_gex_lib_mapping():
     # Returns a mapping of all vdj libraries to their corresponding gex libraries
     # in the form of two dictionaries, one for bcr libs and one for tcr libs
@@ -485,6 +438,61 @@ def get_vdj_lib_to_gex_lib_mapping():
     add_lib("TCR", all_tcr_libs)
 
     return all_bcr_libs, all_tcr_libs
+
+def get_gex_lib_to_vdj_lib_mapping():
+    bcr_to_gex, tcr_to_gex = get_vdj_lib_to_gex_lib_mapping()
+
+    # make sure there is a 1:1 mapping between gex and bcr, and same for tcr
+    gex = list(bcr_to_gex.values())
+    if len(gex) != len(np.unique(gex)):
+        raise ValueError("There is not a 1:1 mapping between gex libs and bcr libs")
+    gex = list(tcr_to_gex.values())
+    if len(gex) != len(np.unique(gex)):
+        raise ValueError("There is not a 1:1 mapping between gex libs and tcr libs")
+
+    gex_to_bcr = {v:k for k,v in bcr_to_gex.items()}
+    gex_to_tcr = {v:k for k,v in tcr_to_gex.items()}
+
+    return gex_to_bcr, gex_to_tcr
+
+def add_vdj_lib_ids_to_adata(adata: AnnData, gex_to_bcr, gex_to_tcr):
+    adata.obs["bcr_library_id"] = np.array([gex_to_bcr[l] if l in gex_to_bcr else "NA" for l in adata.obs["library_id"].values])
+    adata.obs["tcr_library_id"] = np.array([gex_to_tcr[l] if l in gex_to_tcr else "NA" for l in adata.obs["library_id"].values])
+
+def add_vdj_lib_ids_to_integrated_data(tissues_dir: str):
+    gex_to_bcr, gex_to_tcr = get_gex_lib_to_vdj_lib_mapping()
+
+    files = os.listdir(tissues_dir)
+    files = [f for f in files if f.endswith(".h5ad")]
+    for file in files:
+        file_path = os.path.join(tissues_dir, file)
+        adata = anndata.read_h5ad(file_path)
+        add_vdj_lib_ids_to_adata(adata, gex_to_bcr, gex_to_tcr)
+        adata.write(file_path, compression="lzf")
+        del adata
+        gc.collect()
+
+def strip_integration_markers(barcode: str) -> str:
+    # for example from "AACTGTCAAGTCGT-1_CZI-IA11512684-1-2-10" returns "AACTGTCAAGTCGT-1_CZI-IA11512684"
+    parts = barcode.split("_")
+    cell_barcode = parts[0]
+    lib_id_plus_integration_markers = parts[1].split("-")
+    lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
+    return "_".join([cell_barcode, lib_id])
+   
+def get_all_libs(lib_type: str) -> set:
+    if lib_type not in ["GEX", "BCR", "TCR"]:
+        raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
+    all_libs = set()
+    samples = read_immune_aging_sheet("Samples")
+    column_name = "{} lib".format(lib_type)
+    libs_all = samples[column_name]
+    for i in range(len(libs_all)):
+        if libs_all.iloc[i] is np.nan:
+            continue
+        libs = libs_all.iloc[i].split(",")
+        all_libs.update(libs)
+    return all_libs
 
 def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissue_adatas: List[AnnData]):
     if ir_lib_type not in ["BCR", "TCR"]:
