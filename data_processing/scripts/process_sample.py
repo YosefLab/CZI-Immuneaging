@@ -391,34 +391,16 @@ else:
 
 if not no_cells:
     try:
-        # save raw counts
-        is_cite = "Antibody Capture" in np.unique(adata.var.feature_types)
+        prot_exp_obsm_key = "protein_expression"
+        prot_exp_ctrl_obsm_key = "protein_expression_Ctrl"
+        is_cite = prot_exp_obsm_key in adata.obsm.columns or prot_exp_ctrl_obsm_key in adata.obsm.columns
         if is_cite:
             logger.add_to_log("Detected Antibody Capture features.")
-            # Get the CITE data. Only keep the subset of proteins that are not HTO tags. We already store these in an obs column
-            hto_tag = configs["donor"]+"-"
-            protein = adata[:, (adata.var["feature_types"] == "Antibody Capture") & ~(adata.var_names.str.startswith(hto_tag))].copy()
-            # copy protein data from X into adata.obsm["protein_expression"]
-            protein_df = protein.to_df()
-            protein_expression_obsm_key = "protein_expression"
-            protein_expression_ctrl_obsm_key = "protein_expression_Ctrl"
-            if not protein_df.empty:
-                if np.median(protein_df.fillna(0).sum(axis=1)) == 0:
-                    logger.add_to_log("median coverage (total number of protein reads per cell) across cells is 0. Removing protein information from data.", level = "warning")
-                    is_cite = False
-                else:
-                    # switch the protein names to their internal names defined in the protein panels (in the Google Spreadsheet)
-                    protein_df.columns = get_internal_protein_names(protein_df)
-                    # save control and non-control proteins in different obsm structures
-                    is_ctrl_protein = np.array([i.endswith("Ctrl") for i in protein_df.columns])
-                    adata.obsm[protein_expression_ctrl_obsm_key] = protein_df[protein_df.columns[is_ctrl_protein]].copy()
-                    adata.obsm[protein_expression_obsm_key] = protein_df[protein_df.columns[np.logical_not(is_ctrl_protein)]].copy()
-            else:
-                logger.add_to_log("All detected Antibody Capture features were due to HTO, no proteins of interest to analyze.")
+            protein_df = adata.obsm[prot_exp_obsm_key].merge(adata.obsm[prot_exp_ctrl_obsm_key], left_index=True, right_index=True, validate="one_to_one")
+            if np.median(protein_df.fillna(0).sum(axis=1)) == 0:
+                logger.add_to_log("median coverage (total number of protein reads per cell) across cells is 0. Removing protein information from data.", level = "warning")
                 is_cite = False
-            rna = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
-        else:
-            rna = adata.copy()
+        rna = adata.copy() # this is redundant but am keeping it to avoid having to update all references to rna that follow
         logger.add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
         decontx_data_dir = os.path.join(data_dir,"decontx")
         os.system("mkdir -p " + decontx_data_dir)
@@ -525,7 +507,7 @@ if not no_cells:
             # rest of the data regardless of CITE info
             retry_count = 4
             try:
-                _, totalvi_model_file = run_model(rna, configs, batch_key, protein_expression_obsm_key, "totalvi", prefix, version, data_dir, logger, max_retry_count=retry_count)
+                _, totalvi_model_file = run_model(rna, configs, batch_key, prot_exp_obsm_key, "totalvi", prefix, version, data_dir, logger, max_retry_count=retry_count)
             except Exception as err:
                 logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
                 is_cite = False
@@ -589,9 +571,6 @@ if not no_cells:
         adata = adata[keep,].copy()
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
-        logger.add_to_log("Remove protein counts from adata.X...")
-        # keep only the subset of X that does not have protein data, since we already moved these to obsm
-        adata = adata[:, adata.var["feature_types"] == "Gene Expression"].copy()
         # save raw rna counts
         adata.layers["raw_counts"] = adata.X.copy()
         # save decontaminated counts (only applies to rna data; consider only cells that we keep after filters)

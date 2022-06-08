@@ -20,7 +20,7 @@
 "umap_n_components": 2,
 "celltypist_model_urls": "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_Conde/v1/Immune_All_PIP.pkl",
 "celltypist_dotplot_min_frac": 0.01,
-"leiden_resolutions": "0.5,0.75,1.0,1.25,1.5,2.0",
+"leiden_resolutions": "1.0,2.0,3.0,5.0,7.0,10.0,15.0",
 "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
 "python_env_version": "immune_aging.py_env.v4",
 "r_setup_version": "immune_aging.R_setup.v2"}

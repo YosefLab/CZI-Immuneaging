@@ -147,6 +147,76 @@ if configs["library_type"] == "GEX":
 
     store_lib_alignment_metrics(adata, data_dir)
     
+    logger.add_to_log("Dropping out if this is a known poor quality library...")
+    poor_quality_libs_df = pd.DataFrame() # TODO fetch it from S3
+    if configs["library_id"] in poor_quality_libs_df.values:
+        logger.add_to_log("This is a known poor quality library: {}. Exiting...".format(configs["library_id"]), level="warning")
+        flush_logs_and_upload()
+        sys.exit()
+
+    # Add the library ID to the cell barcode name. This will enable two things:
+    # a) distinguish between different cells with the same barcode when integrating different libraries (of the same type) that were used to collect the same samples
+    # b) successfully merge ir data with gex data during sample processing, the merging is contingent on the obs_names being exactly the same
+    # We need to do this before the next step where we filter out non-immune cells since the black-listed cell barcodes include the library-id.
+    logger.add_to_log("Adding the library ID to the cell barcode name...")
+    adata.obs_names = adata.obs_names + "_" + configs["library_id"]
+
+    logger.add_to_log("Filtering out non-immune cells...")
+    tissues = ["BAL", "BLO", "ILN", "JEJEPI", "JEJLP", "LIV", "MLN", "SKN", "TLN"]
+    for tissue in tissues:
+        logger.add_to_log("Downloading list of non-immune cells for tissue {}...".format(tissue))
+        filename = "{}_blacklist.csv".format(tissue)
+        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/cell_filtering/ {} --exclude "*" --include {}'.format(data_dir, filename)
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        file_path = os.path.join(data_dir, filename)
+        if not os.path.isfile(file_path):
+            msg = "Failed to download file {} from S3.".format(filename)
+            logger.add_to_log(msg, level="error")
+            raise ValueError(msg)
+        non_immune_cells_df = pd.read_csv(file_path)
+        # the blacklist for some tissues includes whether the cell barcode should be discarded entirely
+        # or whether it should merely be discarded from analysis but still kept around (mast cell are an
+        # example). In such cases, only remove the cells that are marked "exclude from the dataset".
+        if "Exclude from dataset" in non_immune_cells_df.columns:
+            exclude_cells_barcodes = non_immune_cells_df[non_immune_cells_df["Exclude from dataset"] == "Yes"]["cell_barcode"]
+            adata[non_immune_cells_df["cell_barcode"]].obs["Exclude from Aging analysis"] = non_immune_cells_df["Exclude from Aging analysis"]
+        else:
+            exclude_cells_barcodes = non_immune_cells_df["cell_barcode"]
+        n_obs_before = adata.n_obs
+        adata = adata[~adata.obs_names.isin(exclude_cells_barcodes.values), :].copy()
+        n_cells_filtered = n_obs_before-adata.n_obs
+        percent_removed = 100*n_cells_filtered/n_obs_before
+        level = "warning" if percent_removed > 40 else "info"
+        logger.add_to_log("Filtered out {} non-immune cells for tissue {}, percent_removed: {}".format(n_cells_filtered, tissue, percent_removed), level=level)
+
+    if adata.n_obs == 0:
+        logger.add_to_log("No cells left after filtering out non-immune cells. Exiting...", level="warning")
+        flush_logs_and_upload()
+        sys.exit()
+
+    # move protein/hto data out of adata.X into adata.obsm/obs
+    hto_tag = configs["donor"]+"-"
+    cell_hashing = [i for i in adata.var_names[np.where(adata.var_names.str.startswith(hto_tag))]]
+    if len(cell_hashing) > 1:
+        logger.add_to_log("Moving hto data out of adata.X into adata.obs...")
+        adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
+        adata = adata[:, ~adata.var_names.str.startswith(hto_tag)].copy()
+
+    if "Antibody Capture" in np.unique(adata.var.feature_types):
+        logger.add_to_log("Moving protein data out of adata.X into adata.obsm...")
+        protein = adata[:, adata.var["feature_types"] == "Antibody Capture"].copy()
+        protein_df = protein.to_df()
+        # switch the protein names to their internal names defined in the protein panels (in the Google Spreadsheet)
+        protein_df.columns = get_internal_protein_names(protein_df)
+        # save control and non-control proteins in different obsm structures
+        is_ctrl_protein = np.array([i.endswith("Ctrl") for i in protein_df.columns])
+        protein_expression_obsm_key = "protein_expression"
+        protein_expression_ctrl_obsm_key = "protein_expression_Ctrl"
+        adata.obsm[protein_expression_ctrl_obsm_key] = protein_df[protein_df.columns[is_ctrl_protein]].copy()
+        adata.obsm[protein_expression_obsm_key] = protein_df[protein_df.columns[np.logical_not(is_ctrl_protein)]].copy()
+        adata = adata[:, adata.var["feature_types"] != "Antibody Capture"]
+
     logger.add_to_log("Applying basic filters...")
     n_cells_before = adata.n_obs
     sc.pp.filter_cells(adata, min_genes=configs["filter_cells_min_genes"])
@@ -191,11 +261,8 @@ if configs["library_type"] == "GEX":
     adata = adata[:,genes_to_keep].copy()
     logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude_names)))
 
-    cell_hashing = [i for i in adata.var_names[np.where(adata.var_names.str.startswith(configs["donor"]+"-"))]]
-    if len(cell_hashing)>1:
+    if len(cell_hashing) > 1:
         logger.add_to_log("Demultiplexing is needed; using hashsolo...")
-        # add the HTO counts to .obs
-        adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
         hashsolo_priors = [float(i) for i in configs["hashsolo_priors"].split(',')]
         sc.external.pp.hashsolo(adata, cell_hashing_columns = cell_hashing, priors = hashsolo_priors, inplace = True,
             number_of_noise_barcodes = len(cell_hashing)-1)
@@ -204,12 +271,6 @@ if configs["library_type"] == "GEX":
         level = "error" if percent_doublets > 40 else "info"
         logger.add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(percent_doublets, num_doublets, adata.n_obs), level=level)
         adata = adata[adata.obs["Classification"] != "Doublet"].copy()
-
-    # Add the library ID to the cell barcode name. This will enable two things:
-    # a) distinguish between different cells with the same barcode when integrating different libraries (of the same type) that were used to collect the same samples
-    # b) successfully merge ir data with gex data during sample processing, the merging is contingent on the obs_names being exactly the same
-    logger.add_to_log("Adding the library ID to the cell barcode name...")
-    adata.obs_names = adata.obs_names + "_" + configs["library_id"]
 
     summary.append("Final number of cells: {}, final number of genes: {}.".format(adata.n_obs, adata.n_vars))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":

@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import time
 import glob
 import warnings
@@ -16,7 +17,6 @@ from typing import Type, List, NamedTuple
 import traceback
 from datetime import datetime
 import gc
-
 from logger import BaseLogger
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
@@ -119,6 +119,26 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 		is_new_version = True
 	return [is_new_version,"v"+str(version)]
 
+def get_latest_processed_lib_version(s3_access_file: str, s3_processed_lib_path: str):
+    set_access_keys(s3_access_file)
+    latest_version = -1
+    ls_cmd = 'aws s3 ls {} --recursive'.format(s3_processed_lib_path)
+    ls  = os.popen(ls_cmd).read()
+    if len(ls) != 0:
+        # search for patterns of /vX/. If there is a match, the regex group
+        # one is "X" (X can be any integer >0)
+        pattern = "/v(\d+)/"
+        filenames = ls.split("\n")
+        for filename in filenames:
+            m = re.search(pattern, filename)
+            if bool(m):
+                version = int(m[1])
+                if latest_version < version:
+                    latest_version = version
+    if latest_version == -1:
+        print(f"Could not find latest version for lib. s3_processed_lib_path: {s3_processed_lib_path}")
+    return "v" + str(latest_version)
+
 def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, variable_config_keys):
 	# This function checks if the configs file is using configs that were already used (while disregarding fields variable_config_keys) and are therefore documented on S3.
 	# If this is the first time these configs are used then it creates a new configs version and uploads the new configs to S3.
@@ -173,7 +193,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
         )
 
     with warnings.catch_warnings(record=True) as w:
-        warnings.filterwarnings("error")
+        # warnings.filterwarnings("error")
         output_fn = gdown.download(url, output_fn, quiet=quiet)
 
         if len(w) == 1:
@@ -372,7 +392,7 @@ def get_internal_protein_names(df):
         panel_sizes.append(protein_panel_i.shape[0])
         i += 1
     assert len(np.unique(panel_sizes)) == len(panel_sizes) # make sure we can identify the panel solely based on its size
-    assert np.sum(df.shape[1] == np.array(panel_sizes)) == 1 # make sure that twe can identify the protein panel used
+    assert np.sum(df.shape[1] == np.array(panel_sizes)) == 1 # make sure that we can identify the protein panel used
     for protein_panel in protein_panels.values():
         if df.shape[1] == protein_panel.shape[0]:
             return protein_panel["internal_name"]
@@ -414,6 +434,28 @@ def add_vdj_lib_ids_to_integrated_data(tissues_dir: str):
         adata.write(file_path, compression="lzf")
         del adata
         gc.collect()
+
+def strip_integration_markers(barcode: str) -> str:
+    # for example from "AACTGTCAAGTCGT-1_CZI-IA11512684-1-2-10" returns "AACTGTCAAGTCGT-1_CZI-IA11512684"
+    parts = barcode.split("_")
+    cell_barcode = parts[0]
+    lib_id_plus_integration_markers = parts[1].split("-")
+    lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
+    return "_".join([cell_barcode, lib_id])
+   
+def get_all_libs(lib_type: str) -> set:
+    if lib_type not in ["GEX", "BCR", "TCR"]:
+        raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
+    all_libs = set()
+    samples = read_immune_aging_sheet("Samples")
+    column_name = "{} lib".format(lib_type)
+    libs_all = samples[column_name]
+    for i in range(len(libs_all)):
+        if libs_all.iloc[i] is np.nan:
+            continue
+        libs = libs_all.iloc[i].split(",")
+        all_libs.update(libs)
+    return all_libs
 
 def get_vdj_lib_to_gex_lib_mapping():
     # Returns a mapping of all vdj libraries to their corresponding gex libraries
@@ -678,3 +720,118 @@ def report_vdj_vs_cell_label_metrics(
             csv_file.close()
 
     run_analysis(ir_lib_id, ir_lib_type)
+
+def gather_extra_info_for_ir_libs(
+    lib_type: str,
+    libs_csv_path: str,
+    all_ir_lib_metrics_csv_path: str,
+    all_gex_lib_metrics_csv_path: str,
+    working_dir: str,
+    s3_access_file: str,
+):
+    if lib_type not in ["BCR", "TCR"]:
+        raise ValueError(f"Unknown lib type: {lib_type}")
+
+    libs_df = pd.read_csv(libs_csv_path, header=None)
+    libs = libs_df.values.squeeze().tolist()
+
+    ir_lib_metrics_df = pd.read_csv(all_ir_lib_metrics_csv_path) 
+    ir_lib_metrics_df = ir_lib_metrics_df[ir_lib_metrics_df["Lib Type"] == lib_type]
+    ir_lib_metrics_df = ir_lib_metrics_df.set_index("Lib ID")
+
+    gex_lib_metrics_df = pd.read_csv(all_gex_lib_metrics_csv_path) 
+    gex_lib_metrics_df = gex_lib_metrics_df.set_index("Lib ID")
+
+    ir_to_gex = get_vdj_lib_to_gex_lib_mapping()[0 if lib_type == "BCR" else 1]
+
+    # define the csv headers
+    CSV_HEADER_LIB_ID: str = "Lib Id"
+    CSV_HEADER_ESTIMATED_CELLS_CELLRANGER: str = "Estimated # of Cells (cellranger)"
+    CSV_HEADER_MEAN_RPPC_CELLRANGER: str = "Mean Read Pairs per Cell (cellranger)"
+    CSV_HEADER_NUM_RP_CELLRANGER: str = "Number of Read Pairs (cellranger)"
+    CSV_HEADER_MEAN_URPPC_CELLRANGER: str = "Mean Used Read Pairs per Cell (cellranger)"
+    CSV_HEADER_GEX_LIB_ID: str = "Gex Lib Id"
+    CSV_HEADER_ESTIMATED_CELLS_IN_GEX_LIB_CELLRANGER: str = "Estimated # of Cells in Gex Lib (cellranger)"
+    CSV_HEADER_NUM_CELLS_POST_QC: str = "# of Cells Post QC"
+    CSV_HEADER_NUM_GEX_CELLS_POST_QC: str = "# of Cells Post QC in Gex Lib"
+    csv_fields = [
+        CSV_HEADER_LIB_ID,
+        CSV_HEADER_ESTIMATED_CELLS_CELLRANGER,
+        CSV_HEADER_MEAN_RPPC_CELLRANGER,
+        CSV_HEADER_NUM_RP_CELLRANGER,
+        CSV_HEADER_NUM_RP_CELLRANGER,
+        CSV_HEADER_MEAN_URPPC_CELLRANGER,
+        CSV_HEADER_GEX_LIB_ID,
+        CSV_HEADER_ESTIMATED_CELLS_IN_GEX_LIB_CELLRANGER,
+        CSV_HEADER_NUM_CELLS_POST_QC,
+        CSV_HEADER_NUM_GEX_CELLS_POST_QC,
+    ]
+
+    csv_rows = []
+    for lib in libs:
+        # it is expected that a few libs are not presented in our
+        # ir_lib_metrics_df, since they were sequenced for vdj
+        # recently and we are yet to extract their sequencing info
+        # just skip those for now. we'll deal with them separately
+        if lib not in ir_lib_metrics_df.index:
+            print("lib {} not found in ir_lib_metrics_df".format(lib))
+            row = {f: lib if f == CSV_HEADER_LIB_ID else "" for f in csv_fields}
+            csv_rows.append(row)
+            continue
+
+        gex_lib = ir_to_gex[lib]
+        row = {
+            CSV_HEADER_LIB_ID: lib,
+
+            CSV_HEADER_ESTIMATED_CELLS_CELLRANGER: ir_lib_metrics_df["Estimated Number of Cells"].loc[lib],
+            CSV_HEADER_MEAN_RPPC_CELLRANGER: ir_lib_metrics_df["Mean Read Pairs per Cell"].loc[lib],
+            CSV_HEADER_NUM_RP_CELLRANGER: ir_lib_metrics_df["Number of Read Pairs"].loc[lib],
+            CSV_HEADER_MEAN_URPPC_CELLRANGER: ir_lib_metrics_df["Mean Used Read Pairs per Cell"].loc[lib],
+
+            CSV_HEADER_GEX_LIB_ID: gex_lib,
+            CSV_HEADER_ESTIMATED_CELLS_IN_GEX_LIB_CELLRANGER: gex_lib_metrics_df["Estimated Number of Cells"].loc[gex_lib],
+        }
+
+        donor_id = ir_lib_metrics_df["Donor ID"].loc[lib]
+        def add_info_from_processed_lib_object(library_type, library_id):
+            # really hacky way to work around the fact that we don't have seq runs
+            # at this layer. Almost all donors have 001 as the seq run, but a few
+            # have 002 or 003 so try for those too
+            for seq_run in ["001", "002", "003"]:
+                file_name_partial = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
+                s3_processed_lib_path = "s3://immuneaging/processed_libraries/{}".format(file_name_partial)
+                version = get_latest_processed_lib_version(s3_access_file, s3_processed_lib_path)
+                file_name = "{}.processed.{}.h5ad".format(file_name_partial, version)
+                sync_cmd = 'aws s3 sync --no-progress {}/{}/ {} --exclude "*" --include {}'.format(
+                    s3_processed_lib_path, version, working_dir, file_name
+                )
+
+                print("sync_cmd: {}".format(sync_cmd))
+                print("aws response: {}\n".format(os.popen(sync_cmd).read()))
+                adata_file = os.path.join(working_dir, file_name)
+                if not os.path.isfile(adata_file):
+                    print("Failed to download file {} from S3 using seq_run: {}".format(file_name, seq_run))
+                else:
+                    break # don't need to try the other seq runs
+            
+            col_name = CSV_HEADER_NUM_CELLS_POST_QC if library_type != "GEX" else CSV_HEADER_NUM_GEX_CELLS_POST_QC
+            if not os.path.isfile(adata_file):
+                print("Failed to download file {} from S3.".format(file_name, seq_run))
+                row[col_name] = -1
+            else:
+                adata = anndata.read_h5ad(adata_file)
+                row[col_name] = adata.n_obs
+                os.remove(adata_file)
+
+        add_info_from_processed_lib_object(lib_type, lib)
+        add_info_from_processed_lib_object("GEX", gex_lib)
+
+        csv_rows.append(row)
+
+    csv_file = io.StringIO()
+    field_names = list(csv_rows[0].keys())
+    writer = csv.DictWriter(csv_file, fieldnames=field_names)
+    writer.writeheader()
+    writer.writerows(csv_rows)
+    print(csv_file.getvalue())
+    csv_file.close()
