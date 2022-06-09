@@ -35,6 +35,7 @@ configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
 sys.path.append(configs["code_path"])
 from utils import *
+from vdj_utils import *
 from logger import SimpleLogger
 
 output_destination = configs["output_destination"]
