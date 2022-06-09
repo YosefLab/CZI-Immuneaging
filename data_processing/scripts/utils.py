@@ -193,7 +193,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
         )
 
     with warnings.catch_warnings(record=True) as w:
-        # warnings.filterwarnings("error")
+        warnings.filterwarnings("error")
         output_fn = gdown.download(url, output_fn, quiet=quiet)
 
         if len(w) == 1:
