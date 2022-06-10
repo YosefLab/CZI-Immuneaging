@@ -241,7 +241,7 @@ if len(library_ids_gex)==0:
 logger.add_to_log("Concatenating all cells of sample {} from available GEX libraries...".format(sample_id))
 adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
-    adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))])
+    adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))], join="outer")
 
 def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Optional[AnnData]:
     assert lib_type in ["BCR", "TCR"]
