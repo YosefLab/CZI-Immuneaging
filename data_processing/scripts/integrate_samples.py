@@ -35,6 +35,7 @@ configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
 sys.path.append(configs["code_path"])
 from utils import *
+from vdj_utils import *
 from logger import SimpleLogger
 
 output_destination = configs["output_destination"]
@@ -195,7 +196,7 @@ for integration_mode in integration_modes:
     logger.add_to_log("Concatenating all cells from all samples...")
     adata = adata_dict[sample_ids[0]]
     if len(sample_ids) > 1:
-        adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer")
+        adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
     # Move the summary statistics of the genes (under .var) to .varm
     cols_to_varm = [j for j in adata.var.columns if "n_cells" in j] + \
     [j for j in adata.var.columns if "mean_counts" in j] + \
@@ -319,7 +320,7 @@ for integration_mode in integration_modes:
             n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
         # update the adata with the components of the dim reductions and umap coordinates
         adata.obsm.update(rna.obsm)
-        # save the identify of the most variable genes used
+        # save the identity of the most variable genes used
         adata.var["is_highly_variable_gene"] = adata.var.index.isin(rna.var.index)
     except Exception as err:
         logger.add_to_log("Execution failed with the following error: {}.\n{}".format(err, traceback.format_exc()), "critical")
@@ -333,7 +334,7 @@ for integration_mode in integration_modes:
         sys.exit()
     logger.add_to_log("Using CellTypist for annotations...")
     def annotate(adata, model_paths, model_urls, components_key, neighbors_key, n_neighbors, resolutions, model_name, \
-        dotplot_min_frac, data_dir, save_all_outputs = False):
+        dotplot_min_frac, save_all_outputs = False):
         adata_new = adata.copy()
         dotplot_paths = []
         def find_abundant_cell_types(labels, frac):
@@ -367,16 +368,16 @@ for integration_mode in integration_modes:
                         adata.obsm["celltypist_probability_matrix.{0}".format(celltypist_model_name)] = predictions.probability_matrix
                 # generate and save a dotplot only for the abundant cell types
                 logger.add_to_log("Generating a dotplot based on the CellTypist outputs...")
-                abundant_cell_types = find_abundant_cell_types(labels = predictions.predicted_labels["predicted_labels"], frac = celltypist_dotplot_min_frac)
+                abundant_cell_types = find_abundant_cell_types(labels = predictions.predicted_labels["predicted_labels"], frac = dotplot_min_frac)
                 dotplot_predictions = celltypist.annotate(adata_new[predictions.predicted_labels["predicted_labels"].isin(abundant_cell_types),:].copy() \
                     , model = model_path, majority_voting = True, over_clustering = 'leiden')
-                dotplot = celltypist.dotplot(dotplot_predictions, use_as_reference = 'leiden', use_as_prediction = 'predicted_labels', show = False, return_fig = False)
-                dotplot_filename = "celltypist_dotplot.{0}.{1}.leiden_resolution_{2}.min_frac_{3}".format(celltypist_model_name, model_name, str(resolution),str(celltypist_dotplot_min_frac))
+                celltypist.dotplot(dotplot_predictions, use_as_reference = 'leiden', use_as_prediction = 'predicted_labels', show = False, return_fig = False)
+                dotplot_filename = "celltypist_dotplot.{0}.{1}.leiden_resolution_{2}.min_frac_{3}".format(celltypist_model_name, model_name, str(resolution),str(dotplot_min_frac))
                 sc.pl._utils.savefig_or_show(dotplot_filename, show = False, save = True)
                 # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
                 dotplot_paths.append(os.path.join(os.getcwd(),"figures",dotplot_filename + ".pdf"))
         return(dotplot_paths)
-    ## remove celltypist predictions and related metadata that were added at the sample-level processing
+    # remove celltypist predictions and related metadata that were added at the sample-level processing
     celltypist_cols = [j for j in adata.obs.columns if "celltypist" in j]
     adata.obs = adata.obs.drop(labels = celltypist_cols, axis = "columns")
     leiden_resolutions = [float(j) for j in configs["leiden_resolutions"].split(",")]
@@ -392,13 +393,13 @@ for integration_mode in integration_modes:
     model_name = "scvi" if integration_mode != "unstim" else "scvi.unstim"
     dotplot_paths = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, components_key = "X_scvi_integrated", \
         neighbors_key = "neighbors_scvi", n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, model_name = model_name, \
-            dotplot_min_frac = celltypist_dotplot_min_frac, data_dir = data_dir, save_all_outputs = True)
+            dotplot_min_frac = celltypist_dotplot_min_frac, save_all_outputs = True)
     model_name = "totalvi" if integration_mode != "unstim" else "totalvi.unstim"
     if "X_totalVI_integrated" in adata.obsm:
         dotplot_paths_totalvi = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, \
             components_key = "X_totalVI_integrated", neighbors_key = "neighbors_totalvi", \
             n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, \
-                model_name = model_name, dotplot_min_frac = celltypist_dotplot_min_frac, data_dir = data_dir)
+                model_name = model_name, dotplot_min_frac = celltypist_dotplot_min_frac)
         dotplot_paths = dotplot_paths + dotplot_paths_totalvi
     dotplot_dirname = "dotplots" if integration_mode != "unstim" else "dotplots.unstim"
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
@@ -410,6 +411,9 @@ for integration_mode in integration_modes:
     zipf = zipfile.ZipFile(os.path.join(data_dir,dotplots_zipfile), 'w', zipfile.ZIP_DEFLATED)
     zipdir(dotplot_dir, zipf)
     zipf.close()
+    logger.add_to_log("Adding bcr_lib_id and tcr_lib_id to adata where applicable...")
+    gex_to_bcr, gex_to_tcr = get_gex_lib_to_vdj_lib_mapping()
+    add_vdj_lib_ids_to_adata(adata, gex_to_bcr, gex_to_tcr)
     logger.add_to_log("Saving h5ad files...")
     adata.obs["age"] = adata.obs["age"].astype(str)
     adata.obs["BMI"] = adata.obs["BMI"].astype(str)

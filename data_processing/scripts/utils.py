@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import time
 import glob
 import warnings
@@ -16,7 +17,6 @@ from typing import Type, List, NamedTuple
 import traceback
 from datetime import datetime
 import gc
-
 from logger import BaseLogger
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
@@ -119,6 +119,26 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 		is_new_version = True
 	return [is_new_version,"v"+str(version)]
 
+def get_latest_processed_lib_version(s3_access_file: str, s3_processed_lib_path: str):
+    set_access_keys(s3_access_file)
+    latest_version = -1
+    ls_cmd = 'aws s3 ls {} --recursive'.format(s3_processed_lib_path)
+    ls  = os.popen(ls_cmd).read()
+    if len(ls) != 0:
+        # search for patterns of /vX/. If there is a match, the regex group
+        # one is "X" (X can be any integer >0)
+        pattern = "/v(\d+)/"
+        filenames = ls.split("\n")
+        for filename in filenames:
+            m = re.search(pattern, filename)
+            if bool(m):
+                version = int(m[1])
+                if latest_version < version:
+                    latest_version = version
+    if latest_version == -1:
+        print(f"Could not find latest version for lib. s3_processed_lib_path: {s3_processed_lib_path}")
+    return "v" + str(latest_version)
+
 def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, variable_config_keys):
 	# This function checks if the configs file is using configs that were already used (while disregarding fields variable_config_keys) and are therefore documented on S3.
 	# If this is the first time these configs are used then it creates a new configs version and uploads the new configs to S3.
@@ -174,7 +194,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
 
     with warnings.catch_warnings(record=True) as w:
         warnings.filterwarnings("error")
-        output_fn = gdown.download(url, output_fn, quiet=quiet)
+        output_fn = gdown.download(url, output_fn, quiet=quiet, fuzzy=True)
 
         if len(w) == 1:
             msg = w[0]
@@ -372,7 +392,7 @@ def get_internal_protein_names(df):
         panel_sizes.append(protein_panel_i.shape[0])
         i += 1
     assert len(np.unique(panel_sizes)) == len(panel_sizes) # make sure we can identify the panel solely based on its size
-    assert np.sum(df.shape[1] == np.array(panel_sizes)) == 1 # make sure that twe can identify the protein panel used
+    assert np.sum(df.shape[1] == np.array(panel_sizes)) == 1 # make sure that we can identify the protein panel used
     for protein_panel in protein_panels.values():
         if df.shape[1] == protein_panel.shape[0]:
             return protein_panel["internal_name"]
@@ -390,291 +410,24 @@ def is_immune_type(df: pd.DataFrame) -> pd.DataFrame:
     known_immune_types = ["ILC", "T cells", "B cells", "monocytes", "Monocytes", "Macrophages", "macrophages", "NK cells", "T\(", "Mast cells", "Treg\(diff\)", "DC"]
     return df.isin(known_immune_types)
 
-def add_vdj_lib_ids_to_integrated_data(tissues_dir: str):
-    bcr_to_gex, tcr_to_gex = get_vdj_lib_to_gex_lib_mapping()
-
-    # make sure there is a 1:1 mapping betwen gex and bcr, and same for tcr
-    gex = list(bcr_to_gex.values())
-    if len(gex) != len(np.unique(gex)):
-        raise ValueError("There is not a 1:1 mapping between gex libs and bcr libs")
-    gex = list(tcr_to_gex.values())
-    if len(gex) != len(np.unique(gex)):
-        raise ValueError("There is not a 1:1 mapping between gex libs and tcr libs")
-
-    gex_to_bcr = {v:k for k,v in bcr_to_gex.items()}
-    gex_to_tcr = {v:k for k,v in tcr_to_gex.items()}
-
-    files = os.listdir(tissues_dir)
-    files = [f for f in files if f.endswith(".h5ad")]
-    for file in files:
-        file_path = os.path.join(tissues_dir, file)
-        adata = anndata.read_h5ad(file_path)
-        adata.obs["bcr_library_id"] = np.array([gex_to_bcr[l] if l in gex_to_bcr else "NA" for l in adata.obs["library_id"].values])
-        adata.obs["tcr_library_id"] = np.array([gex_to_tcr[l] if l in gex_to_tcr else "NA" for l in adata.obs["library_id"].values])
-        adata.write(file_path, compression="lzf")
-        del adata
-        gc.collect()
-
-def get_vdj_lib_to_gex_lib_mapping():
-    # Returns a mapping of all vdj libraries to their corresponding gex libraries
-    # in the form of two dictionaries, one for bcr libs and one for tcr libs
+def strip_integration_markers(barcode: str) -> str:
+    # for example from "AACTGTCAAGTCGT-1_CZI-IA11512684-1-2-10" returns "AACTGTCAAGTCGT-1_CZI-IA11512684"
+    parts = barcode.split("_")
+    cell_barcode = parts[0]
+    lib_id_plus_integration_markers = parts[1].split("-")
+    lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
+    return "_".join([cell_barcode, lib_id])
+   
+def get_all_libs(lib_type: str) -> set:
+    if lib_type not in ["GEX", "BCR", "TCR"]:
+        raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
+    all_libs = set()
     samples = read_immune_aging_sheet("Samples")
-
-    def add_lib(lib_type: str, all_libs: dict) -> None:
-        if lib_type not in ["BCR", "TCR"]:
-            raise ValueError("Unsupported lib_type: {}. Must be one of: BCR, TCR".format(lib_type))
-        column_name = "{} lib".format(lib_type)
-        libs_all = samples[column_name]
-        gex_libs_all = samples["GEX lib"]
-        for i in range(len(libs_all)):
-            if libs_all.iloc[i] is np.nan:
-                continue
-            libs = libs_all.iloc[i].split(",")
-            gex_libs = gex_libs_all.iloc[i].split(",")
-            for j in range(len(libs)):
-                lib = libs[j]
-                corresponding_gex_lib = gex_libs[j]
-                all_libs[lib] = corresponding_gex_lib
-
-    all_bcr_libs = {}
-    add_lib("BCR", all_bcr_libs)
-
-    all_tcr_libs = {}
-    add_lib("TCR", all_tcr_libs)
-
-    return all_bcr_libs, all_tcr_libs
-
-def report_vdj_vs_cell_label_metrics_all_libs(ir_lib_type: str, tissue_adatas: List[AnnData]):
-    if ir_lib_type not in ["BCR", "TCR"]:
-        raise ValueError("Unsupported lib_type: {}. Must be one of: BCR, TCR".format(ir_lib_type))
-    is_b = ir_lib_type == "BCR"
-    ir_libs = list(get_vdj_lib_to_gex_lib_mapping()[0 if is_b else 1].keys())
-    samples = read_immune_aging_sheet("Samples")
-    first = True
-    for lib in ir_libs:
-        # get some other metadata associated with this lib
-        col_name = "{} lib".format(ir_lib_type)
-        samples["Pick?"] = samples[col_name].fillna('').apply(lambda x: "Yes" if lib in x.split(",") else "No")
-        idx = samples["Pick?"] == "Yes"
-        sites = samples[idx]["Site"]
-        donors = samples[idx]["Donor ID"]
-        organs = set(samples[idx]["Organ"])
-        if len(set(sites)) > 1:
-            raise ValueError("More than one site was found for lib id {} of type {}".format(lib, ir_lib_type))
-        if len(set(donors)) > 1:
-            raise ValueError("More than one donor was found for lib id {} of type {}".format(lib, ir_lib_type))
-        site, donor = set(sites).pop(), set(donors).pop()
-        # get adatas
-        adatas = []
-        for tdata in tissue_adatas:
-            lib_id_col = "{}cr_library_id".format("b" if is_b else "t")
-            if lib_id_col not in tdata.obs.columns.values:
-                raise ValueError("Make sure all tissue adata objects have {}".format(lib_id_col))
-            adata_s = tdata[tdata.obs[lib_id_col] == lib, :].copy()
-            if len(adata_s) > 0:
-                adatas.append(adata_s)
-        if len(adatas) == 0:
-            print("No cells found for library {}".format(lib))
+    column_name = "{} lib".format(lib_type)
+    libs_all = samples[column_name]
+    for i in range(len(libs_all)):
+        if libs_all.iloc[i] is np.nan:
             continue
-        elif len(adatas) == 1:
-            adata = adatas[0]
-        else:
-            adata = adatas[0].concatenate(adatas[1:], join="outer")
-        report_vdj_vs_cell_label_metrics(adata, lib, ir_lib_type, site, donor, organs, get_csv=True, skip_header=not first, skip_debug_print=True)
-        if first:
-            first = False
-        del adata
-        del adatas
-        gc.collect()
-
-def report_vdj_vs_cell_label_metrics(
-    adata: AnnData,
-    ir_lib_id: str,
-    ir_lib_type: str,
-    site: str,
-    donor: str,
-    organs,
-    get_csv: bool = False,
-    skip_header: bool = False,
-    skip_debug_print: bool = False
-):
-    def debug_print(msg: str):
-        if not skip_debug_print:
-            print(msg)
-
-    ct_key_high = "celltypist_majority_voting.Immune_All_High.totalvi.leiden_resolution_2.0"
-    ct_key_low = "celltypist_majority_voting.Immune_All_Low.totalvi.leiden_resolution_2.0"
-
-    # Define known cell label categories
-    # high hierarchy aka low resolution
-    known_b_cells_high = ["B cells", "B-cell lineage", "Plasma cells"]
-    known_t_cells_high = ["Double-negative thymocytes", "Double-positive thymocytes", "ETP", "T cells"]
-    known_non_b_non_t_cells_high = [
-        "DC",
-        "DC precursor",
-        "Endothelial cells",
-        "Epithelial cells",
-        "Erythrocytes",
-        "Erythroid",
-        "Fibroblasts",
-        "Granulocytes",
-        "ILC",
-        "Monocyte precursor",
-        "Monocytes",
-        "HSC/MPP",
-        "Macrophages",
-        "Mast cells",
-        "Megakaryocyte precursor",
-        "Megakaryocytes/platelets",
-        "Early MK",
-        "MNP",
-        "Mono-mac",
-        "Myelocytes",
-        "pDC",
-        "pDC precursor",
-        "Promyelocyte"
-    ]
-    known_non_b_cells_high = known_t_cells_high + known_non_b_non_t_cells_high
-    known_non_t_cells_high = known_b_cells_high + known_non_b_non_t_cells_high
-    # low hierarchy aka high resolution
-    known_b_cells_low = ["Cycling B cells"]
-    known_t_cells_low = ["Cycling gamma-delta T cells", "Cycling T cells", "Early lymphoid/T lymphoid"]
-    known_non_b_non_t_cells_low = [
-        "Cycling DCs",
-        "Cycling monocytes",
-        "Cycling NK cells"
-    ]
-    known_non_b_cells_low = known_t_cells_low + known_non_b_non_t_cells_low
-    known_non_t_cells_low = known_b_cells_low + known_non_b_non_t_cells_low
-
-    def run_analysis(lib_id: str, receptor_type: str):
-        if receptor_type not in ["BCR", "TCR"]:
-            raise ValueError("Unknown receptor_type passed: {}".format(receptor_type))
-        cell_type = "b" if receptor_type == "BCR" else "t"
-        is_b = receptor_type == "BCR"
-        debug_print("Running for {} of type {}...".format(lib_id, receptor_type))
-
-        # Look at labels of cells that have receptors of the given type 
-        debug_print("Looking at labels of cells that have {} cell receptors...".format(cell_type))
-        ir_cells_by_receptor = adata[adata.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
-        num_ir_cells_by_receptor_1 = len(ir_cells_by_receptor)
-        debug_print("Examining high hierarchy cell type labels...")
-        ir_cells_by_type = ir_cells_by_receptor.obs[ct_key_high]
-        # known b/t cell types high
-        indices = ir_cells_by_type.isin(known_b_cells_high if is_b else known_t_cells_high)
-        num_known_ir_cells_high = indices.sum()
-        ir_cells_by_type = ir_cells_by_type[~indices]
-        # known non b/t cell types high
-        indices = ir_cells_by_type.isin(known_non_b_cells_high if is_b else known_non_t_cells_high)
-        num_known_non_ir_cells_high = indices.sum()
-        ir_cells_by_type = ir_cells_by_type[~indices]
-        if len(ir_cells_by_type) == 0:
-            debug_print("No cells left to examine in low hierarchy")
-            # continue anyway - all the steps below will just return 0 in this case
-        else:
-            debug_print("Examining low hierarchy cell type labels...")
-        # low hierarchy
-        ir_cells_by_type_low = ir_cells_by_receptor[ir_cells_by_type.index, :].obs[ct_key_low]
-        # known b/t cell types low
-        indices = ir_cells_by_type_low.isin(known_b_cells_low if is_b else known_t_cells_low)
-        num_known_ir_cells_low = indices.sum()
-        ir_cells_by_type_low = ir_cells_by_type_low[~indices]
-        # known non b/t cell types low
-        indices = ir_cells_by_type_low.isin(known_non_b_cells_low if is_b else known_non_t_cells_low)
-        num_known_non_ir_cells_low = indices.sum()
-        if num_ir_cells_by_receptor_1 == 0:
-            pct_known_ir_cells_high_n_low, pct_known_non_ir_cells_high_n_low = -1, -1
-        else:
-            pct_known_ir_cells_high_n_low = ((num_known_ir_cells_high + num_known_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
-            pct_known_non_ir_cells_high_n_low = ((num_known_non_ir_cells_high + num_known_non_ir_cells_low) * 100) / num_ir_cells_by_receptor_1
-
-        draw_separator_line()
-
-        # Look at presence of b/t cell receptors for cells that have b/t cell labels (will give us a hint about V(D)J library seq. saturation)
-        debug_print("Looking at presence of {}'s for cells that have {} cell labels ...".format(receptor_type, cell_type))
-        # known b/t cell types high and low
-        indices_high = adata.obs[ct_key_high].isin(known_b_cells_high if is_b else known_t_cells_high)
-        indices_low = adata.obs[ct_key_low].isin(known_b_cells_low if is_b else known_t_cells_low)
-        indices = indices_high | indices_low
-        ir_cells_by_type = adata[indices, :].copy()
-        num_ir_cells_by_type = len(ir_cells_by_type)
-        # look at b/t cell receptors
-        ir_cells_by_receptor = ir_cells_by_type[ir_cells_by_type.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
-        num_ir_cells_by_receptor_2 = len(ir_cells_by_receptor)
-        # num_ir_cells_by_type can be 0 e.g. in the case of SKIN
-        pct_ir_cells_by_receptor_2 = -1 if num_ir_cells_by_type == 0 else (num_ir_cells_by_receptor_2 * 100) / num_ir_cells_by_type
-        # look for any cell receptors of the "opposite" cell type
-        key = "TCR-has_ir" if is_b else "BCR-has_ir"
-        opposite_cells_by_receptor = ir_cells_by_type[ir_cells_by_type.obs[key] == "True", :].copy()
-        num_opposite_cells_by_receptor = len(opposite_cells_by_receptor)
-        pct_opposite_cells_by_receptor = -1 if num_ir_cells_by_type == 0 else (num_opposite_cells_by_receptor * 100) / num_ir_cells_by_type
-
-        # Look at presence of b/t cell receptors for cells that DO NOT have b/t cell labels  (will give us a hint about false positive receptors)
-        debug_print("Looking at presence of {}'s for cells that DO NOT have {} cell labels ...".format(receptor_type, cell_type))
-        # known non b/t cell types high and low
-        indices_high = adata.obs[ct_key_high].isin(known_b_cells_high if is_b else known_t_cells_high)
-        indices_low = adata.obs[ct_key_low].isin(known_b_cells_low if is_b else known_t_cells_low)
-        indices = indices_high | indices_low
-        non_ir_cells_by_type = adata[~indices, :].copy()
-        num_non_ir_cells_by_type = len(non_ir_cells_by_type)
-        # look at b/t cell receptors
-        ir_cells_by_receptor = non_ir_cells_by_type[non_ir_cells_by_type.obs["{}-has_ir".format(receptor_type)] == "True", :].copy()
-        num_ir_cells_by_receptor_3 = len(ir_cells_by_receptor)
-        pct_ir_cells_by_receptor_3 = -1 if num_non_ir_cells_by_type == 0 else (num_ir_cells_by_receptor_3 * 100) / num_non_ir_cells_by_type
-
-        draw_separator_line()
-
-        debug_print("Results:")
-        if not get_csv:
-            print("Of {} {} cells by receptor:".format(num_ir_cells_by_receptor_1, cell_type))
-            print("\t{} cells are of {} type in high hierarchy".format(num_known_ir_cells_high, cell_type))
-            print("\t{} cells are not of {} cell type in high hierarchy".format(num_known_non_ir_cells_high, cell_type))
-            print("\t{} cells are of {} type in low hierarchy".format(num_known_ir_cells_low, cell_type))
-            print("\t{} cells are not of {} cell type in low hierarchy".format(num_known_non_ir_cells_low, cell_type))
-
-            print("Of {} {} cells by type (high or low):".format(num_ir_cells_by_type, cell_type))
-            print("\t{} cells have {} cell receptors".format(num_ir_cells_by_receptor_2, cell_type))
-            print("\t{} cells have {} cell receptors".format(num_opposite_cells_by_receptor, "t" if is_b else "b"))
-
-            print("Of {} non {} cells by type (high or low):".format(num_non_ir_cells_by_type, cell_type))
-            print("\t{} cells have {} cell receptors".format(num_ir_cells_by_receptor_3, cell_type))
-
-            print("cell label keys used: {}, {}".format(ct_key_high, ct_key_low))
-        elif get_csv:
-            csv_rows = [
-                {
-                    "Lib Id": lib_id,
-                    "Site": site,
-                    "Donor ID": donor,
-                    "Organ(s)": ",".join([str(o) for o in organs]),
-
-                    "# {} cells by receptor".format(cell_type): num_ir_cells_by_receptor_1,
-                    "Out of {} cells by receptor: # {} cells (high)".format(cell_type, cell_type): num_known_ir_cells_high,
-                    "Out of {} cells by receptor: # {} cells (low)".format(cell_type, cell_type): num_known_ir_cells_low,
-                    "Out of {} cells by receptor: pct {} cells (high&low)".format(cell_type, cell_type): pct_known_ir_cells_high_n_low,
-
-                    "Out of {} cells by receptor: # non {} cells (high)".format(cell_type, cell_type): num_known_non_ir_cells_high,
-                    "Out of {} cells by receptor: # non {} cells (low)".format(cell_type, cell_type): num_known_non_ir_cells_low,
-                    "Out of {} cells by receptor: pct non {} cells (high&low)".format(cell_type, cell_type): pct_known_non_ir_cells_high_n_low,
-
-                    "# {} cells by type".format(cell_type): num_ir_cells_by_type,
-                    "Out of {} cells by type: # cells w/ {} cr".format(cell_type, cell_type): num_ir_cells_by_receptor_2,
-                    "Out of {} cells by type: pct cells w/ {} cr (aka seq. saturation)".format(cell_type, cell_type): pct_ir_cells_by_receptor_2,
-                    "Out of {} cells by type: # cells w/ {} cr".format(cell_type, "t" if is_b else "b"): num_opposite_cells_by_receptor,
-                    "Out of {} cells by type: pct cells w/ {} cr".format(cell_type, "t" if is_b else "b"): pct_opposite_cells_by_receptor,
-
-                    "# non {} cells by type".format(cell_type): num_non_ir_cells_by_type,
-                    "Out of non {} cells by type: # cells w/ {} cr".format(cell_type, cell_type): num_ir_cells_by_receptor_3,
-                    "Out of non {} cells by type: pct cells w/ {} cr (aka false positive)".format(cell_type, cell_type): pct_ir_cells_by_receptor_3,
-                }
-            ]
-            csv_file = io.StringIO()
-            field_names = list(csv_rows[0].keys())
-            writer = csv.DictWriter(csv_file, fieldnames=field_names)
-            if not skip_header:
-                writer.writeheader()
-            writer.writerows(csv_rows)
-            print(csv_file.getvalue())
-            csv_file.close()
-
-    run_analysis(ir_lib_id, ir_lib_type)
+        libs = libs_all.iloc[i].split(",")
+        all_libs.update(libs)
+    return all_libs
