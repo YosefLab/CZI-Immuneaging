@@ -234,7 +234,9 @@ if configs["library_type"] == "GEX":
         adata = adata[adata.X.sum(axis=-1) > configs["filter_cells_min_umi"]].copy()
         logger.add_to_log("Filtered out {} cells that have less than {} total umi's.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_umi"]))
     n_genes_before = adata.n_vars
-    sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"])
+    gene_subset, _ = sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"], inplace=False)
+    adata.obsm["removed_genes"] = adata[:,~gene_subset].copy().to_df()
+    adata = adata[:,gene_subset].copy()
     logger.add_to_log("Filtered out {} genes that are detected in less than {} cells.".format(n_genes_before-adata.n_vars, configs["filter_genes_min_cells"]))
 
     if adata.n_obs == 0:
