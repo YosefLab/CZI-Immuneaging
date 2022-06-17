@@ -124,18 +124,24 @@ samples = read_immune_aging_sheet("Samples")
 
 logger.add_to_log("Downloading h5ad files of processed samples from S3...")
 all_h5ad_files = []
-# for collecting the sample IDs of unstim samples for which we will generate an additional, separete integration:
+# for collecting the sample IDs of unstim and stim samples for which we will generate an additional, separate integration:
 unstim_sample_ids = [] 
 unstim_h5ad_files = []
+stim_sample_ids = [] 
+stim_h5ad_files = []
 for j in range(len(all_sample_ids)):
     sample_id = all_sample_ids[j]
     sample_version = processed_sample_configs_version[j]
     sample_h5ad_file = "{}_GEX.processed.{}.h5ad".format(sample_id,sample_version)
     sample_h5ad_path = os.path.join(data_dir,sample_h5ad_file)
     all_h5ad_files.append(sample_h5ad_path)
-    if samples["Stimulation"][samples["Sample_ID"] == sample_id].values[0] == "Nonstim":
+    stim_status = samples["Stimulation"][samples["Sample_ID"] == sample_id].values[0]
+    if stim_status == "Nonstim":
         unstim_sample_ids.append(sample_id)
         unstim_h5ad_files.append(sample_h5ad_path)
+    else:
+        stim_sample_ids.append(sample_id)
+        stim_h5ad_files.append(sample_h5ad_path)
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
         sample_id,sample_version,data_dir,sample_h5ad_file)
     logger.add_to_log("syncing {}...".format(sample_h5ad_file))
@@ -153,7 +159,7 @@ for j in range(len(all_sample_ids)):
 # run the following integration pipeline twice if there is a combination of stim and unstim samples - once using the stim and unstim samples and second using unstim only.
 integration_modes = ["stim_unsim"]
 if (len(unstim_sample_ids) > 0) and (len(all_sample_ids)-len(unstim_sample_ids)>0):
-    integration_modes.append("unstim")
+    integration_modes += ["unstim", "stim"]
 
 for integration_mode in integration_modes:
     logger.add_to_log("Running {} integration pipeline...".format(integration_mode))

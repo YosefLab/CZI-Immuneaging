@@ -259,17 +259,37 @@ if configs["library_type"] == "GEX":
         flush_logs_and_upload()
         sys.exit()
 
-    genes_to_exclude = np.zeros((adata.n_vars,), dtype=bool)
+    def extend_removed_genes_df(adata, exclude_df):
+        assert(np.all(adata.obsm["removed_genes"].index == exclude_df.index))
+        merged_df = pd.merge(
+            left=adata.obsm["removed_genes"],
+            right=exclude_df,
+            left_index=True,
+            right_index=True,
+            how="left",
+            validate="one_to_one",
+            suffixes=("_merged", "_merged")
+        )
+        assert(np.all(adata.obsm["removed_genes"].index == merged_df.index))
+        merged_df_no_dups = merged_df.transpose().drop_duplicates().transpose()
+        merged_df_no_dups.columns = merged_df_no_dups.columns.str.removesuffix("_merged")
+        adata.obsm["removed_genes"] = merged_df_no_dups
+
+    genes_to_exclude = set()
     if configs["genes_to_exclude"] != "None":
         for gene in configs["genes_to_exclude"].split(','):
-            genes_to_exclude = np.add(genes_to_exclude,adata.var_names.str.startswith(gene))
+            gene_names = set(adata.var_names[adata.var_names.str.startswith(gene)])
+            genes_to_exclude.update(gene_names)
     if configs["exclude_mito_genes"] == "True":
-        genes_to_exclude = np.add(genes_to_exclude,adata.var_names.str.startswith('MT-'))
-    genes_to_exclude_names = adata.var_names[np.where(genes_to_exclude)]
-    genes_to_keep = np.invert(genes_to_exclude)
+            gene_names = set(adata.var_names[adata.var_names.str.startswith('MT-')])
+            genes_to_exclude.update(gene_names)
     n_genes_before = adata.n_vars
-    adata = adata[:,genes_to_keep].copy()
-    logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude_names)))
+    genes_to_exclude_idx = adata.var_names.isin(genes_to_exclude)
+    # add the genes to exclude to the removed_genes obsm df
+    exclude_df = adata[:, genes_to_exclude_idx].copy().to_df()
+    extend_removed_genes_df(adata, exclude_df)
+    adata = adata[:, ~genes_to_exclude_idx].copy()
+    logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude)))
 
     if len(cell_hashing) > 1:
         logger.add_to_log("Demultiplexing is needed; using hashsolo...")
