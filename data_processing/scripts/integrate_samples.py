@@ -41,7 +41,7 @@ from logger import SimpleLogger
 output_destination = configs["output_destination"]
 s3_access_file = configs["s3_access_file"]
 
-# sort the sample ids lexicographically (and accordingly the versions) in order to avoid generating a new version if the exact same set of samples were previously used but in a differnet order
+# sort the sample ids lexicographically (and accordingly the versions) in order to avoid generating a new version if the exact same set of samples were previously used but in a different order
 order = np.argsort(configs["sample_ids"].split(","))
 all_sample_ids = np.array(configs["sample_ids"].split(","))[order]
 processed_sample_configs_version = np.array(configs["processed_sample_configs_version"].split(","))[order]
@@ -56,7 +56,7 @@ sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hin
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(s3_access_file, return_dict = True)
-assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sanbox mode; please set sandbox_mode to True"
+assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sandbox mode; please set sandbox_mode to True"
 set_access_keys(s3_access_file)
 
 # create a new directory for the data and outputs
@@ -80,6 +80,9 @@ output_h5ad_model_file = "{}.{}.model_data.h5ad".format(configs["output_prefix"]
 
 output_h5ad_file_unstim = "{}.unstim.{}.h5ad".format(configs["output_prefix"], version)
 output_h5ad_model_file_unstim = "{}.unstim.{}.model_data.h5ad".format(configs["output_prefix"], version)
+
+output_h5ad_file_stim = "{}.stim.{}.h5ad".format(configs["output_prefix"], version)
+output_h5ad_model_file_stim = "{}.stim.{}.model_data.h5ad".format(configs["output_prefix"], version)
 
 logger = SimpleLogger(filename = logger_file_path)
 logger.add_to_log("Running integrate_samples.py...")
@@ -156,16 +159,34 @@ for j in range(len(all_sample_ids)):
 ###### SAMPLE INTEGRATION BEGINS HERE ######
 ############################################
 
-# run the following integration pipeline twice if there is a combination of stim and unstim samples - once using the stim and unstim samples and second using unstim only.
-integration_modes = ["stim_unsim"]
+# run the following integration pipeline three times if there is a combination of stim and unstim samples - once using the stim and unstim samples, once using unstim only, once using stim only
+integration_modes = ["stim_unstim"]
 if (len(unstim_sample_ids) > 0) and (len(all_sample_ids)-len(unstim_sample_ids)>0):
     integration_modes += ["unstim", "stim"]
 
 for integration_mode in integration_modes:
     logger.add_to_log("Running {} integration pipeline...".format(integration_mode))
-    sample_ids = all_sample_ids if integration_mode == "stim_unsim" else unstim_sample_ids
-    h5ad_files = all_h5ad_files if integration_mode == "stim_unsim" else unstim_h5ad_files
-    prefix = configs["output_prefix"] + ".unstim" if integration_mode == "unstim" else configs["output_prefix"]
+    if integration_mode == "stim_unstim":
+        sample_ids = all_sample_ids
+        h5ad_files = all_h5ad_files
+        prefix = configs["output_prefix"]
+        scvi_model_name = "scvi"
+        totalvi_model_name = "totalvi"
+        dotplot_dirname = "dotplots"
+    elif integration_mode == "unstim":
+        sample_ids = unstim_sample_ids
+        h5ad_files = unstim_h5ad_files
+        prefix = configs["output_prefix"] + ".unstim"
+        scvi_model_name = "scvi.unstim"
+        totalvi_model_name = "totalvi.unstim"
+        dotplot_dirname = "dotplots.unstim"
+    else:
+        sample_ids = stim_sample_ids
+        h5ad_files = stim_h5ad_files
+        prefix = configs["output_prefix"] + ".stim"
+        scvi_model_name = "scvi.stim"
+        totalvi_model_name = "totalvi.stim"
+        dotplot_dirname = "dotplots.stim"
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
     adata_dict = {}
@@ -259,7 +280,7 @@ for integration_mode in integration_modes:
         logger.add_to_log("Removing proteins: {} ".format(", ".join(cols_remove.values)))
     extend_removed_features_df(adata, "removed_proteins", adata.obsm["protein_expression"][cols_remove])
     adata.obsm["protein_expression"] = adata.obsm["protein_expression"][cols_keep]
-    # summarize
+    # summarize protein qc
     logger.add_to_log("Protein QC summary: a total of {} cells ({}%) and {} proteins ({}%) were filtered out owing to extreme values.".format(
         n_cells_before-adata.n_obs, round(100*(n_cells_before-adata.n_obs)/n_cells_before,2),
         n_proteins_before-adata.obsm["protein_expression"].shape[1], round(100*(n_proteins_before-adata.obsm["protein_expression"].shape[1])/n_proteins_before,2)))
@@ -405,18 +426,15 @@ for integration_mode in integration_modes:
         celltypist_model_path = os.path.join(data_dir, celltypist_model_url.split("/")[-1])
         urllib.request.urlretrieve(celltypist_model_url, celltypist_model_path)
         celltypist_model_paths.append(celltypist_model_path)
-    model_name = "scvi" if integration_mode != "unstim" else "scvi.unstim"
     dotplot_paths = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, components_key = "X_scvi_integrated", \
-        neighbors_key = "neighbors_scvi", n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, model_name = model_name, \
+        neighbors_key = "neighbors_scvi", n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, model_name = scvi_model_name, \
             dotplot_min_frac = celltypist_dotplot_min_frac, save_all_outputs = True)
-    model_name = "totalvi" if integration_mode != "unstim" else "totalvi.unstim"
     if "X_totalVI_integrated" in adata.obsm:
         dotplot_paths_totalvi = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, \
             components_key = "X_totalVI_integrated", neighbors_key = "neighbors_totalvi", \
             n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, \
-                model_name = model_name, dotplot_min_frac = celltypist_dotplot_min_frac)
+                model_name = totalvi_model_name, dotplot_min_frac = celltypist_dotplot_min_frac)
         dotplot_paths = dotplot_paths + dotplot_paths_totalvi
-    dotplot_dirname = "dotplots" if integration_mode != "unstim" else "dotplots.unstim"
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))
     os.system("mkdir {}".format(dotplot_dir))
