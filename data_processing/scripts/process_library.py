@@ -235,7 +235,7 @@ if configs["library_type"] == "GEX":
         logger.add_to_log("Filtered out {} cells that have less than {} total umi's.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_umi"]))
     n_genes_before = adata.n_vars
     gene_subset, _ = sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"], inplace=False)
-    adata.obsm["removed_genes"] = adata[:,~gene_subset].copy().to_df()
+    extend_removed_features_df(adata, "removed_genes", adata[:,~gene_subset].copy().to_df())
     adata = adata[:,gene_subset].copy()
     logger.add_to_log("Filtered out {} genes that are detected in less than {} cells.".format(n_genes_before-adata.n_vars, configs["filter_genes_min_cells"]))
 
@@ -259,22 +259,6 @@ if configs["library_type"] == "GEX":
         flush_logs_and_upload()
         sys.exit()
 
-    def extend_removed_genes_df(adata, exclude_df):
-        assert(np.all(adata.obsm["removed_genes"].index == exclude_df.index))
-        merged_df = pd.merge(
-            left=adata.obsm["removed_genes"],
-            right=exclude_df,
-            left_index=True,
-            right_index=True,
-            how="left",
-            validate="one_to_one",
-            suffixes=("_merged", "_merged")
-        )
-        assert(np.all(adata.obsm["removed_genes"].index == merged_df.index))
-        merged_df_no_dups = merged_df.transpose().drop_duplicates().transpose()
-        merged_df_no_dups.columns = merged_df_no_dups.columns.str.removesuffix("_merged")
-        adata.obsm["removed_genes"] = merged_df_no_dups
-
     genes_to_exclude = set()
     if configs["genes_to_exclude"] != "None":
         for gene in configs["genes_to_exclude"].split(','):
@@ -287,7 +271,7 @@ if configs["library_type"] == "GEX":
     genes_to_exclude_idx = adata.var_names.isin(genes_to_exclude)
     # add the genes to exclude to the removed_genes obsm df
     exclude_df = adata[:, genes_to_exclude_idx].copy().to_df()
-    extend_removed_genes_df(adata, exclude_df)
+    extend_removed_features_df(adata, "removed_genes", exclude_df)
     adata = adata[:, ~genes_to_exclude_idx].copy()
     logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude)))
 

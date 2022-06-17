@@ -188,8 +188,8 @@ for integration_mode in integration_modes:
             proteins_ctrl.update(adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].columns)
     # each sample should include all proteins; missing values are set as NaN
     if len(proteins) > 0 or len(proteins_ctrl) > 0:
-        proteins = [i for i in proteins]
-        proteins_ctrl = [i for i in proteins_ctrl]
+        proteins = list(proteins)
+        proteins_ctrl = list(proteins_ctrl)
         for j in range(len(sample_ids)):
             df = pd.DataFrame(columns = proteins, index = adata_dict[sample_ids[j]].obs.index)
             if "protein_expression" in adata_dict[sample_ids[j]].obsm:
@@ -224,7 +224,7 @@ for integration_mode in integration_modes:
         # a function for excluding cells or proteins based on extreme values (does not excludes cells that have only missing values)
         def exclude_outliers(x, num_sds):
             # a value is considered as an outlier if it is more extreme that the mean plus (or minus) num_sds times the standard deviation
-            assert np.sum(normalized_cell_lib_size<0) == 0
+            assert np.sum(x<0) == 0
             lower_bound = np.maximum(0, np.nanmean(x)-np.nanstd(x)*num_sds)
             upper_bound = np.nanmean(x)+np.nanstd(x)*num_sds
             is_outlier = np.logical_and(x >= lower_bound, x <= upper_bound)
@@ -244,17 +244,26 @@ for integration_mode in integration_modes:
         adata.uns["protein_qc"]["normalized_protein_lib_size_upper_bound"] = upper_bound
         logger.add_to_log("Removing {} proteins with extreme total number of reads across cells (normalized levels - by the number of cells with no missing values for the protein - more extreme than {} standard deviations)...".format(
             np.sum(~keep), protein_levels_max_sds))
-        adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[keep.values]]
+        cols_keep = adata.obsm["protein_expression"].columns[keep.values]
+        cols_remove = adata.obsm["protein_expression"].columns[~keep.values]
+        logger.add_to_log("Removing proteins: {} ".format(", ".join(cols_remove.values)))
+        extend_removed_features_df(adata, "removed_proteins", adata.obsm["protein_expression"][cols_remove])
+        adata.obsm["protein_expression"] = adata.obsm["protein_expression"][cols_keep]
     # remove proteins that were left with zero reads
     non_zero_proteins = adata.obsm["protein_expression"].sum() > 0
     num_zero_proteins = np.sum(~non_zero_proteins)
-    if num_zero_proteins:
+    cols_keep = adata.obsm["protein_expression"].columns[non_zero_proteins.values]
+    cols_remove = adata.obsm["protein_expression"].columns[~non_zero_proteins.values]
+    if num_zero_proteins > 0:
         logger.add_to_log("Removing {} proteins with zero reads across all cells...".format(num_zero_proteins))
-    adata.obsm["protein_expression"] = adata.obsm["protein_expression"][adata.obsm["protein_expression"].columns[non_zero_proteins.values]]
+        logger.add_to_log("Removing proteins: {} ".format(", ".join(cols_remove.values)))
+    extend_removed_features_df(adata, "removed_proteins", adata.obsm["protein_expression"][cols_remove])
+    adata.obsm["protein_expression"] = adata.obsm["protein_expression"][cols_keep]
     # summarize
     logger.add_to_log("Protein QC summary: a total of {} cells ({}%) and {} proteins ({}%) were filtered out owing to extreme values.".format(
         n_cells_before-adata.n_obs, round(100*(n_cells_before-adata.n_obs)/n_cells_before,2),
         n_proteins_before-adata.obsm["protein_expression"].shape[1], round(100*(n_proteins_before-adata.obsm["protein_expression"].shape[1])/n_proteins_before,2)))
+    # end protein QC
     if "is_solo_singlet" in adata.obs:
         del adata.obs["is_solo_singlet"]
     if "Classification" in adata.obs:
