@@ -36,3 +36,4 @@ The configuration file is formatted as json with the following fields:
 * `"vdj_genes"` - URL of a csv file on AWS that contains a list of VDJ genes to exclude before applying dimensionality reduction (SCVI, TOTALVI, and PCA)
 * `"python_env_version"` - The environment name to be used when running process_sample.py
 * `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
+* `"pipeline_version"` - Version used to run the pipeline. We bump this for every iteration of our data processing pipeline run so that config files are stamped with the new version.

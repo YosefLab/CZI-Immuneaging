@@ -51,7 +51,8 @@ integration_configs = {
         "leiden_resolutions": leiden_resolutions,
         "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
         "python_env_version": python_env,
-        "r_setup_version": "immune_aging.R_setup.v2"
+        "r_setup_version": "immune_aging.R_setup.v2",
+        "pipeline_version": "v3",
     }
 
 set_access_keys(s3_access_file)

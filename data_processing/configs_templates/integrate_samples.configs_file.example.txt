@@ -23,4 +23,5 @@
 "leiden_resolutions": "1.0,2.0,3.0,5.0,7.0,10.0,15.0",
 "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
 "python_env_version": "immune_aging.py_env.v4",
-"r_setup_version": "immune_aging.R_setup.v2"}
+"r_setup_version": "immune_aging.R_setup.v2",
+"pipeline_version": "v3"}

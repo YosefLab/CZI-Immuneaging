@@ -113,7 +113,8 @@ if config_type in ["library", "all"]:
             "hashsolo_number_of_noise_barcodes": 2,
             "aligned_library_configs_version": aligned_lib_version,
             "python_env_version": "immune_aging.py_env.v4",
-            "r_setup_version": "immune_aging.R_setup.v2"
+            "r_setup_version": "immune_aging.R_setup.v2",
+            "pipeline_version": "v3",
         }
         filename = os.path.join(output_destination,
             "process_library.{}.{}.{}.{}.configs.txt".format(donor_id,seq_run,lib_id, lib_type))
@@ -177,6 +178,7 @@ if config_type in ["sample", "all"]:
             "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
             "python_env_version": "immune_aging.py_env.v4",
             "r_setup_version": "immune_aging.R_setup.v2",
+            "pipeline_version": "v3",
         }
         filename = os.path.join(output_destination,"process_sample.configs.{}.txt".format(sample_id))
         with open(filename, 'w') as f:
