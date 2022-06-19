@@ -431,3 +431,18 @@ def get_all_libs(lib_type: str) -> set:
         libs = libs_all.iloc[i].split(",")
         all_libs.update(libs)
     return all_libs
+
+def extend_removed_features_df(adata, obsm_key, exclude_df):
+    if obsm_key not in adata.obsm:
+        adata.obsm[obsm_key] = exclude_df.copy()
+    else:
+        assert(np.all(adata.obsm[obsm_key].index == exclude_df.index))
+        adata.obsm[obsm_key] = pd.merge(
+            left=adata.obsm[obsm_key],
+            right=exclude_df,
+            left_index=True,
+            right_index=True,
+            how="left", # this should not matter since we are asserting that the left and right df's have equal index
+            validate="one_to_one",
+            suffixes=("_left_merged", "_right_merged")
+        )

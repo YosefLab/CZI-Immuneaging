@@ -33,7 +33,7 @@ sandbox_mode = configs["sandbox_mode"] == "True"
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(configs["s3_access_file"], return_dict = True)
-assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sanbox mode; please set sandbox_mode to True"
+assert sandbox_mode or hashlib.md5(bytes(s3_dict["AWS_SECRET_ACCESS_KEY"], 'utf-8')).hexdigest() in AUTHORIZED_EXECUTERS, "You are not authorized to run this script in a non sandbox mode; please set sandbox_mode to True"
 set_access_keys(configs["s3_access_file"])
 
 # create a new directory for the data and outputs
@@ -234,7 +234,9 @@ if configs["library_type"] == "GEX":
         adata = adata[adata.X.sum(axis=-1) > configs["filter_cells_min_umi"]].copy()
         logger.add_to_log("Filtered out {} cells that have less than {} total umi's.".format(n_cells_before-adata.n_obs, configs["filter_cells_min_umi"]))
     n_genes_before = adata.n_vars
-    sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"])
+    gene_subset, _ = sc.pp.filter_genes(adata, min_cells=configs["filter_genes_min_cells"], inplace=False)
+    extend_removed_features_df(adata, "removed_genes", adata[:,~gene_subset].copy().to_df())
+    adata = adata[:,gene_subset].copy()
     logger.add_to_log("Filtered out {} genes that are detected in less than {} cells.".format(n_genes_before-adata.n_vars, configs["filter_genes_min_cells"]))
 
     if adata.n_obs == 0:
@@ -257,17 +259,21 @@ if configs["library_type"] == "GEX":
         flush_logs_and_upload()
         sys.exit()
 
-    genes_to_exclude = np.zeros((adata.n_vars,), dtype=bool)
+    genes_to_exclude = set()
     if configs["genes_to_exclude"] != "None":
         for gene in configs["genes_to_exclude"].split(','):
-            genes_to_exclude = np.add(genes_to_exclude,adata.var_names.str.startswith(gene))
+            gene_names = set(adata.var_names[adata.var_names.str.startswith(gene)])
+            genes_to_exclude.update(gene_names)
     if configs["exclude_mito_genes"] == "True":
-        genes_to_exclude = np.add(genes_to_exclude,adata.var_names.str.startswith('MT-'))
-    genes_to_exclude_names = adata.var_names[np.where(genes_to_exclude)]
-    genes_to_keep = np.invert(genes_to_exclude)
+            gene_names = set(adata.var_names[adata.var_names.str.startswith('MT-')])
+            genes_to_exclude.update(gene_names)
     n_genes_before = adata.n_vars
-    adata = adata[:,genes_to_keep].copy()
-    logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude_names)))
+    genes_to_exclude_idx = adata.var_names.isin(genes_to_exclude)
+    # add the genes to exclude to the removed_genes obsm df
+    exclude_df = adata[:, genes_to_exclude_idx].copy().to_df()
+    extend_removed_features_df(adata, "removed_genes", exclude_df)
+    adata = adata[:, ~genes_to_exclude_idx].copy()
+    logger.add_to_log("Filtered out the following {} genes: {}".format(n_genes_before-adata.n_vars, ", ".join(genes_to_exclude)))
 
     if len(cell_hashing) > 1:
         logger.add_to_log("Demultiplexing is needed; using hashsolo...")
