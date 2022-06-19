@@ -25,4 +25,4 @@ The configuration file is formatted as json with the following fields:
 * `"aligned_library_configs_version"` - The alignment version of the library to process - this version number is determined by the configs version that was used to align the library; the latest alignment version of each aligned library can be found on the S3 bucket under `s3://immuneaging/aligned_libraries`
 * `"python_env_version"` - The environment name to be used when running process_library.py
 * `"r_setup_version"` - Version of the setup file for additional R setups on top of those defined in `python_env_version`
-
+* `"pipeline_version"` - Version used to run the pipeline. We bump this for every iteration of our data processing pipeline run so that config files are stamped with the new version.
