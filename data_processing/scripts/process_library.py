@@ -186,9 +186,7 @@ if configs["library_type"] == "GEX":
             # also add the "Exclude from Aging analysis" as an obs column to adata
             exclude_key = "Exclude from Aging analysis"
             inter = np.intersect1d(adata.obs_names, non_immune_cells_df["cell_barcode"])
-            adata_t = adata[inter, :].copy()
-            adata_t.obs[exclude_key] = non_immune_cells_df.loc[inter][exclude_key]
-            adata.obs[exclude_key] = adata_t.obs[exclude_key]
+            adata.obs[exclude_key] = non_immune_cells_df.loc[inter][exclude_key]
         else:
             exclude_cells_barcodes = non_immune_cells_df["cell_barcode"]
         n_obs_before = adata.n_obs
@@ -358,7 +356,7 @@ else:
     raise ValueError("Unrecognized lib type: {}".format(configs["library_type"]))
 
 logger.add_to_log("Saving h5ad file...")
-adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")
