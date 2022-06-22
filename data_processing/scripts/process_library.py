@@ -186,7 +186,7 @@ if configs["library_type"] == "GEX":
             # also add the "Exclude from Aging analysis" as an obs column to adata
             exclude_key = "Exclude from Aging analysis"
             inter = np.intersect1d(adata.obs_names, non_immune_cells_df["cell_barcode"])
-            adata.obs[exclude_key] = non_immune_cells_df.loc[inter][exclude_key]
+            adata.obs[exclude_key] = non_immune_cells_df.set_index("cell_barcode").loc[inter][exclude_key]
         else:
             exclude_cells_barcodes = non_immune_cells_df["cell_barcode"]
         n_obs_before = adata.n_obs
