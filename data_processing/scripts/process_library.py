@@ -204,7 +204,7 @@ if configs["library_type"] == "GEX":
     # move protein/hto data out of adata.X into adata.obsm/obs
     hto_tag = configs["donor"]+"-"
     cell_hashing = [i for i in adata.var_names[np.where(adata.var_names.str.startswith(hto_tag))]]
-    if len(cell_hashing) > 1:
+    if len(cell_hashing) >= 1:
         logger.add_to_log("Moving hto data out of adata.X into adata.obs...")
         adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
         adata = adata[:, ~adata.var_names.str.startswith(hto_tag)].copy()
