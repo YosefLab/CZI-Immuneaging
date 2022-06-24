@@ -161,7 +161,7 @@ if configs["library_type"] == "GEX":
     logger.add_to_log("Dropping out if this is a known poor quality library...")
     logger.add_to_log("Downloading list of poor_quality libraries from AWS...")
     poor_quality_libs_df = read_csv_from_aws("poor_quality_libs.csv")
-    if f"{configs["donor"]}_{configs["library_id"]}" in poor_quality_libs_df.columns:
+    if configs["donor"] + "_" + configs["library_id"] in poor_quality_libs_df.columns:
         logger.add_to_log("This is a known poor quality library: {}. Exiting...".format(configs["library_id"]), level="warning")
         flush_logs_and_upload()
         sys.exit()
