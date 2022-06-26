@@ -393,7 +393,7 @@ if not no_cells:
     try:
         prot_exp_obsm_key = "protein_expression"
         prot_exp_ctrl_obsm_key = "protein_expression_Ctrl"
-        is_cite = prot_exp_obsm_key in adata.obsm.columns or prot_exp_ctrl_obsm_key in adata.obsm.columns
+        is_cite = prot_exp_obsm_key in adata.obsm or prot_exp_ctrl_obsm_key in adata.obsm
         if is_cite:
             logger.add_to_log("Detected Antibody Capture features.")
             protein_df = adata.obsm[prot_exp_obsm_key].merge(adata.obsm[prot_exp_ctrl_obsm_key], left_index=True, right_index=True, validate="one_to_one")
