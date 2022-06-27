@@ -446,3 +446,47 @@ def extend_removed_features_df(adata, obsm_key, exclude_df):
             validate="one_to_one",
             suffixes=("_left_merged", "_right_merged")
         )
+
+# Utility function to rename TLN folders and files to LLN on S3
+# as a consequence of renaming these samples in our IA Sample spreadsheet
+def handle_sample_tln_to_lln_renaming(donor_id: str, delete_lln: bool = False):
+    path_prefix = "s3://immuneaging/processed_samples/"
+    def get_tln_lln_folders():
+        ls_cmd = 'aws s3 ls {}'.format(path_prefix)
+        files = os.popen(ls_cmd).read()
+        lln_folders, tln_folders = [], []
+        for f in files.rstrip().split('\n'):
+            folder_name = f.split('PRE ')[-1]
+            if folder_name.startswith(donor_id + "-LLN"):
+                lln_folders.append(folder_name)
+            elif folder_name.startswith(donor_id + "-TLN"):
+                tln_folders.append(folder_name)
+        return lln_folders, tln_folders
+    lln_folders, tln_folders = get_tln_lln_folders()
+    if len(lln_folders) > 0:
+        if delete_lln:
+            for lf in lln_folders:
+                ls_cmd = 'aws s3 rm --recursive {}'.format(path_prefix+lf)
+                os.popen(ls_cmd).read()
+        else:
+            print("LLN folder(s) present: {}".format(", ".join(lln_folders)))
+            return
+    if len(tln_folders) > 0:
+        for tf in tln_folders:
+            dest = tf.replace("TLN", "LLN")
+            ls_cmd = 'aws s3 mv --recursive {} {}'.format(path_prefix+tf, path_prefix+dest)
+            os.popen(ls_cmd).read()
+    # rename TLN to LLN in file names
+    lln_folders, _ = get_tln_lln_folders()
+    for lf in lln_folders:
+        ls_cmd = 'aws s3 ls --recursive {}'.format(path_prefix+lf)
+        files = os.popen(ls_cmd).read()
+        for f in files.rstrip().split('\n'):
+            dir_name = f.split(' ')[-1]
+            file_name = dir_name.split('/')[-1]
+            dir_name_no_file_name = dir_name.removesuffix(file_name)
+            new_file_name = file_name.replace("TLN", "LLN")
+            ia_path = "s3://immuneaging/"
+            ls_cmd = 'aws s3 mv {} {}'.format(ia_path+dir_name, ia_path+dir_name_no_file_name+new_file_name)
+            print(ls_cmd)
+            os.popen(ls_cmd).read()

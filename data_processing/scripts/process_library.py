@@ -208,6 +208,9 @@ if configs["library_type"] == "GEX":
         logger.add_to_log("Moving hto data out of adata.X into adata.obs...")
         adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
         adata = adata[:, ~adata.var_names.str.startswith(hto_tag)].copy()
+        # rename TLN to LLN
+        new_col_names = {c: c.replace("TLN", "LLN") for c in cell_hashing}
+        adata.obs.rename(columns=new_col_names, errors='raise', inplace=True)
 
     if "Antibody Capture" in np.unique(adata.var.feature_types):
         logger.add_to_log("Moving protein data out of adata.X into adata.obsm...")
