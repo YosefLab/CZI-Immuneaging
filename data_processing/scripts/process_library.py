@@ -202,6 +202,30 @@ if configs["library_type"] == "GEX":
         new_cell_hashing = {c: c.replace("TLN", "LLN") for c in cell_hashing}
         adata.obs.rename(columns=new_cell_hashing, errors='raise', inplace=True)
         cell_hashing = list(new_cell_hashing.values())
+        # The 694B donor had some of its libraries aligned with HTO tags that end in -1
+        # and some with HTO tags that end in -X where X corresponds to each unique sample
+        # ID (in short, this was caused by a failure that was fixed mid-way through lib
+        # alignment and we didn't want to re-align all the libraries after the fix)
+        # We patch that here by renaming the HTO tags to the new ones that match the IA
+        # sample spreadsheet.
+        old_name_to_new_name = {
+            "694B-BLO-1": "694B-BLO-203",
+            "694B-BMA-1": "694B-BMA-204",
+            "694B-SPL-1": "694B-SPL-205",
+            "694B-MLN-1": "694B-MLN-206",
+            "694B-JEJEPI-1": "694B-JEJEPI-207",
+            "694B-JEJLP-1": "694B-JEJLP-208",
+            "694B-SKN-1": "694B-SKN-209",
+            "694B-BLO-1": "694B-BLO-210",
+            "694B-BMA-1": "694B-BMA-211",
+            "694B-SPL-1": "694B-SPL-212",
+            "694B-JEJEPI-1": "694B-JEJEPI-213",
+            "694B-JEJLP-1": "694B-JEJLP-214",
+            "694B-SKN-1": "694B-SKN-215",
+        }
+        new_cell_hashing = {c: old_name_to_new_name[c] for c in cell_hashing if c in old_name_to_new_name.keys()}
+        adata.obs.rename(columns=new_cell_hashing, errors='raise', inplace=True)
+        cell_hashing = list(new_cell_hashing.values())
 
     if "Antibody Capture" in np.unique(adata.var.feature_types):
         logger.add_to_log("Moving protein data out of adata.X into adata.obsm...")
