@@ -490,3 +490,19 @@ def handle_sample_tln_to_lln_renaming(donor_id: str, delete_lln: bool = False):
             ls_cmd = 'aws s3 mv {} {}'.format(ia_path+dir_name, ia_path+dir_name_no_file_name+new_file_name)
             print(ls_cmd)
             os.popen(ls_cmd).read()
+
+def read_csv_from_aws(
+        data_dir: str,
+        aws_dir: str,
+        aws_filename: str,
+        logger: Type[BaseLogger],
+    ):
+    sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(aws_dir, data_dir, aws_filename)
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+    file_path = os.path.join(data_dir, aws_filename)
+    if not os.path.isfile(file_path):
+        msg = "Failed to download file {} from S3.".format(aws_filename)
+        logger.add_to_log(msg, level="error")
+        raise ValueError(msg)
+    return pd.read_csv(file_path)

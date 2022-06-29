@@ -147,20 +147,10 @@ if configs["library_type"] == "GEX":
 
     store_lib_alignment_metrics(adata, data_dir)
     
-    def read_csv_from_aws(filename: str):
-        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/cell_filtering/ {} --exclude "*" --include {}'.format(data_dir, filename)
-        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-        file_path = os.path.join(data_dir, filename)
-        if not os.path.isfile(file_path):
-            msg = "Failed to download file {} from S3.".format(filename)
-            logger.add_to_log(msg, level="error")
-            raise ValueError(msg)
-        return pd.read_csv(file_path)
-    
     logger.add_to_log("Dropping out if this is a known poor quality library...")
     logger.add_to_log("Downloading list of poor_quality libraries from AWS...")
-    poor_quality_libs_df = read_csv_from_aws("poor_quality_libs.csv")
+    cell_filtering_aws_dir = "s3://immuneaging/cell_filtering/"
+    poor_quality_libs_df = read_csv_from_aws(data_dir, cell_filtering_aws_dir, "poor_quality_libs.csv", logger)
     if configs["donor"] + "_" + configs["library_id"] in poor_quality_libs_df.columns:
         logger.add_to_log("This is a known poor quality library: {}. Exiting...".format(configs["library_id"]), level="warning")
         flush_logs_and_upload()
@@ -177,7 +167,7 @@ if configs["library_type"] == "GEX":
     tissues = ["BAL", "BLO", "ILN", "JEJEPI", "JEJLP", "LIV", "MLN", "SKN", "TLN"]
     for tissue in tissues:
         logger.add_to_log("Downloading list of non-immune cells for tissue {}...".format(tissue))
-        non_immune_cells_df = read_csv_from_aws("{}_blacklist.csv".format(tissue))
+        non_immune_cells_df = read_csv_from_aws(data_dir, cell_filtering_aws_dir, "{}_blacklist.csv".format(tissue), logger)
         # the blacklist for some tissues includes whether the cell barcode should be discarded entirely
         # or whether it should merely be discarded from analysis but still kept around (mast cell are an
         # example). In such cases, only remove the cells that are marked "exclude from the dataset".
