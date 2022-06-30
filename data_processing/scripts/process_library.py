@@ -2,6 +2,7 @@ import sys
 import logging
 import os
 import json
+from jax import value_and_grad
 import scanpy as sc
 import numpy as np
 import hashlib
@@ -208,22 +209,39 @@ if configs["library_type"] == "GEX":
         # alignment and we didn't want to re-align all the libraries after the fix)
         # We patch that here by renaming the HTO tags to the new ones that match the IA
         # sample spreadsheet.
-        old_name_to_new_name = {
-            "694B-BLO-1": "694B-BLO-203",
-            "694B-BMA-1": "694B-BMA-204",
-            "694B-SPL-1": "694B-SPL-205",
-            "694B-MLN-1": "694B-MLN-206",
-            "694B-JEJEPI-1": "694B-JEJEPI-207",
-            "694B-JEJLP-1": "694B-JEJLP-208",
-            "694B-SKN-1": "694B-SKN-209",
-            "694B-BLO-1": "694B-BLO-210",
-            "694B-BMA-1": "694B-BMA-211",
-            "694B-SPL-1": "694B-SPL-212",
-            "694B-JEJEPI-1": "694B-JEJEPI-213",
-            "694B-JEJLP-1": "694B-JEJLP-214",
-            "694B-SKN-1": "694B-SKN-215",
-        }
-        new_cell_hashing = {c: old_name_to_new_name[c] for c in cell_hashing if c in old_name_to_new_name.keys()}
+        def old_name_to_new_name(old_name: str) -> str:
+            if old_name == "694B-BLO-1":
+                if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
+                    return "694B-BLO-203"
+                else:
+                    return "694B-BLO-210"
+            elif old_name == "694B-BMA-1":
+                if configs["library_id"] in ["CZI-IA11512688", "CZI-IA11512689", "CZI-IA11485873"]:
+                    return "694B-BMA-204"
+                else:
+                    return "694B-BMA-211"
+            elif old_name == "694B-SPL-1":
+                if configs["library_id"] in ["CZI-IA11512688", "CZI-IA11512689", "CZI-IA11485873"]:
+                    return "694B-SPL-205"
+                else:
+                    return "694B-SPL-212"
+            elif old_name == "694B-MLN-206":
+                return "694B-MLN-206"
+            elif old_name == "694B-JEJEPI-1":
+                if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
+                    return "694B-JEJEPI-207"
+                else:
+                    return "694B-JEJEPI-213"
+            elif old_name == "694B-JEJLP-1":
+                if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
+                    return "694B-JEJLP-208"
+                else:
+                    return "694B-JEJLP-214"
+            elif old_name == "694B-SKN-1":
+                raise ValueError("This is unexpected!")
+            else:
+                return old_name
+        new_cell_hashing = {c: old_name_to_new_name(c) for c in cell_hashing}
         adata.obs.rename(columns=new_cell_hashing, errors='raise', inplace=True)
         cell_hashing = list(new_cell_hashing.values())
 
