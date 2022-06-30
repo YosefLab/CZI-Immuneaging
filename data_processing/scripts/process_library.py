@@ -2,7 +2,6 @@ import sys
 import logging
 import os
 import json
-from jax import value_and_grad
 import scanpy as sc
 import numpy as np
 import hashlib
