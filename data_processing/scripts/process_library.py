@@ -209,6 +209,9 @@ if configs["library_type"] == "GEX":
         # We patch that here by renaming the HTO tags to the new ones that match the IA
         # sample spreadsheet.
         def old_name_to_new_name(old_name: str) -> str:
+            # replace BLD with BLO since that is something else that we renamed after having aligned
+            # the libraries
+            old_name = old_name.replace("BLD", "BLO")
             if old_name == "694B-BLO-1":
                 if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
                     return "694B-BLO-203"
