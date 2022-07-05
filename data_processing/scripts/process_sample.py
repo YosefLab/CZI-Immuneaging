@@ -38,6 +38,7 @@ sample_id = configs["sample_id"]
 sys.path.append(configs["code_path"])
 
 from utils import *
+from vdj_utils import *
 from logger import SimpleLogger
 init_scvi_settings()
 
@@ -290,7 +291,21 @@ def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Option
     logger.add_to_log("Concatenating all cells of sample {} from available {} libraries...".format(sample_id, lib_type))
     adata_to_return = adata_dict[library_ids_ir[0]]
     if len(library_ids_ir) > 1:
-        adata_to_return = adata_to_return.concatenate([adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))], batch_key="temp_batch")
+        batch_categories = None
+        if len(library_ids_ir) < len(library_ids_gex):
+            # There can be cases where gex libs A, B, C are present but the IR lib corresponding to B failed. In
+            # this case, we should specify a batch_categories sequence to adata.concatenate. Otherwise it would
+            # select [0, 1] for the IR libs and [0, 1, 2] for the gex libs and we would have a "1 vs 2" mismatch
+            # for lib C
+            all_ir_libs = get_vdj_lib_to_gex_lib_mapping(samples=samples)[0 if lib_type == "BCR" else 1] # e.g. {"CZI-BCR-789": "CZI-GEX-456"}
+            lib_to_seq = dict(zip(library_ids_gex, range(len(library_ids_gex)))) # e.g. {"CZI-GEX-123": 0, "CZI-GEX-456": 1}
+            batch_categories = [str(lib_to_seq[all_ir_libs[l]]) for l in library_ids_ir]
+            logger.add_to_log("batch categories: {}".format(batch_categories))
+        adata_to_return = adata_to_return.concatenate(
+            [adata_dict[library_ids_ir[j]] for j in range(1,len(library_ids_ir))],
+            batch_key="temp_batch",
+            batch_categories=batch_categories,
+        )
 
         # validate that the assumption above holds, i.e. the batch corresponding to each corresponding_gex_lib is the same
         # for all cells in the adata_ir and is the same as the one in adata
