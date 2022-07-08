@@ -147,21 +147,11 @@ if configs["library_type"] == "GEX":
 
     store_lib_alignment_metrics(adata, data_dir)
     
-    def read_csv_from_aws(filename: str):
-        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/cell_filtering/ {} --exclude "*" --include {}'.format(data_dir, filename)
-        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
-        file_path = os.path.join(data_dir, filename)
-        if not os.path.isfile(file_path):
-            msg = "Failed to download file {} from S3.".format(filename)
-            logger.add_to_log(msg, level="error")
-            raise ValueError(msg)
-        return pd.read_csv(file_path)
-    
     logger.add_to_log("Dropping out if this is a known poor quality library...")
     logger.add_to_log("Downloading list of poor_quality libraries from AWS...")
-    poor_quality_libs_df = read_csv_from_aws("poor_quality_libs.csv")
-    if configs["library_id"] in poor_quality_libs_df.columns:
+    cell_filtering_aws_dir = "s3://immuneaging/cell_filtering/"
+    poor_quality_libs_df = read_csv_from_aws(data_dir, cell_filtering_aws_dir, "poor_quality_libs.csv", logger)
+    if configs["donor"] + "_" + configs["library_id"] in poor_quality_libs_df.columns:
         logger.add_to_log("This is a known poor quality library: {}. Exiting...".format(configs["library_id"]), level="warning")
         flush_logs_and_upload()
         sys.exit()
@@ -177,7 +167,7 @@ if configs["library_type"] == "GEX":
     tissues = ["BAL", "BLO", "ILN", "JEJEPI", "JEJLP", "LIV", "MLN", "SKN", "TLN"]
     for tissue in tissues:
         logger.add_to_log("Downloading list of non-immune cells for tissue {}...".format(tissue))
-        non_immune_cells_df = read_csv_from_aws("{}_blacklist.csv".format(tissue))
+        non_immune_cells_df = read_csv_from_aws(data_dir, cell_filtering_aws_dir, "{}_blacklist.csv".format(tissue), logger)
         # the blacklist for some tissues includes whether the cell barcode should be discarded entirely
         # or whether it should merely be discarded from analysis but still kept around (mast cell are an
         # example). In such cases, only remove the cells that are marked "exclude from the dataset".
@@ -186,9 +176,7 @@ if configs["library_type"] == "GEX":
             # also add the "Exclude from Aging analysis" as an obs column to adata
             exclude_key = "Exclude from Aging analysis"
             inter = np.intersect1d(adata.obs_names, non_immune_cells_df["cell_barcode"])
-            adata_t = adata[inter, :].copy()
-            adata_t.obs[exclude_key] = non_immune_cells_df.loc[inter][exclude_key]
-            adata.obs[exclude_key] = adata_t.obs[exclude_key]
+            adata.obs[exclude_key] = non_immune_cells_df.set_index("cell_barcode").loc[inter][exclude_key]
         else:
             exclude_cells_barcodes = non_immune_cells_df["cell_barcode"]
         n_obs_before = adata.n_obs
@@ -206,10 +194,58 @@ if configs["library_type"] == "GEX":
     # move protein/hto data out of adata.X into adata.obsm/obs
     hto_tag = configs["donor"]+"-"
     cell_hashing = [i for i in adata.var_names[np.where(adata.var_names.str.startswith(hto_tag))]]
-    if len(cell_hashing) > 1:
+    if len(cell_hashing) >= 1:
         logger.add_to_log("Moving hto data out of adata.X into adata.obs...")
         adata.obs[cell_hashing] = adata[:,cell_hashing].X.toarray()
         adata = adata[:, ~adata.var_names.str.startswith(hto_tag)].copy()
+        # rename TLN to LLN
+        new_cell_hashing = {c: c.replace("TLN", "LLN") for c in cell_hashing}
+        adata.obs.rename(columns=new_cell_hashing, errors='raise', inplace=True)
+        cell_hashing = list(new_cell_hashing.values())
+        # The 694B donor had some of its libraries aligned with HTO tags that end in -1
+        # and some with HTO tags that end in -X where X corresponds to each unique sample
+        # ID (in short, this was caused by a failure that was fixed mid-way through lib
+        # alignment and we didn't want to re-align all the libraries after the fix)
+        # We patch that here by renaming the HTO tags to the new ones that match the IA
+        # sample spreadsheet.
+        def old_name_to_new_name(old_name: str) -> str:
+            # replace BLD with BLO since that is something else that we renamed after having aligned
+            # the libraries
+            old_name = old_name.replace("BLD", "BLO")
+            if old_name == "694B-BLO-1":
+                if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
+                    return "694B-BLO-203"
+                else:
+                    return "694B-BLO-210"
+            elif old_name == "694B-BMA-1":
+                if configs["library_id"] in ["CZI-IA11512688", "CZI-IA11512689", "CZI-IA11485873"]:
+                    return "694B-BMA-204"
+                else:
+                    return "694B-BMA-211"
+            elif old_name == "694B-SPL-1":
+                if configs["library_id"] in ["CZI-IA11512688", "CZI-IA11512689", "CZI-IA11485873"]:
+                    return "694B-SPL-205"
+                else:
+                    return "694B-SPL-212"
+            elif old_name == "694B-MLN-206":
+                return "694B-MLN-206"
+            elif old_name == "694B-JEJEPI-1":
+                if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
+                    return "694B-JEJEPI-207"
+                else:
+                    return "694B-JEJEPI-213"
+            elif old_name == "694B-JEJLP-1":
+                if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
+                    return "694B-JEJLP-208"
+                else:
+                    return "694B-JEJLP-214"
+            elif old_name == "694B-SKN-1":
+                raise ValueError("This is unexpected!")
+            else:
+                return old_name
+        new_cell_hashing = {c: old_name_to_new_name(c) for c in cell_hashing}
+        adata.obs.rename(columns=new_cell_hashing, errors='raise', inplace=True)
+        cell_hashing = list(new_cell_hashing.values())
 
     if "Antibody Capture" in np.unique(adata.var.feature_types):
         logger.add_to_log("Moving protein data out of adata.X into adata.obsm...")
@@ -358,7 +394,7 @@ else:
     raise ValueError("Unrecognized lib type: {}".format(configs["library_type"]))
 
 logger.add_to_log("Saving h5ad file...")
-adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 if not sandbox_mode:
     logger.add_to_log("Uploading h5ad file to S3...")

@@ -9,10 +9,11 @@ from typing import List
 import gc
 from utils import *
 
-def get_vdj_lib_to_gex_lib_mapping():
+def get_vdj_lib_to_gex_lib_mapping(samples=None):
     # Returns a mapping of all vdj libraries to their corresponding gex libraries
     # in the form of two dictionaries, one for bcr libs and one for tcr libs
-    samples = read_immune_aging_sheet("Samples")
+    if samples is None:
+        samples = read_immune_aging_sheet("Samples")
 
     def add_lib(lib_type: str, all_libs: dict) -> None:
         if lib_type not in ["BCR", "TCR"]:
