@@ -51,6 +51,7 @@ def get_tissue_coverage_csv():
 
         # fill in the row and add it to the list of rows
         csv_row = {}
+        csv_row["Donors"] = donor
         for tissue in tissues:
             tissue_stimulation[tissue].sort()
             stim_status = tissue_stimulation[tissue]
@@ -59,7 +60,9 @@ def get_tissue_coverage_csv():
 
     # write the csv
     csv_file = io.StringIO()
-    writer = csv.DictWriter(csv_file, fieldnames=tissues)
+    field_names = ["Donors"] + list(tissues)
+    print(field_names, csv_rows[0].keys())
+    writer = csv.DictWriter(csv_file, fieldnames=field_names)
     writer.writeheader()
     writer.writerows(csv_rows)
     print(csv_file.getvalue())
