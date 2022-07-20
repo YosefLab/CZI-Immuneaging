@@ -221,6 +221,7 @@ for integration_mode in integration_modes:
                 df_ctrl[adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].copy()
             adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"] = df_ctrl
     logger.add_to_log("Concatenating all cells from all samples...")
+    # TODO only grab the compartment-specific cells
     adata = adata_dict[sample_ids[0]]
     if len(sample_ids) > 1:
         adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
@@ -232,35 +233,24 @@ for integration_mode in integration_modes:
     adata.varm["gene_stats"] = adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)]
     adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
     # protein QC
-    if "protein_levels_max_sds" in configs:
-        protein_levels_max_sds = configs["protein_levels_max_sds"]
-    else:
-        protein_levels_max_sds = None
+    protein_levels_max_sds = configs["protein_levels_max_sds"] if "protein_levels_max_sds" in configs else None
     if (len(proteins) > 0) and protein_levels_max_sds is not None:
         logger.add_to_log("Running protein QC...")
-        n_cells_before = adata.obsm["protein_expression"].shape[0]
-        n_proteins_before = adata.obsm["protein_expression"].shape[1]
+        n_cells_before, n_proteins_before = adata.obsm["protein_expression"].shape
+        # (1) remove cells that demonstrate extremely high (or low) protein library size; normalize library size by the total number of non NaN proteins available for the cell.
+        prot_exp = adata.obsm["protein_expression"]
+        normalized_cell_lib_size = prot_exp.sum(axis=1)/(prot_exp.shape[1] - prot_exp.isnull().sum(axis=1))
+        keep, lower_bound, upper_bound = detect_outliers(normalized_cell_lib_size, protein_levels_max_sds)
         # save the qc thresholds in .uns so they can later be applied to other data if needed (specifically, in case of integrating new data into the model we learn here)
         adata.uns["protein_qc"] = {}
-        # a function for excluding cells or proteins based on extreme values (does not excludes cells that have only missing values)
-        def exclude_outliers(x, num_sds):
-            # a value is considered as an outlier if it is more extreme that the mean plus (or minus) num_sds times the standard deviation
-            assert np.sum(x<0) == 0
-            lower_bound = np.maximum(0, np.nanmean(x)-np.nanstd(x)*num_sds)
-            upper_bound = np.nanmean(x)+np.nanstd(x)*num_sds
-            is_outlier = np.logical_and(x >= lower_bound, x <= upper_bound)
-            # do not consider missing values as outliers
-            return np.logical_or(x.isna(), is_outlier), lower_bound, upper_bound
-        # (1) remove cells that demonstrate extremely high (or low) protein library size; normalize library size by the total number of non NaN proteins available for the cell.
-        normalized_cell_lib_size = adata.obsm["protein_expression"].sum(axis=1)/(adata.obsm["protein_expression"].shape[1]-adata.obsm["protein_expression"].isnull().sum(axis=1))
-        keep, lower_bound, upper_bound = exclude_outliers(normalized_cell_lib_size, protein_levels_max_sds)
         adata.uns["protein_qc"]["normalized_cell_lib_size_lower_bound"] = lower_bound
         adata.uns["protein_qc"]["normalized_cell_lib_size_upper_bound"] = upper_bound
         logger.add_to_log("Removing {} cells with extreme protein values (normalized library size more extreme than {} standard deviations)...".format(np.sum(~keep), protein_levels_max_sds))
         adata = adata[keep,].copy()
         # (2) remove proteins that have extreme library size (across all cells; consider only cells that have non-missing values and normalize by the number of cells with no missing values for the protein)
-        normalized_protein_lib_sizes = adata.obsm["protein_expression"].sum()/(adata.obsm["protein_expression"].shape[0]-adata.obsm["protein_expression"].isnull().sum(axis=0))
-        keep, lower_bound, upper_bound = exclude_outliers(normalized_protein_lib_sizes, protein_levels_max_sds)
+        prot_exp = adata.obsm["protein_expression"]
+        normalized_protein_lib_sizes = prot_exp.sum()/(prot_exp.shape[0] - prot_exp.isnull().sum(axis=0))
+        keep, lower_bound, upper_bound = detect_outliers(normalized_protein_lib_sizes, protein_levels_max_sds)
         adata.uns["protein_qc"]["normalized_protein_lib_size_lower_bound"] = lower_bound
         adata.uns["protein_qc"]["normalized_protein_lib_size_upper_bound"] = upper_bound
         logger.add_to_log("Removing {} proteins with extreme total number of reads across cells (normalized levels - by the number of cells with no missing values for the protein - more extreme than {} standard deviations)...".format(
@@ -301,49 +291,49 @@ for integration_mode in integration_modes:
         if is_cite:
             logger.add_to_log("Detected Antibody Capture features.")
         rna = adata.copy()
-        # set the batch key
-        batch_key = "batch" if "batch_key" not in configs else configs["batch_key"]
         logger.add_to_log("Filtering out vdj genes...")
         rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
-        logger.add_to_log("Detecting highly variable genes...")
         rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
         rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)
         rna.X = rna.layers["rounded_decontaminated_counts"].copy()
         sc.pp.log1p(rna)
         rna.layers["log1p_transformed"] = rna.X.copy()
+        logger.add_to_log("Detecting highly variable genes...")
         if configs["highly_variable_genes_flavor"] == "seurat_v3":
             # highly_variable_genes requires counts data in this case
             rna.X = rna.layers["rounded_decontaminated_counts"]
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         rna.X = rna.layers["rounded_decontaminated_counts"]
-        # scvi
-        key = "X_scvi_integrated"
-        _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
-        logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
-        neighbors_key = "scvi_integrated_neighbors"
-        sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
-        rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-                n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-        if is_cite:
-            # totalVI
-            key = "X_totalVI_integrated"
-            # if there is no protein information for some of the cells set them to zero (instead of NaN)
-            rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
-            # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
-            # so we try a few times then carry on with the rest of the script as we can still mine the
-            # rest of the data regardless of CITE info
-            retry_count = 4
-            try:
-                _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
-                logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
-                neighbors_key = "totalvi_integrated_neighbors"
-                sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
-                rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+        batch_keys = ["batch"] if "batch_key" not in configs else configs["batch_key"].split(",")
+        for batch_key in batch_keys:
+            # scvi
+            key = "X_scvi_integrated"
+            _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
+            logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
+            neighbors_key = "scvi_integrated_neighbors"
+            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
+            rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                     n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-            except Exception as err:
-                logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
-                is_cite = False
+            if is_cite:
+                # totalVI
+                key = "X_totalVI_integrated"
+                # if there is no protein information for some of the cells set them to zero (instead of NaN)
+                rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
+                # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
+                # so we try a few times then carry on with the rest of the script as we can still mine the
+                # rest of the data regardless of CITE info
+                retry_count = 4
+                try:
+                    _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
+                    logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
+                    neighbors_key = "totalvi_integrated_neighbors"
+                    sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
+                    rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                        n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
+                except Exception as err:
+                    logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
+                    is_cite = False
         # pca
         logger.add_to_log("Calculating PCA...")
         rna.X = rna.layers["log1p_transformed"]

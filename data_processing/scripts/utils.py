@@ -507,3 +507,14 @@ def read_csv_from_aws(
         logger.add_to_log(msg, level="error")
         raise ValueError(msg)
     return pd.read_csv(file_path)
+
+# detects which datapoints in x have extreme values (does not count missing data as outliers)
+def detect_outliers(x, num_sds):
+    # a value is considered as an outlier if it is more extreme that the mean plus (or minus) num_sds times the standard deviation
+    assert np.sum(x<0) == 0
+    m, s = np.nanmean(x), np.nanstd(x)
+    lower_bound = np.maximum(0, m - s*num_sds)
+    upper_bound = m + s*num_sds
+    is_not_outlier = np.logical_and(x >= lower_bound, x <= upper_bound)
+    # do not consider missing values as outliers
+    return np.logical_or(x.isna(), is_not_outlier), lower_bound, upper_bound
