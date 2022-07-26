@@ -1,5 +1,6 @@
-## This script generates configuration files for integrate_samples.py (one configuration file per tissue - for integrating all currently available samples from the given tissue type)
-## run as follows (use absolute paths): python generate_tissue_integration_config_files.py <code_path> <output_destination> <s3_access_file>
+## This script generates configuration files for integrate_samples.py.and
+## There are currently two levels of integration: tissue-level and compartment-level. In tissue-level integration, this script generates one configuration file per tissue - for integrating all currently available samples from the given tissue type. In compartment-level integration, this script generates one file per compartment - for integrating cells belonging to that compartment from all currently available samples.
+## run as follows (use absolute paths): python generate_integration_config_files.py <code_path> <output_destination> <s3_access_file>
 
 import sys
 import os
@@ -10,6 +11,7 @@ import re
 code_path = sys.argv[1]
 output_destination = sys.argv[2]
 s3_access_file = sys.argv[3]
+integration_level = sys.argv[4]
 
 sys.path.append(code_path)
 from utils import *
