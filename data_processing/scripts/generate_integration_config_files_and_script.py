@@ -1,6 +1,8 @@
 ## This script generates configuration files for integrate_samples.py.and
-## There are currently two levels of integration: tissue-level and compartment-level. In tissue-level integration, this script generates one configuration file per tissue - for integrating all currently available samples from the given tissue type. In compartment-level integration, this script generates one file per compartment - for integrating cells belonging to that compartment from all currently available samples.
-## run as follows (use absolute paths): python generate_integration_config_files.py <code_path> <output_destination> <s3_access_file>
+## There are currently two levels of integration: tissue-level and compartment-level.
+## In tissue-level integration, this script generates one configuration file per tissue - for integrating all currently available samples from the given tissue type.
+## In compartment-level integration, this script generates one file per compartment - for integrating cells belonging to that compartment from all currently available samples.
+## run as follows (use absolute paths): python generate_integration_config_files_and_scripts.py <code_path> <output_destination> <s3_access_file> <integration_level>
 
 import sys
 import os
@@ -12,6 +14,7 @@ code_path = sys.argv[1]
 output_destination = sys.argv[2]
 s3_access_file = sys.argv[3]
 integration_level = sys.argv[4]
+assert integration_level in ["tissue", "compartment"]
 
 sys.path.append(code_path)
 from utils import *
@@ -29,7 +32,7 @@ integration_configs = {
         "code_path": code_path,
         "output_destination": output_destination,
         "s3_access_file": s3_access_file,
-        "integration_level": "tissue",
+        "integration_level": integration_level,
         "protein_levels_max_sds": 5,
         "n_highly_variable_genes": 3000,
         "highly_variable_genes_flavor": "seurat_v3",
@@ -60,19 +63,26 @@ integration_configs = {
 set_access_keys(s3_access_file)
 
 samples = read_immune_aging_sheet("Samples")
-tissues = np.unique(samples["Organ"][np.logical_not(pd.isnull(samples["Organ"]))])
+tissues_or_compartments = []
+tissue_integration = integration_level == "tissue"
+if tissue_integration:
+    tissues_or_compartments = np.unique(samples["Organ"][np.logical_not(pd.isnull(samples["Organ"]))])
+else:
+    tissues_or_compartments = ["T", "B", "Myeloid", "Other"]
 
 outfile = open(os.path.join(code_path,"integrate_samples_runs.sh"),'w') 
 outfile.write("source activate {}\n".format(python_env))
 
 no_integration = []
 
-for tissue in tissues:
-    # get all samples from the requested tissue as appears in the google spreadsheet
+for tissue_or_compartment in tissues_or_compartments:
+    # get all samples from the requested tissue or compartment as appears in the google spreadsheet
     final_sample_ids = []
     versions = []
-    # consider all samples from the current tissue except for samples coming from pilot donor
-    indices = (samples["Organ"] == tissue) & (~samples["Donor ID"].isin(pilot_donors))
+    # consider all samples from the current tissue or compartment except for samples coming from pilot donor
+    indices = ~samples["Donor ID"].isin(pilot_donors)
+    if tissue_integration:
+        indices = indices & (samples["Organ"] == tissue_or_compartment)
     sample_ids = samples["Sample_ID"][indices]
     for sample_id in sample_ids:
         ls_cmd = "aws s3 ls s3://immuneaging/processed_samples/{}_GEX --recursive".format(sample_id)
@@ -96,18 +106,18 @@ for tissue in tissues:
                 versions.append(version)
                 final_sample_ids.append(sample_id)
     if len(final_sample_ids)>1:
-        tissue_integration_configs = integration_configs
-        tissue_integration_configs["output_prefix"] = tissue
-        tissue_integration_configs["sample_ids"] = ",".join(final_sample_ids)
-        tissue_integration_configs["processed_sample_configs_version"] = ",".join([str(i) for i in versions])
-        filename = os.path.join(output_destination,"integrate_samples.{}.configs.txt".format(tissue))
+        final_integration_configs = integration_configs
+        final_integration_configs["output_prefix"] = tissue_or_compartment
+        final_integration_configs["sample_ids"] = ",".join(final_sample_ids)
+        final_integration_configs["processed_sample_configs_version"] = ",".join([str(i) for i in versions])
+        filename = os.path.join(output_destination,"integrate_samples.{}.configs.txt".format(tissue_or_compartment))
         with open(filename, 'w') as f:
-            json.dump(tissue_integration_configs, f)
+            json.dump(final_integration_configs, f)
         print("generated configs file " + filename)
         outfile.write("python integrate_samples.py {}\n".format(filename))
     else:
-        no_integration.append((tissue, len(final_sample_ids)))
-        
+        assert tissue_integration
+        no_integration.append((tissue_or_compartment, len(final_sample_ids)))
 
 outfile.write("conda deactivate")
 outfile.close()

@@ -354,12 +354,14 @@ def _run_model_impl(
     zipf.close()
     return model, model_file
 
-def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger]) -> None:
+def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger], do_log: bool = True) -> None:
     sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(source, target, include)
-    logger.add_to_log("syncing {}...".format(include))
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    if do_log:
+        logger.add_to_log("syncing {}...".format(include))
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     aws_response = os.popen(sync_cmd).read()
-    logger.add_to_log("aws response: {}\n".format(aws_response))
+    if do_log:
+        logger.add_to_log("aws response: {}\n".format(aws_response))
 
 def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Type[BaseLogger]) -> AnnData:
     file_path_components = aws_file_path.split("/")
@@ -518,3 +520,74 @@ def detect_outliers(x, num_sds):
     is_not_outlier = np.logical_and(x >= lower_bound, x <= upper_bound)
     # do not consider missing values as outliers
     return np.logical_or(x.isna(), is_not_outlier), lower_bound, upper_bound
+
+# find and return, among the given labels, those that constitute at least the given fraction (frac) of all the labels
+def find_abundant_labels(labels, frac):
+    labels.unique()
+    labels_include = []
+    th = frac*len(labels)
+    unique_labels = np.unique(labels)
+    for l in unique_labels:
+        if np.sum(labels == l) > th:
+            labels_include.append(l)
+    return labels_include
+
+def annotate(
+    adata,
+    model_paths,
+    model_urls,
+    components_key,
+    neighbors_key,
+    n_neighbors,
+    resolutions,
+    model_name,
+    dotplot_min_frac,
+    save_all_outputs: bool = False
+):
+    adata_new = adata.copy()
+    dotplot_paths = []
+    for r in range(len(resolutions)):
+        resolution = resolutions[r]
+        logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
+        sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
+        sc.tl.leiden(adata_new, resolution = resolution, key_added = 'leiden', neighbors_key = neighbors_key)
+        # save the leiden clusters and majority voting results in the original anndata
+        adata.obs["leiden_resolution_" + str(resolution)] = adata_new.obs["leiden"]
+        for m in range(len(model_paths)):
+            celltypist_model_name = model_urls[m].split("/")[-1].split(".")[0]
+            model_path = model_paths[m]
+            logger.add_to_log("Running CellTypist annotation using model {0}...".format(model_path))
+            predictions = celltypist.annotate(adata_new, model = model_path, majority_voting = True, over_clustering = 'leiden')
+            logger.add_to_log("Saving CellTypist outputs for model {0}...".format(model_path))
+            adata.obs["celltypist_majority_voting.{0}.{1}.leiden_resolution_{2}".format(celltypist_model_name, model_name, str(resolution))] = predictions.predicted_labels["majority_voting"]
+            if r == 0 and save_all_outputs:
+                # save the rest of the outputs; these outputs do not change with different leiden resolution so should save only once
+                adata.obs["celltypist_model_url.{0}".format(celltypist_model_name)] = model_urls[m]
+                adata.obs["celltypist_predicted_labels.{0}".format(celltypist_model_name)] = predictions.predicted_labels["predicted_labels"]
+                adata.obsm["celltypist_probability_matrix.{0}".format(celltypist_model_name)] = predictions.probability_matrix
+            # generate and save a dotplot only for the abundant cell types
+            logger.add_to_log("Generating a dotplot based on the CellTypist outputs...")
+            abundant_cell_types = find_abundant_labels(labels = predictions.predicted_labels["predicted_labels"], frac = dotplot_min_frac)
+            dotplot_predictions = celltypist.annotate(
+                adata_new[predictions.predicted_labels["predicted_labels"].isin(abundant_cell_types),:].copy(),
+                model = model_path,
+                majority_voting = True,
+                over_clustering = 'leiden'
+            )
+            celltypist.dotplot(
+                dotplot_predictions,
+                use_as_reference = 'leiden',
+                use_as_prediction = 'predicted_labels',
+                show = False,
+                return_fig = False
+            )
+            dotplot_filename = "celltypist_dotplot.{}.{}.leiden_resolution_{}.min_frac_{}".format(
+                celltypist_model_name,
+                model_name,
+                str(resolution),
+                str(dotplot_min_frac)
+            )
+            sc.pl._utils.savefig_or_show(dotplot_filename, show = False, save = True)
+            # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
+            dotplot_paths.append(os.path.join(os.getcwd(), "figures", dotplot_filename + ".pdf"))
+    return dotplot_paths

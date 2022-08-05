@@ -33,6 +33,8 @@ with open(configs_file) as f:
 
 configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
+tissue_integration = integration_level == "tissue"
+
 sys.path.append(configs["code_path"])
 from utils import *
 from vdj_utils import *
@@ -73,7 +75,7 @@ output_configs_file = "integrate_samples.configs.{}.{}.txt".format(configs["outp
 logger_file = "integrate_samples.{}.{}.log".format(configs["output_prefix"],version)
 logger_file_path = os.path.join(data_dir, logger_file)
 if os.path.isfile(logger_file_path):
-	os.remove(logger_file_path)
+    os.remove(logger_file_path)
 
 output_h5ad_file = "{}.{}.h5ad".format(configs["output_prefix"], version)
 output_h5ad_model_file = "{}.{}.model_data.h5ad".format(configs["output_prefix"], version)
@@ -155,6 +157,20 @@ for j in range(len(all_sample_ids)):
         logger.add_to_log("h5ad file does not exist on aws for sample {}. Terminating execution.".format(sample_id))
         sys.exit()
 
+if not tissue_integration:
+    compartment = configs["output_prefix"]
+    logger.add_to_log(f"Downloading csv file containing cell barcodes for the {compartment} compartment from S3...")
+    barcodes_csv_file = f"{compartment}-compartment-barcodes.csv"
+    aws_sync("s3://immuneaging/per-compartment-barcodes/", data_dir, barcodes_csv_file, logger)
+    barcodes_csv_path = os.path.join(data_dir, barcodes_csv_file)
+    if not os.path.exists(barcodes_csv_path):
+        logger.add_to_log(f"per-compartment-barcodes csv file does not exist on aws for compartment {compartment}. Terminating execution.")
+        sys.exit()
+    logger.add_to_log(f"Downloading csv file containing cell barcodes to exclude, if any...")
+    exclude_barcodes_csv_file = f"Exclude-barcodes.csv"
+    aws_sync("s3://immuneaging/per-compartment-barcodes/", data_dir, exclude_barcodes_csv_file, logger)
+    exclude_barcodes_csv_path = os.path.join(data_dir, exclude_barcodes_csv_file)
+
 ############################################
 ###### SAMPLE INTEGRATION BEGINS HERE ######
 ############################################
@@ -200,28 +216,60 @@ for integration_mode in integration_modes:
                 del adata_dict[sample_id].obsm[field]
     # get the names of all proteins and control proteins across all samples (in case the samples were collected using more than one protein panel)
     proteins = set()
-    for j in range(len(sample_ids)):
-        if "protein_expression" in adata_dict[sample_ids[j]].obsm:
-            proteins.update(adata_dict[sample_ids[j]].obsm["protein_expression"].columns)
     proteins_ctrl = set()
-    for j in range(len(sample_ids)):
-        if "protein_expression_Ctrl" in adata_dict[sample_ids[j]].obsm:
-            proteins_ctrl.update(adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].columns)
+    for sample_id in sample_ids:
+        if "protein_expression" in adata_dict[sample_id].obsm:
+            proteins.update(adata_dict[sample_id].obsm["protein_expression"].columns)
+        if "protein_expression_Ctrl" in adata_dict[sample_id].obsm:
+            proteins_ctrl.update(adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns)
     # each sample should include all proteins; missing values are set as NaN
     if len(proteins) > 0 or len(proteins_ctrl) > 0:
         proteins = list(proteins)
         proteins_ctrl = list(proteins_ctrl)
-        for j in range(len(sample_ids)):
-            df = pd.DataFrame(columns = proteins, index = adata_dict[sample_ids[j]].obs.index)
-            if "protein_expression" in adata_dict[sample_ids[j]].obsm:
-                df[adata_dict[sample_ids[j]].obsm["protein_expression"].columns] = adata_dict[sample_ids[j]].obsm["protein_expression"].copy()
-            adata_dict[sample_ids[j]].obsm["protein_expression"] = df
-            df_ctrl = pd.DataFrame(columns = proteins_ctrl, index = adata_dict[sample_ids[j]].obs.index)
-            if "protein_expression_Ctrl" in adata_dict[sample_ids[j]].obsm:
-                df_ctrl[adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"].copy()
-            adata_dict[sample_ids[j]].obsm["protein_expression_Ctrl"] = df_ctrl
-    logger.add_to_log("Concatenating all cells from all samples...")
-    # TODO only grab the compartment-specific cells
+        for sample_id in sample_ids:
+            df = pd.DataFrame(columns = proteins, index = adata_dict[sample_id].obs.index)
+            if "protein_expression" in adata_dict[sample_id].obsm:
+                df[adata_dict[sample_id].obsm["protein_expression"].columns] = adata_dict[sample_id].obsm["protein_expression"].copy()
+            adata_dict[sample_id].obsm["protein_expression"] = df
+            df_ctrl = pd.DataFrame(columns = proteins_ctrl, index = adata_dict[sample_id].obs.index)
+            if "protein_expression_Ctrl" in adata_dict[sample_id].obsm:
+                df_ctrl[adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_id].obsm["protein_expression_Ctrl"].copy()
+            adata_dict[sample_id].obsm["protein_expression_Ctrl"] = df_ctrl
+    if not tissue_integration:
+        logger.add_to_log("Selecting only the compartment-specific cells from all samples...")
+        barcodes = pd.read_csv(barcodes_csv_path)
+        exclude_barcodes = pd.read_csv(exclude_barcodes_csv_path) if os.path.isfile(exclude_barcodes_csv_path) else None
+        new_adata_dict = {}
+        for sample_id,adata in adata_dict.items():
+            # replace adata with the subset of adata that is limited to the compartment barcodes
+            idx = adata.obs.index in barcodes
+            if exclude_barcodes is not None:
+                # also, exclude any cells that are marked as Exclude
+                # Note: The majority of cells to be excluded are removed during earlier stages of the pipeline
+                # such as sample and library processing. However, we have this additional step here in case that
+                # we find cells to exclude later on and don't want to go back and re-run earlier processing stages
+                # (ideally though we should in order to keep everything consistent) or if for any other reason we
+                # need to exclude some cells here.
+                idx = idx and (adata.obs.index not in exclude_barcodes)
+            if np.sum(idx) > 0: # i.e. if there is at least one cell that passes the condition above
+                new_adata_dict[sample_id] = adata[idx, :].copy()
+        if len(new_adata_dict) == 0:
+            msg = f"No cells found for compartment {compartment} from all samples in {integration_mode} integration mode..."
+            if integration_mode != "stim_unstim":
+               logger.add_to_log(msg, level="warning")
+               # move on to the next integration mode
+               continue
+            else:
+                logger.add_to_log(msg + " Terminating execution.", level="error")
+                logging.shutdown()
+                if not sandbox_mode:
+                    # upload log to S3
+                    aws_sync(data_dir, "{}/{}/{}/".format(s3_url, configs["output_prefix"], version), logger_file, logger, do_log=False)
+                sys.exit()
+        else:
+            adata_dict = new_adata_dict
+            sample_ids = list(new_adata_dict.keys())
+    logger.add_to_log("Concatenating all datasets...")
     adata = adata_dict[sample_ids[0]]
     if len(sample_ids) > 1:
         adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
@@ -302,38 +350,37 @@ for integration_mode in integration_modes:
         if configs["highly_variable_genes_flavor"] == "seurat_v3":
             # highly_variable_genes requires counts data in this case
             rna.X = rna.layers["rounded_decontaminated_counts"]
+        batch_key = "batch" if "batch_key" not in configs else configs["batch_key"]
         sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
             flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
         rna.X = rna.layers["rounded_decontaminated_counts"]
-        batch_keys = ["batch"] if "batch_key" not in configs else configs["batch_key"].split(",")
-        for batch_key in batch_keys:
-            # scvi
-            key = "X_scvi_integrated"
-            _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
-            logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
-            neighbors_key = "scvi_integrated_neighbors"
-            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
-            rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+        # scvi
+        key = "X_scvi_integrated"
+        _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
+        logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
+        neighbors_key = "scvi_integrated_neighbors"
+        sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
+        rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
+        if is_cite:
+            # totalVI
+            key = "X_totalVI_integrated"
+            # if there is no protein information for some of the cells set them to zero (instead of NaN)
+            rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
+            # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
+            # so we try a few times then carry on with the rest of the script as we can still mine the
+            # rest of the data regardless of CITE info
+            retry_count = 4
+            try:
+                _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
+                logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
+                neighbors_key = "totalvi_integrated_neighbors"
+                sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
+                rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                     n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-            if is_cite:
-                # totalVI
-                key = "X_totalVI_integrated"
-                # if there is no protein information for some of the cells set them to zero (instead of NaN)
-                rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
-                # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
-                # so we try a few times then carry on with the rest of the script as we can still mine the
-                # rest of the data regardless of CITE info
-                retry_count = 4
-                try:
-                    _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
-                    logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
-                    neighbors_key = "totalvi_integrated_neighbors"
-                    sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
-                    rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-                        n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-                except Exception as err:
-                    logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
-                    is_cite = False
+            except Exception as err:
+                logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
+                is_cite = False
         # pca
         logger.add_to_log("Calculating PCA...")
         rna.X = rna.layers["log1p_transformed"]
@@ -359,50 +406,6 @@ for integration_mode in integration_modes:
         print(err)
         sys.exit()
     logger.add_to_log("Using CellTypist for annotations...")
-    def annotate(adata, model_paths, model_urls, components_key, neighbors_key, n_neighbors, resolutions, model_name, \
-        dotplot_min_frac, save_all_outputs = False):
-        adata_new = adata.copy()
-        dotplot_paths = []
-        def find_abundant_cell_types(labels, frac):
-            labels.unique()
-            ct_include = []
-            th = frac*len(labels)
-            cell_types = np.unique(labels)
-            for ct in cell_types:
-                if np.sum(labels == ct) > th:
-                    ct_include.append(ct)
-            return ct_include
-        for r in range(len(resolutions)):
-            resolution = resolutions[r]
-            logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
-            sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
-            sc.tl.leiden(adata_new, resolution = resolution, key_added = 'leiden', neighbors_key = neighbors_key)
-            # save the leiden clusters and majority voting results in the original anndata
-            adata.obs["leiden_resolution_" + str(resolution)] = adata_new.obs["leiden"]
-            for m in range(len(model_paths)):
-                celltypist_model_name = model_urls[m].split("/")[-1].split(".")[0]
-                model_path = model_paths[m]
-                logger.add_to_log("Running CellTypist annotation using model {0}...".format(model_path))
-                predictions = celltypist.annotate(adata_new, model = model_path, majority_voting = True, over_clustering = 'leiden')
-                logger.add_to_log("Saving CellTypist outputs for model {0}...".format(model_path))
-                adata.obs["celltypist_majority_voting.{0}.{1}.leiden_resolution_{2}".format(celltypist_model_name, model_name, str(resolution))] = predictions.predicted_labels["majority_voting"]
-                if r == 0:
-                    # save the rest of the outputs; these outputs do not change with different leiden resolution so should save only once
-                    if save_all_outputs:
-                        adata.obs["celltypist_model_url.{0}".format(celltypist_model_name)] = model_urls[m]
-                        adata.obs["celltypist_predicted_labels.{0}".format(celltypist_model_name)] = predictions.predicted_labels["predicted_labels"]
-                        adata.obsm["celltypist_probability_matrix.{0}".format(celltypist_model_name)] = predictions.probability_matrix
-                # generate and save a dotplot only for the abundant cell types
-                logger.add_to_log("Generating a dotplot based on the CellTypist outputs...")
-                abundant_cell_types = find_abundant_cell_types(labels = predictions.predicted_labels["predicted_labels"], frac = dotplot_min_frac)
-                dotplot_predictions = celltypist.annotate(adata_new[predictions.predicted_labels["predicted_labels"].isin(abundant_cell_types),:].copy() \
-                    , model = model_path, majority_voting = True, over_clustering = 'leiden')
-                celltypist.dotplot(dotplot_predictions, use_as_reference = 'leiden', use_as_prediction = 'predicted_labels', show = False, return_fig = False)
-                dotplot_filename = "celltypist_dotplot.{0}.{1}.leiden_resolution_{2}.min_frac_{3}".format(celltypist_model_name, model_name, str(resolution),str(dotplot_min_frac))
-                sc.pl._utils.savefig_or_show(dotplot_filename, show = False, save = True)
-                # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
-                dotplot_paths.append(os.path.join(os.getcwd(),"figures",dotplot_filename + ".pdf"))
-        return(dotplot_paths)
     # remove celltypist predictions and related metadata that were added at the sample-level processing
     celltypist_cols = [j for j in adata.obs.columns if "celltypist" in j]
     adata.obs = adata.obs.drop(labels = celltypist_cols, axis = "columns")
@@ -416,14 +419,30 @@ for integration_mode in integration_modes:
         celltypist_model_path = os.path.join(data_dir, celltypist_model_url.split("/")[-1])
         urllib.request.urlretrieve(celltypist_model_url, celltypist_model_path)
         celltypist_model_paths.append(celltypist_model_path)
-    dotplot_paths = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, components_key = "X_scvi_integrated", \
-        neighbors_key = "neighbors_scvi", n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, model_name = scvi_model_name, \
-            dotplot_min_frac = celltypist_dotplot_min_frac, save_all_outputs = True)
+    dotplot_paths = annotate(
+        adata,
+        model_paths = celltypist_model_paths,
+        model_urls = celltypist_model_urls,
+        components_key = "X_scvi_integrated",
+        neighbors_key = "neighbors_scvi",
+        n_neighbors = configs["neighborhood_graph_n_neighbors"],
+        resolutions = leiden_resolutions,
+        model_name = scvi_model_name,
+        dotplot_min_frac = celltypist_dotplot_min_frac,
+        save_all_outputs = True
+    )
     if "X_totalVI_integrated" in adata.obsm:
-        dotplot_paths_totalvi = annotate(adata, model_paths = celltypist_model_paths, model_urls = celltypist_model_urls, \
-            components_key = "X_totalVI_integrated", neighbors_key = "neighbors_totalvi", \
-            n_neighbors = configs["neighborhood_graph_n_neighbors"], resolutions = leiden_resolutions, \
-                model_name = totalvi_model_name, dotplot_min_frac = celltypist_dotplot_min_frac)
+        dotplot_paths_totalvi = annotate(
+            adata,
+            model_paths = celltypist_model_paths,
+            model_urls = celltypist_model_urls,
+            components_key = "X_totalVI_integrated",
+            neighbors_key = "neighbors_totalvi",
+            n_neighbors = configs["neighborhood_graph_n_neighbors"],
+            resolutions = leiden_resolutions,
+            model_name = totalvi_model_name,
+            dotplot_min_frac = celltypist_dotplot_min_frac
+        )
         dotplot_paths = dotplot_paths + dotplot_paths_totalvi
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))
