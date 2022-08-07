@@ -319,7 +319,7 @@ def _run_model_impl(
     for i in model_params_keys:
         if i in configs:
             model_params[i] = configs[i]
-    logger.add_to_log("Training {} model...".format(model_name))
+    logger.add_to_log("Training {} model with batch key {}...".format(model_name, batch_key))
     model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, \
         empirical_protein_background_prior = empirical_protein_background_prior, **model_params)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
@@ -335,17 +335,17 @@ def _run_model_impl(
     if latent_key is None:
         latent_key = "X_scVI" if model_name=="scvi" else "X_totalVI"
     adata.obsm[latent_key] = latent
-    model_file = "{}.{}.{}_model.zip".format(prefix, version, model_name)
+    model_file = "{}.{}.{}_model_batch_key_{}.zip".format(prefix, version, model_name, batch_key)
     logger.add_to_log("Saving the model into {}...".format(model_file))
     model_file_path = os.path.join(data_dir, model_file)
-    model_dir_path = os.path.join(data_dir,"{}.{}_model/".format(prefix, model_name))
+    model_dir_path = os.path.join(data_dir,"{}.{}_model_batch_key_{}/".format(prefix, model_name, batch_key))
     if os.path.isdir(model_dir_path):
         os.system("rm -r " + model_dir_path)
     model.save(model_dir_path)
     # save the data used for fitting the model; this is useful for applying reference-based integration on query data later on (based on the current model and data).
     logger.add_to_log("Saving the data used for fitting the model...")
     os.path.join(data_dir, model_file)
-    data_file = "{}.{}.{}_model.data.h5ad".format(prefix, version, model_name)
+    data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
     adata_copy = adata.copy()
     write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
     # zip the dir with all the model outputs

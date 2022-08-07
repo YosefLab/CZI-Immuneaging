@@ -329,72 +329,99 @@ for integration_mode in integration_modes:
         del adata.obs["Classification"]
     logger.add_to_log("A total of {} cells and {} genes are available after merge.".format(adata.n_obs, adata.n_vars))
     # set the train size; this train size was justified by an experiment that is described here https://yoseflab.github.io/scvi-tools-reproducibility/runtime_analysis_reproducibility/
-    if 0.1 * adata.n_obs < 20000:
-        train_size = 0.9
-    else:
-        train_size = 1-(20000/adata.n_obs)
-    configs["train_size"] = train_size
+    configs["train_size"] = 0.9 if 0.1 * adata.n_obs < 20000 else 1-(20000/adata.n_obs)
     try:
         is_cite = "protein_expression" in adata.obsm
         if is_cite:
             logger.add_to_log("Detected Antibody Capture features.")
-        rna = adata.copy()
-        logger.add_to_log("Filtering out vdj genes...")
-        rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
-        rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
-        rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)
-        rna.X = rna.layers["rounded_decontaminated_counts"].copy()
-        sc.pp.log1p(rna)
-        rna.layers["log1p_transformed"] = rna.X.copy()
-        logger.add_to_log("Detecting highly variable genes...")
-        if configs["highly_variable_genes_flavor"] == "seurat_v3":
-            # highly_variable_genes requires counts data in this case
+        # iterate over batch keys
+        batch_keys = ["batch"] if "batch_key" not in configs else configs["batch_key"].split(",")
+        scvi_model_files = {}
+        totalvi_model_files = {}
+        run_pca = True
+        for batch_key in batch_keys:
+            logger.add_to_log("Running for batch_key {}...".format(batch_key))
+            logger.add_to_log("Filtering out vdj genes...")
+            rna = adata.copy()
+            rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
+            rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
+            rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)
+            rna.X = rna.layers["rounded_decontaminated_counts"].copy()
+            sc.pp.log1p(rna)
+            rna.layers["log1p_transformed"] = rna.X.copy()
+            logger.add_to_log("Detecting highly variable genes...")
+            if configs["highly_variable_genes_flavor"] == "seurat_v3":
+                # highly_variable_genes requires counts data in this case
+                rna.X = rna.layers["rounded_decontaminated_counts"]
+            sc.pp.highly_variable_genes(
+                rna,
+                n_top_genes=configs["n_highly_variable_genes"],
+                subset=True,
+                flavor=configs["highly_variable_genes_flavor"],
+                batch_key=batch_key,
+                span = 1.0
+            )
             rna.X = rna.layers["rounded_decontaminated_counts"]
-        batch_key = "batch" if "batch_key" not in configs else configs["batch_key"]
-        sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
-            flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
-        rna.X = rna.layers["rounded_decontaminated_counts"]
-        # scvi
-        key = "X_scvi_integrated"
-        _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
-        logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
-        neighbors_key = "scvi_integrated_neighbors"
-        sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
-        rna.obsm["X_umap_scvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-                n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-        if is_cite:
-            # totalVI
-            key = "X_totalVI_integrated"
-            # if there is no protein information for some of the cells set them to zero (instead of NaN)
-            rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
-            # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
-            # so we try a few times then carry on with the rest of the script as we can still mine the
-            # rest of the data regardless of CITE info
-            retry_count = 4
-            try:
-                _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
-                logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
-                neighbors_key = "totalvi_integrated_neighbors"
-                sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
-                rna.obsm["X_umap_totalvi_integrated"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-                    n_components=configs["umap_n_components"], neighbors_key=neighbors_key, copy=True).obsm["X_umap"]
-            except Exception as err:
-                logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
-                is_cite = False
-        # pca
-        logger.add_to_log("Calculating PCA...")
-        rna.X = rna.layers["log1p_transformed"]
-        sc.pp.pca(rna)
-        logger.add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
-        key = "pca_neighbors"
-        sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-            use_rep="X_pca", key_added=key) 
-        rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
-            n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
-        # update the adata with the components of the dim reductions and umap coordinates
-        adata.obsm.update(rna.obsm)
-        # save the identity of the most variable genes used
-        adata.var["is_highly_variable_gene"] = adata.var.index.isin(rna.var.index)
+            # scvi
+            key = f"X_scvi_integrated_batch_key_{batch_key}"
+            _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
+            scvi_model_files[batch_key] = scvi_model_file
+            logger.add_to_log("Calculate neighbors graph and UMAP based on scvi components...")
+            neighbors_key = f"scvi_integrated_neighbors_batch_key_{batch_key}"
+            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
+            rna.obsm[f"X_umap_scvi_integrated_batch_key_{batch_key}"] = sc.tl.umap(
+                rna,
+                min_dist=configs["umap_min_dist"],
+                spread=float(configs["umap_spread"]),
+                n_components=configs["umap_n_components"],
+                neighbors_key=neighbors_key,
+                copy=True
+            ).obsm["X_umap"]
+            if is_cite:
+                # totalVI
+                key = f"X_totalVI_integrated_batch_key_{batch_key}"
+                # if there is no protein information for some of the cells set them to zero (instead of NaN)
+                rna.obsm["protein_expression"] = rna.obsm["protein_expression"].fillna(0)
+                # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
+                # so we try a few times then carry on with the rest of the script as we can still mine the
+                # rest of the data regardless of CITE info
+                retry_count = 4
+                try:
+                    _, totalvi_model_file = run_model(rna, configs, batch_key, "protein_expression", "totalvi", prefix, version, data_dir, logger, latent_key=key, max_retry_count=retry_count)
+                    totalvi_model_files[batch_key] = totalvi_model_file
+                    logger.add_to_log("Calculate neighbors graph and UMAP based on totalVI components...")
+                    neighbors_key = f"totalvi_integrated_neighbors_batch_key_{batch_key}"
+                    sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],use_rep=key, key_added=neighbors_key) 
+                    rna.obsm[f"X_umap_totalvi_integrated_batch_key_{batch_key}"] = sc.tl.umap(
+                        rna,
+                        min_dist=configs["umap_min_dist"],
+                        spread=float(configs["umap_spread"]),
+                        n_components=configs["umap_n_components"],
+                        neighbors_key=neighbors_key,
+                        copy=True
+                    ).obsm["X_umap"]
+                except Exception as err:
+                    logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
+            if not pca_run:
+                logger.add_to_log("Calculating PCA...")
+                rna.X = rna.layers["log1p_transformed"]
+                sc.pp.pca(rna)
+                logger.add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
+                key = "pca_neighbors"
+                sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep="X_pca", key_added=key) 
+                rna.obsm["X_umap_pca"] = sc.tl.umap(
+                    rna,
+                    min_dist=configs["umap_min_dist"],
+                    spread=float(configs["umap_spread"]),
+                    n_components=configs["umap_n_components"],
+                    neighbors_key=key,
+                    copy=True
+                ).obsm["X_umap"]
+                run_pca = False
+            # update the adata with the components of the dim reductions and umap coordinates
+            adata.obsm.update(rna.obsm)
+            # save the identity of the most variable genes used
+            adata.var[f"is_highly_variable_gene_batch_key_{batch_key}"] = adata.var.index.isin(rna.var.index)
     except Exception as err:
         logger.add_to_log("Execution failed with the following error: {}.\n{}".format(err, traceback.format_exc()), "critical")
         logger.add_to_log("Terminating execution prematurely.")
@@ -419,31 +446,32 @@ for integration_mode in integration_modes:
         celltypist_model_path = os.path.join(data_dir, celltypist_model_url.split("/")[-1])
         urllib.request.urlretrieve(celltypist_model_url, celltypist_model_path)
         celltypist_model_paths.append(celltypist_model_path)
-    dotplot_paths = annotate(
-        adata,
-        model_paths = celltypist_model_paths,
-        model_urls = celltypist_model_urls,
-        components_key = "X_scvi_integrated",
-        neighbors_key = "neighbors_scvi",
-        n_neighbors = configs["neighborhood_graph_n_neighbors"],
-        resolutions = leiden_resolutions,
-        model_name = scvi_model_name,
-        dotplot_min_frac = celltypist_dotplot_min_frac,
-        save_all_outputs = True
-    )
-    if "X_totalVI_integrated" in adata.obsm:
-        dotplot_paths_totalvi = annotate(
+    dotplot_paths = []
+    for batch_key in batch_keys:
+        dotplot_paths += annotate(
             adata,
             model_paths = celltypist_model_paths,
             model_urls = celltypist_model_urls,
-            components_key = "X_totalVI_integrated",
-            neighbors_key = "neighbors_totalvi",
+            components_key = f"X_scvi_integrated_batch_key_{batch_key}",
+            neighbors_key = f"neighbors_scvi",
             n_neighbors = configs["neighborhood_graph_n_neighbors"],
             resolutions = leiden_resolutions,
-            model_name = totalvi_model_name,
-            dotplot_min_frac = celltypist_dotplot_min_frac
+            model_name = f"{scvi_model_name}_batch_key_{batch_key}",
+            dotplot_min_frac = celltypist_dotplot_min_frac,
+            save_all_outputs = True
         )
-        dotplot_paths = dotplot_paths + dotplot_paths_totalvi
+        if "X_totalVI_integrated" in adata.obsm:
+            dotplot_paths += annotate(
+                adata,
+                model_paths = celltypist_model_paths,
+                model_urls = celltypist_model_urls,
+                components_key = f"X_totalVI_integrated_batch_key_{batch_key}",
+                neighbors_key = "neighbors_totalvi",
+                n_neighbors = configs["neighborhood_graph_n_neighbors"],
+                resolutions = leiden_resolutions,
+                model_name = f"{totalvi_model_name}_batch_key_{batch_key}",
+                dotplot_min_frac = celltypist_dotplot_min_frac
+            )
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))
     os.system("mkdir {}".format(dotplot_dir))
@@ -469,10 +497,9 @@ for integration_mode in integration_modes:
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
         logger.add_to_log("Uploading model files (a single .zip file for each model) and CellTypist dot plots to S3...")
-        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" --include {}'.format(
-            data_dir, s3_url, configs["output_prefix"], version, scvi_model_file)
-        if is_cite:
-            sync_cmd += ' --include {}'.format(totalvi_model_file)
+        inclusions = [f"--include {file}" for file in list(scvi_model_files.values()) + list(totalvi_model_files.values())]
+        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" {}'.format(
+            data_dir, s3_url, configs["output_prefix"], version, " ".join(inclusions))
         sync_cmd += ' --include {}'.format(dotplots_zipfile)         
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
