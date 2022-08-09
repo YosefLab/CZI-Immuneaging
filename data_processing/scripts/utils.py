@@ -13,7 +13,7 @@ import anndata
 from anndata import AnnData
 from math import floor
 import csv
-from typing import Type, List, NamedTuple
+from typing import Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
 import gc
@@ -413,21 +413,25 @@ def is_immune_type(df: pd.DataFrame) -> pd.DataFrame:
     known_immune_types = ["ILC", "T cells", "B cells", "monocytes", "Monocytes", "Macrophages", "macrophages", "NK cells", "T\(", "Mast cells", "Treg\(diff\)", "DC"]
     return df.isin(known_immune_types)
 
-def strip_integration_markers(barcode: str) -> str:
+def strip_integration_markers(barcode: str, valid_libs: List[str] = None) -> str:
     # for example from "AACTGTCAAGTCGT-1_CZI-IA11512684-1-2-10" returns "AACTGTCAAGTCGT-1_CZI-IA11512684"
+    # Note this function assumes that the library id encoded in the barcode is of the form xxx-yyy (for example "CZI-IA11512684"),
+    # otherwise, the behavior is undefined
     parts = barcode.split("_")
     cell_barcode = parts[0]
     lib_id_plus_integration_markers = parts[1].split("-")
     lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
+    if valid_libs is not None and lib_id not in valid_libs:
+        raise ValueError(f"lib_id {lib_id} is not a valid library. Are you sure your barcode {barcode} contains a lib_id of the form xxx_yyy?")
     return "_".join([cell_barcode, lib_id])
    
-def get_all_libs(lib_type: str) -> set:
+def get_all_libs(lib_type: str, donor_id: Optional[str] = None) -> set:
     if lib_type not in ["GEX", "BCR", "TCR"]:
         raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
     all_libs = set()
     samples = read_immune_aging_sheet("Samples")
     column_name = "{} lib".format(lib_type)
-    libs_all = samples[column_name]
+    libs_all = samples[column_name] if donor_id is None else samples[samples["Donor ID"] == donor_id][column_name]
     for i in range(len(libs_all)):
         if libs_all.iloc[i] is np.nan:
             continue
