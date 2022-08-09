@@ -53,6 +53,10 @@ configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_
 
 assert(len(all_sample_ids)>1)
 
+# TODO remove this workaround once these two samples have been re-processed
+# as a result of a missing library assignment
+all_sample_ids = all_sample_ids[~np.isin(all_sample_ids, ["647C-LIV-142", "647C-JEJLP-144"])]
+
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
 
@@ -180,6 +184,7 @@ integration_modes = ["stim_unstim"]
 if (len(unstim_sample_ids) > 0) and (len(all_sample_ids)-len(unstim_sample_ids)>0):
     integration_modes += ["unstim", "stim"]
 
+valid_libs = get_all_libs("GEX")
 for integration_mode in integration_modes:
     logger.add_to_log("Running {} integration pipeline...".format(integration_mode))
     if integration_mode == "stim_unstim":
@@ -242,7 +247,8 @@ for integration_mode in integration_modes:
         new_adata_dict = {}
         for sample_id,adata in adata_dict.items():
             # replace adata with the subset of adata that is limited to the compartment barcodes
-            idx = adata.obs.index in barcodes
+            trimmed_adata_index = adata.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
+            idx = trimmed_adata_index in barcodes
             if exclude_barcodes is not None:
                 # also, exclude any cells that are marked as Exclude
                 # Note: The majority of cells to be excluded are removed during earlier stages of the pipeline
@@ -250,9 +256,11 @@ for integration_mode in integration_modes:
                 # we find cells to exclude later on and don't want to go back and re-run earlier processing stages
                 # (ideally though we should in order to keep everything consistent) or if for any other reason we
                 # need to exclude some cells here.
-                idx = idx and (adata.obs.index not in exclude_barcodes)
+                idx = idx and (trimmed_adata_index not in exclude_barcodes)
             if np.sum(idx) > 0: # i.e. if there is at least one cell that passes the condition above
                 new_adata_dict[sample_id] = adata[idx, :].copy()
+            # add the tissue to the adata since we may need it as part of a composite batch_key later
+            new_adata_dict[sample_id]["tissue"] = samples["Organ"][samples["Sample_ID"] == sample_id].values[0]
         if len(new_adata_dict) == 0:
             msg = f"No cells found for compartment {compartment} from all samples in {integration_mode} integration mode..."
             if integration_mode != "stim_unstim":
@@ -341,8 +349,18 @@ for integration_mode in integration_modes:
         run_pca = True
         for batch_key in batch_keys:
             logger.add_to_log("Running for batch_key {}...".format(batch_key))
-            logger.add_to_log("Filtering out vdj genes...")
             rna = adata.copy()
+            if batch_key not in rna.obs:
+                if batch_key == "donor_id+tissue":
+                    rna.obs[batch_key] = rna.obs["donor_id"].astype("str") + "+" + rna.obs["tissue"].astype("str")
+                else:
+                    logger.add_to_log(f"Batch key {batch_key} not found in adata columns. Terminating execution.", level="error")
+                    logging.shutdown()
+                    if not sandbox_mode:
+                        # upload log to S3
+                        aws_sync(data_dir, "{}/{}/{}/".format(s3_url, configs["output_prefix"], version), logger_file, logger, do_log=False)
+                    sys.exit()
+            logger.add_to_log("Filtering out vdj genes...")
             rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
             rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
             rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)

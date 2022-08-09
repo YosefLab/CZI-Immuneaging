@@ -36,7 +36,7 @@ integration_configs = {
         "protein_levels_max_sds": 5,
         "n_highly_variable_genes": 3000,
         "highly_variable_genes_flavor": "seurat_v3",
-        "batch_key": "donor_id",
+        "batch_key": ["donor_id", "donor_id+tissue"],
         "scvi_max_epochs": 400,
         "totalvi_max_epochs": 400,
         "empirical_protein_background_prior": "False",
