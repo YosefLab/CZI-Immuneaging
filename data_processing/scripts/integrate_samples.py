@@ -19,6 +19,7 @@ import traceback
 import celltypist
 import urllib.request
 import zipfile
+import gc
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -33,7 +34,7 @@ with open(configs_file) as f:
 
 configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
-tissue_integration = integration_level == "tissue"
+tissue_integration = configs["integration_level"] == "tissue"
 
 sys.path.append(configs["code_path"])
 from utils import *
@@ -47,15 +48,16 @@ s3_access_file = configs["s3_access_file"]
 order = np.argsort(configs["sample_ids"].split(","))
 all_sample_ids = np.array(configs["sample_ids"].split(","))[order]
 processed_sample_configs_version = np.array(configs["processed_sample_configs_version"].split(","))[order]
+# TODO remove this workaround once these two samples have been re-processed as a result of a missing library assignment
+idx = ~np.isin(all_sample_ids, ["647C-LIV-142", "647C-JEJLP-144"])
+all_sample_ids = all_sample_ids[idx]
+processed_sample_configs_version = processed_sample_configs_version[idx]
 # the followings are required because we check if the integration of the requested samples already exist on aws
 configs["sample_ids"] = ",".join(all_sample_ids)
 configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_version)
 
 assert(len(all_sample_ids)>1)
 
-# TODO remove this workaround once these two samples have been re-processed
-# as a result of a missing library assignment
-all_sample_ids = all_sample_ids[~np.isin(all_sample_ids, ["647C-LIV-142", "647C-JEJLP-144"])]
 
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -210,15 +212,62 @@ for integration_mode in integration_modes:
         dotplot_dirname = "dotplots.stim"
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
+    barcodes = pd.read_csv(barcodes_csv_path, header=None)
+    exclude_barcodes = pd.read_csv(exclude_barcodes_csv_path, header=None) if os.path.isfile(exclude_barcodes_csv_path) else None
+    try:
+        if adata_dict is not None:
+            logger.add_to_log("Cleaning up adata_dict to free up some memory before the next run...")
+            del adata_dict
+            gc.collect()
+    except NameError:
+        pass
     adata_dict = {}
     for j in range(len(h5ad_files)):
         h5ad_file = h5ad_files[j]
         sample_id = sample_ids[j]
-        adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
+        if tissue_integration:
+            adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
+        else:
+            adata_temp = sc.read_h5ad(h5ad_file)
+            # replace adata with the subset of adata that is limited to the compartment barcodes
+            trimmed_adata_index = adata_temp.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
+            idx = trimmed_adata_index.isin(barcodes[0])
+            if exclude_barcodes is not None:
+                # also, exclude any cells that are marked as Exclude
+                # Note: The majority of cells to be excluded are removed during earlier stages of the pipeline
+                # such as sample and library processing. However, we have this additional step here in case that
+                # we find cells to exclude later on and don't want to go back and re-run earlier processing stages
+                # (ideally though we should in order to keep everything consistent) or if for any other reason we
+                # need to exclude some cells here.
+                idx = idx & ~trimmed_adata_index.isin(exclude_barcodes[0])
+            if np.sum(idx) > 0: # i.e. if there is at least one cell that passes the condition above
+                adata_dict[sample_id] = adata_temp[idx, :].copy()
+                del adata_temp
+                gc.collect()
+            else:
+                del adata_temp
+                gc.collect()
+                continue
+        # add the tissue to the adata since we may need it as part of a composite batch_key later
+        adata_dict[sample_id].obs["tissue"] = samples["Organ"][samples["Sample_ID"] == sample_id].values[0]
         adata_dict[sample_id].obs["sample_id"] = sample_id
         for field in ('X_pca', 'X_scVI', 'X_totalVI', 'X_umap_pca', 'X_umap_scvi', 'X_umap_totalvi'):
             if field in adata_dict[sample_id].obsm:
                 del adata_dict[sample_id].obsm[field]
+    if tissue_integration and len(adata_dict) == 0:
+        msg = f"No cells found for compartment {compartment} from all samples in {integration_mode} integration mode..."
+        if integration_mode != "stim_unstim":
+            logger.add_to_log(msg, level="warning")
+            # move on to the next integration mode
+            continue
+        else:
+            logger.add_to_log(msg + " Terminating execution.", level="error")
+            logging.shutdown()
+            if not sandbox_mode:
+                # upload log to S3
+                aws_sync(data_dir, "{}/{}/{}/".format(s3_url, configs["output_prefix"], version), logger_file, logger, do_log=False)
+            sys.exit()
+    sample_ids = list(adata_dict.keys())
     # get the names of all proteins and control proteins across all samples (in case the samples were collected using more than one protein panel)
     proteins = set()
     proteins_ctrl = set()
@@ -240,43 +289,6 @@ for integration_mode in integration_modes:
             if "protein_expression_Ctrl" in adata_dict[sample_id].obsm:
                 df_ctrl[adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_id].obsm["protein_expression_Ctrl"].copy()
             adata_dict[sample_id].obsm["protein_expression_Ctrl"] = df_ctrl
-    if not tissue_integration:
-        logger.add_to_log("Selecting only the compartment-specific cells from all samples...")
-        barcodes = pd.read_csv(barcodes_csv_path)
-        exclude_barcodes = pd.read_csv(exclude_barcodes_csv_path) if os.path.isfile(exclude_barcodes_csv_path) else None
-        new_adata_dict = {}
-        for sample_id,adata in adata_dict.items():
-            # replace adata with the subset of adata that is limited to the compartment barcodes
-            trimmed_adata_index = adata.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
-            idx = trimmed_adata_index in barcodes
-            if exclude_barcodes is not None:
-                # also, exclude any cells that are marked as Exclude
-                # Note: The majority of cells to be excluded are removed during earlier stages of the pipeline
-                # such as sample and library processing. However, we have this additional step here in case that
-                # we find cells to exclude later on and don't want to go back and re-run earlier processing stages
-                # (ideally though we should in order to keep everything consistent) or if for any other reason we
-                # need to exclude some cells here.
-                idx = idx and (trimmed_adata_index not in exclude_barcodes)
-            if np.sum(idx) > 0: # i.e. if there is at least one cell that passes the condition above
-                new_adata_dict[sample_id] = adata[idx, :].copy()
-            # add the tissue to the adata since we may need it as part of a composite batch_key later
-            new_adata_dict[sample_id]["tissue"] = samples["Organ"][samples["Sample_ID"] == sample_id].values[0]
-        if len(new_adata_dict) == 0:
-            msg = f"No cells found for compartment {compartment} from all samples in {integration_mode} integration mode..."
-            if integration_mode != "stim_unstim":
-               logger.add_to_log(msg, level="warning")
-               # move on to the next integration mode
-               continue
-            else:
-                logger.add_to_log(msg + " Terminating execution.", level="error")
-                logging.shutdown()
-                if not sandbox_mode:
-                    # upload log to S3
-                    aws_sync(data_dir, "{}/{}/{}/".format(s3_url, configs["output_prefix"], version), logger_file, logger, do_log=False)
-                sys.exit()
-        else:
-            adata_dict = new_adata_dict
-            sample_ids = list(new_adata_dict.keys())
     logger.add_to_log("Concatenating all datasets...")
     adata = adata_dict[sample_ids[0]]
     if len(sample_ids) > 1:
@@ -420,7 +432,7 @@ for integration_mode in integration_modes:
                     ).obsm["X_umap"]
                 except Exception as err:
                     logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
-            if not pca_run:
+            if run_pca:
                 logger.add_to_log("Calculating PCA...")
                 rna.X = rna.layers["log1p_transformed"]
                 sc.pp.pca(rna)
