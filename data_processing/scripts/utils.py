@@ -327,8 +327,7 @@ def _run_model_impl(
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     train_params = dict()
-    #train_params["max_epochs"] = configs[max_epochs_config_key]
-    train_params["max_epochs"] = 5
+    train_params["max_epochs"] = configs[max_epochs_config_key]
     for i in train_params_keys:
         if i in configs:
             train_params[i] = configs[i]

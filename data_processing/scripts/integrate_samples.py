@@ -48,16 +48,11 @@ s3_access_file = configs["s3_access_file"]
 order = np.argsort(configs["sample_ids"].split(","))
 all_sample_ids = np.array(configs["sample_ids"].split(","))[order]
 processed_sample_configs_version = np.array(configs["processed_sample_configs_version"].split(","))[order]
-# TODO remove this workaround once these two samples have been re-processed as a result of a missing library assignment
-#idx = ~np.isin(all_sample_ids, ["647C-LIV-142", "647C-JEJLP-144"])
-#all_sample_ids = all_sample_ids[idx]
-#processed_sample_configs_version = processed_sample_configs_version[idx]
 # the followings are required because we check if the integration of the requested samples already exist on aws
 configs["sample_ids"] = ",".join(all_sample_ids)
 configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_version)
 
 assert(len(all_sample_ids)>1)
-
 
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
 sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -299,8 +294,8 @@ for integration_mode in integration_modes:
     [j for j in adata.var.columns if "mean_counts" in j] + \
     [j for j in adata.var.columns if "pct_dropout_by_counts" in j] + \
     [j for j in adata.var.columns if "total_counts" in j]
-    logger.add_to_log("adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)] = ...".format(len(adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].columns)))
-    #3adata.varm["gene_stats"] = adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)]
+    output_gene_stats_csv_file = "{}.{}.gene_stats.csv".format(prefix, version)
+    adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].to_csv(output_gene_stats_csv_file)
     adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
     # protein QC
     protein_levels_max_sds = configs["protein_levels_max_sds"] if "protein_levels_max_sds" in configs else None
