@@ -49,9 +49,9 @@ order = np.argsort(configs["sample_ids"].split(","))
 all_sample_ids = np.array(configs["sample_ids"].split(","))[order]
 processed_sample_configs_version = np.array(configs["processed_sample_configs_version"].split(","))[order]
 # TODO remove this workaround once these two samples have been re-processed as a result of a missing library assignment
-idx = ~np.isin(all_sample_ids, ["647C-LIV-142", "647C-JEJLP-144"])
-all_sample_ids = all_sample_ids[idx]
-processed_sample_configs_version = processed_sample_configs_version[idx]
+#idx = ~np.isin(all_sample_ids, ["647C-LIV-142", "647C-JEJLP-144"])
+#all_sample_ids = all_sample_ids[idx]
+#processed_sample_configs_version = processed_sample_configs_version[idx]
 # the followings are required because we check if the integration of the requested samples already exist on aws
 configs["sample_ids"] = ",".join(all_sample_ids)
 configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_version)
@@ -153,12 +153,13 @@ for j in range(len(all_sample_ids)):
     else:
         stim_sample_ids.append(sample_id)
         stim_h5ad_files.append(sample_h5ad_path)
-    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
+    if not os.path.exists(sample_h5ad_path):
+        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
         sample_id,sample_version,data_dir,sample_h5ad_file)
-    logger.add_to_log("syncing {}...".format(sample_h5ad_file))
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-    aws_response = os.popen(sync_cmd).read()
-    logger.add_to_log("aws response: {}\n".format(aws_response))
+        logger.add_to_log("syncing {}...".format(sample_h5ad_file))
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        aws_response = os.popen(sync_cmd).read()
+        logger.add_to_log("aws response: {}\n".format(aws_response))
     if not os.path.exists(sample_h5ad_path):
         logger.add_to_log("h5ad file does not exist on aws for sample {}. Terminating execution.".format(sample_id))
         sys.exit()
@@ -298,7 +299,8 @@ for integration_mode in integration_modes:
     [j for j in adata.var.columns if "mean_counts" in j] + \
     [j for j in adata.var.columns if "pct_dropout_by_counts" in j] + \
     [j for j in adata.var.columns if "total_counts" in j]
-    adata.varm["gene_stats"] = adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)]
+    logger.add_to_log("adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)] = ...".format(len(adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].columns)))
+    #3adata.varm["gene_stats"] = adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)]
     adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
     # protein QC
     protein_levels_max_sds = configs["protein_levels_max_sds"] if "protein_levels_max_sds" in configs else None
@@ -488,6 +490,7 @@ for integration_mode in integration_modes:
             resolutions = leiden_resolutions,
             model_name = f"{scvi_model_name}_batch_key_{batch_key}",
             dotplot_min_frac = celltypist_dotplot_min_frac,
+            logger = logger,
             save_all_outputs = True
         )
         if "X_totalVI_integrated" in adata.obsm:
@@ -500,7 +503,8 @@ for integration_mode in integration_modes:
                 n_neighbors = configs["neighborhood_graph_n_neighbors"],
                 resolutions = leiden_resolutions,
                 model_name = f"{totalvi_model_name}_batch_key_{batch_key}",
-                dotplot_min_frac = celltypist_dotplot_min_frac
+                dotplot_min_frac = celltypist_dotplot_min_frac,
+                logger = logger,
             )
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))

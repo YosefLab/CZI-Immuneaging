@@ -18,6 +18,8 @@ import traceback
 from datetime import datetime
 import gc
 from logger import BaseLogger
+import scanpy as sc
+import celltypist
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
@@ -325,7 +327,8 @@ def _run_model_impl(
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     train_params = dict()
-    train_params["max_epochs"] = configs[max_epochs_config_key]
+    #train_params["max_epochs"] = configs[max_epochs_config_key]
+    train_params["max_epochs"] = 5
     for i in train_params_keys:
         if i in configs:
             train_params[i] = configs[i]
@@ -546,6 +549,7 @@ def annotate(
     resolutions,
     model_name,
     dotplot_min_frac,
+    logger,
     save_all_outputs: bool = False
 ):
     adata_new = adata.copy()
