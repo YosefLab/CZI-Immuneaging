@@ -324,13 +324,14 @@ def _run_model_impl(
     logger.add_to_log("Training {} model with batch key {}...".format(model_name, batch_key))
     model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, \
         empirical_protein_background_prior = empirical_protein_background_prior, **model_params)
-    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
-    train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     train_params = dict()
-    train_params["max_epochs"] = configs[max_epochs_config_key]
+    train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     for i in train_params_keys:
         if i in configs:
             train_params[i] = configs[i]
+    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
+    if max_epochs_config_key in configs:
+        train_params["max_epochs"] = configs[max_epochs_config_key]
     model.train(**train_params)
     logger.add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()

@@ -38,8 +38,6 @@ integration_configs = {
         "n_highly_variable_genes": 3000,
         "highly_variable_genes_flavor": "seurat_v3",
         "batch_key": "donor_id" if tissue_integration else "donor_id,donor_id+tissue",
-        "scvi_max_epochs": 400,
-        "totalvi_max_epochs": 400,
         "empirical_protein_background_prior": "False",
         # The following non-default configurations of scvi and totalvi can be used for speed up in case of very large numbers of cells.
         #"use_layer_norm": "none",
@@ -60,6 +58,10 @@ integration_configs = {
         "r_setup_version": "immune_aging.R_setup.v2",
         "pipeline_version": "v3",
     }
+    
+if tissue_integration:
+    integration_configs["scvi_max_epochs"] = 400
+    integration_configs["totalvi_max_epochs"] = 400
 
 set_access_keys(s3_access_file)
 

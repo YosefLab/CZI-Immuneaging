@@ -289,13 +289,13 @@ for integration_mode in integration_modes:
     adata = adata_dict[sample_ids[0]]
     if len(sample_ids) > 1:
         adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
-    # Move the summary statistics of the genes (under .var) to .varm
+    # Move the summary statistics of the genes (under .var) to a separate csv file
     cols_to_varm = [j for j in adata.var.columns if "n_cells" in j] + \
     [j for j in adata.var.columns if "mean_counts" in j] + \
     [j for j in adata.var.columns if "pct_dropout_by_counts" in j] + \
     [j for j in adata.var.columns if "total_counts" in j]
     output_gene_stats_csv_file = "{}.{}.gene_stats.csv".format(prefix, version)
-    adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].to_csv(output_gene_stats_csv_file)
+    adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].to_csv(os.path.join(data_dir,output_gene_stats_csv_file))
     adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
     # protein QC
     protein_levels_max_sds = configs["protein_levels_max_sds"] if "protein_levels_max_sds" in configs else None
@@ -347,6 +347,8 @@ for integration_mode in integration_modes:
     logger.add_to_log("A total of {} cells and {} genes are available after merge.".format(adata.n_obs, adata.n_vars))
     # set the train size; this train size was justified by an experiment that is described here https://yoseflab.github.io/scvi-tools-reproducibility/runtime_analysis_reproducibility/
     configs["train_size"] = 0.9 if 0.1 * adata.n_obs < 20000 else 1-(20000/adata.n_obs)
+    if (not tissue_integration) and adata.n_obs > 200000:
+        configs["early_stopping"] = "True"
     try:
         is_cite = "protein_expression" in adata.obsm
         if is_cite:
@@ -530,6 +532,11 @@ for integration_mode in integration_modes:
         sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{}/ --exclude "*" {}'.format(
             data_dir, s3_url, configs["output_prefix"], version, " ".join(inclusions))
         sync_cmd += ' --include {}'.format(dotplots_zipfile)         
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        logger.add_to_log("Uploading gene stats csv file to S3...")
+        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
+            data_dir, s3_url, configs["output_prefix"], version, output_gene_stats_csv_file)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
     logger.add_to_log("Number of cells: {}, number of genes: {}.".format(adata.n_obs, adata.n_vars))
