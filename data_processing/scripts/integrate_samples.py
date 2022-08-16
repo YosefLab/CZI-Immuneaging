@@ -188,24 +188,17 @@ for integration_mode in integration_modes:
     if integration_mode == "stim_unstim":
         sample_ids = all_sample_ids
         h5ad_files = all_h5ad_files
-        prefix = configs["output_prefix"]
-        scvi_model_name = "scvi"
-        totalvi_model_name = "totalvi"
-        dotplot_dirname = "dotplots"
+        mode_suffix = ""
     elif integration_mode == "unstim":
         sample_ids = unstim_sample_ids
         h5ad_files = unstim_h5ad_files
-        prefix = configs["output_prefix"] + ".unstim"
-        scvi_model_name = "scvi.unstim"
-        totalvi_model_name = "totalvi.unstim"
-        dotplot_dirname = "dotplots.unstim"
+        mode_suffix = ".unstim"
     else:
         sample_ids = stim_sample_ids
         h5ad_files = stim_h5ad_files
-        prefix = configs["output_prefix"] + ".stim"
-        scvi_model_name = "scvi.stim"
-        totalvi_model_name = "totalvi.stim"
-        dotplot_dirname = "dotplots.stim"
+        mode_suffix = ".stim"
+    prefix = configs["output_prefix"] + mode_suffix
+    dotplot_dirname = "dotplots" + mode_suffix
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
     barcodes = pd.read_csv(barcodes_csv_path, header=None)
@@ -485,21 +478,22 @@ for integration_mode in integration_modes:
             neighbors_key = f"neighbors_scvi",
             n_neighbors = configs["neighborhood_graph_n_neighbors"],
             resolutions = leiden_resolutions,
-            model_name = f"{scvi_model_name}_batch_key_{batch_key}",
+            model_name = f"scvi_batch_key_{batch_key}" + mode_suffix,
             dotplot_min_frac = celltypist_dotplot_min_frac,
             logger = logger,
             save_all_outputs = True
         )
-        if "X_totalVI_integrated" in adata.obsm:
+        totalvi_key = f"X_totalVI_integrated_batch_key_{batch_key}"
+        if totalvi_key in adata.obsm:
             dotplot_paths += annotate(
                 adata,
                 model_paths = celltypist_model_paths,
                 model_urls = celltypist_model_urls,
-                components_key = f"X_totalVI_integrated_batch_key_{batch_key}",
+                components_key = totalvi_key,
                 neighbors_key = "neighbors_totalvi",
                 n_neighbors = configs["neighborhood_graph_n_neighbors"],
                 resolutions = leiden_resolutions,
-                model_name = f"{totalvi_model_name}_batch_key_{batch_key}",
+                model_name = f"totalvi_batch_key_{batch_key}" + mode_suffix,
                 dotplot_min_frac = celltypist_dotplot_min_frac,
                 logger = logger,
             )

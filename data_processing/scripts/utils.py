@@ -334,6 +334,10 @@ def _run_model_impl(
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     if max_epochs_config_key in configs:
         train_params["max_epochs"] = configs[max_epochs_config_key]
+    elif model_name == "totalvi":
+        # totalvi has a bug where it fails to heuristically determine max_epochs
+        # so for now we replicate that code below (https://github.com/scverse/scvi-tools/issues/1638)
+        train_params["max_epochs"] = np.min([round((20000 / adata.n_obs) * 400), 400])
     model.train(**train_params)
     if "elbo_train" in model.history_:
         logger.add_to_log("Number of {} training epochs: {}...".format(model_name, len(model.history_["elbo_train"])))
