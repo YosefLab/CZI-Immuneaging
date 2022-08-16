@@ -21,6 +21,8 @@ from logger import BaseLogger
 import scanpy as sc
 import celltypist
 
+logging.getLogger('numba').setLevel(logging.WARNING)
+
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
 class CELLRANGER_METRICS_NT(NamedTuple):
@@ -333,6 +335,8 @@ def _run_model_impl(
     if max_epochs_config_key in configs:
         train_params["max_epochs"] = configs[max_epochs_config_key]
     model.train(**train_params)
+    if "elbo_train" in model.history_:
+        logger.add_to_log("Number of {} training epochs: {}...".format(model_name, len(model.history_["elbo_train"])))
     logger.add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()
     if latent_key is None:
