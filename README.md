@@ -32,7 +32,7 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
     1. [Aligning libraries](#admins_lib_alignment)
     2. [Executing job queue jobs](#admins_job_queue_execution)
     3. [Generating job configs](#admins_job_configs_generation)
-    4. [Tissue-level integration](#tissue_integration)
+    4. [Sample integration](#sample_integration)
 
 ---
 
@@ -84,7 +84,7 @@ Note that:
 We provide this <a href= "https://docs.google.com/spreadsheets/d/1v1TT1uJHTAxemnPmORX8XvSDZCXWq27ZK0Nbfugjts0/edit?usp=sharing">dashboard</a>, which reflects the current state of the data. The dashboard includes the following three sheets:
 1. Tissue Coverage - describes the coverage of tissues across donors.
 2. Samples QC - provides basic quality control summaries for each processed sample, as well as detailed warnings and/or errors that were issued during processing.
-3. Tissue Integration - shows basic information on the current tissue-level integrations in the project, including the sample IDs and ages of the samples that were used for generating the data for each tissue. The last two columns provide links to the data files and to figures that demonstrate the integration through multiple UMAPs colored by different metadata and variables of the experimental design. Note that these links are accessible only after loging into the AWS console ([see instructions here](#preliminaries_access)).
+3. Tissue Integration - shows basic information on the current tissue-level integrations in the project, including the sample IDs and ages of the samples that were used for generating the data for each tissue. The last two columns provide links to the data files and to figures that demonstrate the integration through multiple UMAPs colored by different metadata and variables of the experimental design. Note that these links are accessible only after logging into the AWS console ([see instructions here](#preliminaries_access)).
 
 ## <a name="download"></a> Data Download
 
@@ -205,7 +205,7 @@ The `integrated_samples` directory stores integrated data. Particularly, integra
         * tissue2/
         * ...
 
-The `.h5ad` file is the integrated data file, the `.zip` files incude the scVI and totalVI models and figures showing the integration (UMAPs colored by different variables), the `.txt` file includes the configurations that were used in the execution of the sample integration (i.e., `integrate_samples.py`), and the `.log` file provides a documentation of the execution of the integration. 
+The `.h5ad` file is the integrated data file, the `.zip` files incudes the scVI and totalVI models and figures showing the integration (UMAPs colored by different variables), the `.txt` file includes the configurations that were used in the execution of the sample integration (i.e., `integrate_samples.py`), and the `.log` file provides a documentation of the execution of the integration. 
 
 ### <a name="download_console"></a> Downloading data via the AWS console
 
@@ -462,11 +462,11 @@ adding keys to the config files - (1) if adding keys that should not affect on v
 link to the configs template and description of `align_library.py`
 -->
 
-### <a name="tissue_integration"></a> Tissue-level integration
+### <a name="sample_integration"></a> Sample integration
 
-The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue, thus creating tissue-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
+The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue or compartment, thus creating tissue-level or compartment-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
 
-In addition, the script `generate_tissue_integration_config_files.py` automatically generates configuration files for `integrate_samples.py` - one per tissue - by collecting for each tissue the list of available processed samples.
+In addition, the script `generate_integration_config_files_and_scripts.py` automatically generates configuration files for `integrate_samples.py` - one per tissue or compartment - by collecting for each tissue/compartment the list of available processed samples. Note that for a compartment, we simply grab all samples at this stage. Later, during the execution of the integrate_samples script, we only select cells from each sample that belong to that compartment.
 
 
 ---

@@ -13,11 +13,15 @@ import anndata
 from anndata import AnnData
 from math import floor
 import csv
-from typing import Type, List, NamedTuple
+from typing import Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
 import gc
 from logger import BaseLogger
+import scanpy as sc
+import celltypist
+
+logging.getLogger('numba').setLevel(logging.WARNING)
 
 AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
@@ -194,7 +198,7 @@ def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False)
 
     with warnings.catch_warnings(record=True) as w:
         warnings.filterwarnings("error")
-        #output_fn = gdown.download(url, output_fn, quiet=quiet, fuzzy=True)
+        # output_fn = gdown.download(url, output_fn, quiet=quiet, fuzzy=True)
         output_fn = gdown.download(url, output_fn, quiet=quiet)
 
         if len(w) == 1:
@@ -319,33 +323,36 @@ def _run_model_impl(
     for i in model_params_keys:
         if i in configs:
             model_params[i] = configs[i]
-    logger.add_to_log("Training {} model...".format(model_name))
+    logger.add_to_log("Training {} model with batch key {}...".format(model_name, batch_key))
     model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, \
         empirical_protein_background_prior = empirical_protein_background_prior, **model_params)
-    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
-    train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     train_params = dict()
-    train_params["max_epochs"] = configs[max_epochs_config_key]
+    train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
     for i in train_params_keys:
         if i in configs:
             train_params[i] = configs[i]
+    max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
+    if max_epochs_config_key in configs:
+        train_params["max_epochs"] = configs[max_epochs_config_key]
     model.train(**train_params)
+    if "elbo_train" in model.history_:
+        logger.add_to_log("Number of {} training epochs: {}...".format(model_name, len(model.history_["elbo_train"])))
     logger.add_to_log("Saving {} latent representation...".format(model_name))
     latent = model.get_latent_representation()
     if latent_key is None:
         latent_key = "X_scVI" if model_name=="scvi" else "X_totalVI"
     adata.obsm[latent_key] = latent
-    model_file = "{}.{}.{}_model.zip".format(prefix, version, model_name)
+    model_file = "{}.{}.{}_model_batch_key_{}.zip".format(prefix, version, model_name, batch_key)
     logger.add_to_log("Saving the model into {}...".format(model_file))
     model_file_path = os.path.join(data_dir, model_file)
-    model_dir_path = os.path.join(data_dir,"{}.{}_model/".format(prefix, model_name))
+    model_dir_path = os.path.join(data_dir,"{}.{}_model_batch_key_{}/".format(prefix, model_name, batch_key))
     if os.path.isdir(model_dir_path):
         os.system("rm -r " + model_dir_path)
     model.save(model_dir_path)
     # save the data used for fitting the model; this is useful for applying reference-based integration on query data later on (based on the current model and data).
     logger.add_to_log("Saving the data used for fitting the model...")
     os.path.join(data_dir, model_file)
-    data_file = "{}.{}.{}_model.data.h5ad".format(prefix, version, model_name)
+    data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
     adata_copy = adata.copy()
     write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
     # zip the dir with all the model outputs
@@ -354,12 +361,14 @@ def _run_model_impl(
     zipf.close()
     return model, model_file
 
-def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger]) -> None:
+def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger], do_log: bool = True) -> None:
     sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(source, target, include)
-    logger.add_to_log("syncing {}...".format(include))
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    if do_log:
+        logger.add_to_log("syncing {}...".format(include))
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     aws_response = os.popen(sync_cmd).read()
-    logger.add_to_log("aws response: {}\n".format(aws_response))
+    if do_log:
+        logger.add_to_log("aws response: {}\n".format(aws_response))
 
 def filter_vdj_genes(rna: AnnData, aws_file_path: str, data_dir: str, logger: Type[BaseLogger]) -> AnnData:
     file_path_components = aws_file_path.split("/")
@@ -411,21 +420,25 @@ def is_immune_type(df: pd.DataFrame) -> pd.DataFrame:
     known_immune_types = ["ILC", "T cells", "B cells", "monocytes", "Monocytes", "Macrophages", "macrophages", "NK cells", "T\(", "Mast cells", "Treg\(diff\)", "DC"]
     return df.isin(known_immune_types)
 
-def strip_integration_markers(barcode: str) -> str:
+def strip_integration_markers(barcode: str, valid_libs: List[str] = None) -> str:
     # for example from "AACTGTCAAGTCGT-1_CZI-IA11512684-1-2-10" returns "AACTGTCAAGTCGT-1_CZI-IA11512684"
+    # Note this function assumes that the library id encoded in the barcode is of the form xxx-yyy (for example "CZI-IA11512684"),
+    # otherwise, the behavior is undefined
     parts = barcode.split("_")
     cell_barcode = parts[0]
     lib_id_plus_integration_markers = parts[1].split("-")
     lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
+    if valid_libs is not None and lib_id not in valid_libs:
+        raise ValueError(f"lib_id {lib_id} is not a valid library. Are you sure your barcode {barcode} contains a lib_id of the form xxx_yyy?")
     return "_".join([cell_barcode, lib_id])
    
-def get_all_libs(lib_type: str) -> set:
+def get_all_libs(lib_type: str, donor_id: Optional[str] = None) -> set:
     if lib_type not in ["GEX", "BCR", "TCR"]:
         raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(lib_type))
     all_libs = set()
     samples = read_immune_aging_sheet("Samples")
     column_name = "{} lib".format(lib_type)
-    libs_all = samples[column_name]
+    libs_all = samples[column_name] if donor_id is None else samples[samples["Donor ID"] == donor_id][column_name]
     for i in range(len(libs_all)):
         if libs_all.iloc[i] is np.nan:
             continue
@@ -507,3 +520,86 @@ def read_csv_from_aws(
         logger.add_to_log(msg, level="error")
         raise ValueError(msg)
     return pd.read_csv(file_path)
+
+# detects which datapoints in x have extreme values (does not count missing data as outliers)
+def detect_outliers(x, num_sds):
+    # a value is considered as an outlier if it is more extreme that the mean plus (or minus) num_sds times the standard deviation
+    assert np.sum(x<0) == 0
+    m, s = np.nanmean(x), np.nanstd(x)
+    lower_bound = np.maximum(0, m - s*num_sds)
+    upper_bound = m + s*num_sds
+    is_not_outlier = np.logical_and(x >= lower_bound, x <= upper_bound)
+    # do not consider missing values as outliers
+    return np.logical_or(x.isna(), is_not_outlier), lower_bound, upper_bound
+
+# find and return, among the given labels, those that constitute at least the given fraction (frac) of all the labels
+def find_abundant_labels(labels, frac):
+    labels.unique()
+    labels_include = []
+    th = frac*len(labels)
+    unique_labels = np.unique(labels)
+    for l in unique_labels:
+        if np.sum(labels == l) > th:
+            labels_include.append(l)
+    return labels_include
+
+def annotate(
+    adata,
+    model_paths,
+    model_urls,
+    components_key,
+    neighbors_key,
+    n_neighbors,
+    resolutions,
+    model_name,
+    dotplot_min_frac,
+    logger,
+    save_all_outputs: bool = False
+):
+    adata_new = adata.copy()
+    dotplot_paths = []
+    for r in range(len(resolutions)):
+        resolution = resolutions[r]
+        logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
+        sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
+        sc.tl.leiden(adata_new, resolution = resolution, key_added = 'leiden', neighbors_key = neighbors_key)
+        # save the leiden clusters and majority voting results in the original anndata
+        adata.obs["leiden_resolution_" + str(resolution)] = adata_new.obs["leiden"]
+        for m in range(len(model_paths)):
+            celltypist_model_name = model_urls[m].split("/")[-1].split(".")[0]
+            model_path = model_paths[m]
+            logger.add_to_log("Running CellTypist annotation using model {0}...".format(model_path))
+            predictions = celltypist.annotate(adata_new, model = model_path, majority_voting = True, over_clustering = 'leiden')
+            logger.add_to_log("Saving CellTypist outputs for model {0}...".format(model_path))
+            adata.obs["celltypist_majority_voting.{0}.{1}.leiden_resolution_{2}".format(celltypist_model_name, model_name, str(resolution))] = predictions.predicted_labels["majority_voting"]
+            if r == 0 and save_all_outputs:
+                # save the rest of the outputs; these outputs do not change with different leiden resolution so should save only once
+                adata.obs["celltypist_model_url.{0}".format(celltypist_model_name)] = model_urls[m]
+                adata.obs["celltypist_predicted_labels.{0}".format(celltypist_model_name)] = predictions.predicted_labels["predicted_labels"]
+                adata.obsm["celltypist_probability_matrix.{0}".format(celltypist_model_name)] = predictions.probability_matrix
+            # generate and save a dotplot only for the abundant cell types
+            logger.add_to_log("Generating a dotplot based on the CellTypist outputs...")
+            abundant_cell_types = find_abundant_labels(labels = predictions.predicted_labels["predicted_labels"], frac = dotplot_min_frac)
+            dotplot_predictions = celltypist.annotate(
+                adata_new[predictions.predicted_labels["predicted_labels"].isin(abundant_cell_types),:].copy(),
+                model = model_path,
+                majority_voting = True,
+                over_clustering = 'leiden'
+            )
+            celltypist.dotplot(
+                dotplot_predictions,
+                use_as_reference = 'leiden',
+                use_as_prediction = 'predicted_labels',
+                show = False,
+                return_fig = False
+            )
+            dotplot_filename = "celltypist_dotplot.{}.{}.leiden_resolution_{}.min_frac_{}".format(
+                celltypist_model_name,
+                model_name,
+                str(resolution),
+                str(dotplot_min_frac)
+            )
+            sc.pl._utils.savefig_or_show(dotplot_filename, show = False, save = True)
+            # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
+            dotplot_paths.append(os.path.join(os.getcwd(), "figures", dotplot_filename + ".pdf"))
+    return dotplot_paths
