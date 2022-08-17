@@ -357,6 +357,15 @@ for integration_mode in integration_modes:
             if batch_key not in rna.obs:
                 if batch_key == "donor_id+tissue":
                     rna.obs[batch_key] = rna.obs["donor_id"].astype("str") + "+" + rna.obs["tissue"].astype("str")
+                    # we need to remove cells, if any, that belong to a batch that has a size one
+                    # or else the scanpy hvg call below fails. It is ok if there is only ever one or
+                    # two such cells, but not if there is a lot of them, which is why we emit a warning
+                    # log.
+                    batch_vc = rna.obs["donor_id+tissue"].value_counts()
+                    for b in batch_vc[batch_vc == 1].index.values:
+                        barcode = rna[rna.obs[batch_key] == b].obs.index[0]
+                        logger.add_to_log(f"Removing cell {barcode} where {batch_key} = {b}.", level="warning")
+                        rna = rna[rna.obs[batch_key] != b,:].copy()
                 else:
                     logger.add_to_log(f"Batch key {batch_key} not found in adata columns. Terminating execution.", level="error")
                     logging.shutdown()
