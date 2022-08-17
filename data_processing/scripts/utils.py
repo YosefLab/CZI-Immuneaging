@@ -20,6 +20,7 @@ import gc
 from logger import BaseLogger
 import scanpy as sc
 import celltypist
+import logging
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
