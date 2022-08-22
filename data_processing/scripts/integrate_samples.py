@@ -148,13 +148,12 @@ for j in range(len(all_sample_ids)):
     else:
         stim_sample_ids.append(sample_id)
         stim_h5ad_files.append(sample_h5ad_path)
-    if not os.path.exists(sample_h5ad_path):
-        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
-        sample_id,sample_version,data_dir,sample_h5ad_file)
-        logger.add_to_log("syncing {}...".format(sample_h5ad_file))
-        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-        aws_response = os.popen(sync_cmd).read()
-        logger.add_to_log("aws response: {}\n".format(aws_response))
+    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
+    sample_id,sample_version,data_dir,sample_h5ad_file)
+    logger.add_to_log("syncing {}...".format(sample_h5ad_file))
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    aws_response = os.popen(sync_cmd).read()
+    logger.add_to_log("aws response: {}\n".format(aws_response))
     if not os.path.exists(sample_h5ad_path):
         logger.add_to_log("h5ad file does not exist on aws for sample {}. Terminating execution.".format(sample_id))
         sys.exit()
