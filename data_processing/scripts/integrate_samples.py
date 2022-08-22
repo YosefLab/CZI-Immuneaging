@@ -148,13 +148,12 @@ for j in range(len(all_sample_ids)):
     else:
         stim_sample_ids.append(sample_id)
         stim_h5ad_files.append(sample_h5ad_path)
-    if not os.path.exists(sample_h5ad_path):
-        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
-        sample_id,sample_version,data_dir,sample_h5ad_file)
-        logger.add_to_log("syncing {}...".format(sample_h5ad_file))
-        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-        aws_response = os.popen(sync_cmd).read()
-        logger.add_to_log("aws response: {}\n".format(aws_response))
+    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
+    sample_id,sample_version,data_dir,sample_h5ad_file)
+    logger.add_to_log("syncing {}...".format(sample_h5ad_file))
+    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+    aws_response = os.popen(sync_cmd).read()
+    logger.add_to_log("aws response: {}\n".format(aws_response))
     if not os.path.exists(sample_h5ad_path):
         logger.add_to_log("h5ad file does not exist on aws for sample {}. Terminating execution.".format(sample_id))
         sys.exit()
@@ -188,24 +187,17 @@ for integration_mode in integration_modes:
     if integration_mode == "stim_unstim":
         sample_ids = all_sample_ids
         h5ad_files = all_h5ad_files
-        prefix = configs["output_prefix"]
-        scvi_model_name = "scvi"
-        totalvi_model_name = "totalvi"
-        dotplot_dirname = "dotplots"
+        mode_suffix = ""
     elif integration_mode == "unstim":
         sample_ids = unstim_sample_ids
         h5ad_files = unstim_h5ad_files
-        prefix = configs["output_prefix"] + ".unstim"
-        scvi_model_name = "scvi.unstim"
-        totalvi_model_name = "totalvi.unstim"
-        dotplot_dirname = "dotplots.unstim"
+        mode_suffix = ".unstim"
     else:
         sample_ids = stim_sample_ids
         h5ad_files = stim_h5ad_files
-        prefix = configs["output_prefix"] + ".stim"
-        scvi_model_name = "scvi.stim"
-        totalvi_model_name = "totalvi.stim"
-        dotplot_dirname = "dotplots.stim"
+        mode_suffix = ".stim"
+    prefix = configs["output_prefix"] + mode_suffix
+    dotplot_dirname = "dotplots" + mode_suffix
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
     barcodes = pd.read_csv(barcodes_csv_path, header=None)
@@ -364,6 +356,18 @@ for integration_mode in integration_modes:
             if batch_key not in rna.obs:
                 if batch_key == "donor_id+tissue":
                     rna.obs[batch_key] = rna.obs["donor_id"].astype("str") + "+" + rna.obs["tissue"].astype("str")
+                    # we need to remove cells, if any, that belong to a batch that has a size one
+                    # or else the scanpy hvg call below fails. It is ok if there is only ever one or
+                    # two such cells, but not if there is a lot of them, which is why we emit a warning
+                    # log.
+                    batch_vc = rna.obs["donor_id+tissue"].value_counts()
+                    for b in batch_vc[batch_vc == 1].index.values:
+                        barcode = rna[rna.obs[batch_key] == b].obs.index[0]
+                        logger.add_to_log(f"Removing cell {barcode} where {batch_key} = {b} b/c it's the only one of its batch.", level="warning")
+                        keep_idx = (rna.obs[batch_key] != b)
+                        rna = rna[keep_idx,:].copy()
+                        # need to also remove it from adata
+                        adata = adata[keep_idx,:].copy()
                 else:
                     logger.add_to_log(f"Batch key {batch_key} not found in adata columns. Terminating execution.", level="error")
                     logging.shutdown()
@@ -485,21 +489,22 @@ for integration_mode in integration_modes:
             neighbors_key = f"neighbors_scvi",
             n_neighbors = configs["neighborhood_graph_n_neighbors"],
             resolutions = leiden_resolutions,
-            model_name = f"{scvi_model_name}_batch_key_{batch_key}",
+            model_name = f"scvi_batch_key_{batch_key}" + mode_suffix,
             dotplot_min_frac = celltypist_dotplot_min_frac,
             logger = logger,
             save_all_outputs = True
         )
-        if "X_totalVI_integrated" in adata.obsm:
+        totalvi_key = f"X_totalVI_integrated_batch_key_{batch_key}"
+        if totalvi_key in adata.obsm:
             dotplot_paths += annotate(
                 adata,
                 model_paths = celltypist_model_paths,
                 model_urls = celltypist_model_urls,
-                components_key = f"X_totalVI_integrated_batch_key_{batch_key}",
+                components_key = totalvi_key,
                 neighbors_key = "neighbors_totalvi",
                 n_neighbors = configs["neighborhood_graph_n_neighbors"],
                 resolutions = leiden_resolutions,
-                model_name = f"{totalvi_model_name}_batch_key_{batch_key}",
+                model_name = f"totalvi_batch_key_{batch_key}" + mode_suffix,
                 dotplot_min_frac = celltypist_dotplot_min_frac,
                 logger = logger,
             )

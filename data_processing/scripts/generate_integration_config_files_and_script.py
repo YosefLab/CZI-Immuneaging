@@ -24,7 +24,7 @@ python_env = "immune_aging.py_env.v4"
 pilot_donors = ["CUIMC-457","CUIMC-471","390C"]
 
 celltypist_model_urls = "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v2/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v2/Immune_All_High.pkl"
-leiden_resolutions = "1.0,2.0,3.0,5.0,7.0,10.0,15.0"
+leiden_resolutions = "1.0,2.0,3.0,5.0,7.0,10.0"
 
 tissue_integration = integration_level == "tissue"
 integration_configs = {
