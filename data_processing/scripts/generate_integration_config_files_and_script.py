@@ -35,10 +35,11 @@ integration_configs = {
         "s3_access_file": s3_access_file,
         "integration_level": integration_level,
         "protein_levels_max_sds": 5,
-        "n_highly_variable_genes": 3000,
+        "n_highly_variable_genes": 3000 if tissue_integration else 10000,
         "highly_variable_genes_flavor": "seurat_v3",
         "batch_key": "donor_id" if tissue_integration else "donor_id,donor_id+tissue",
         "empirical_protein_background_prior": "False",
+        "n_latent": 30,
         # The following non-default configurations of scvi and totalvi can be used for speed up in case of very large numbers of cells.
         #"use_layer_norm": "none",
         #"use_batch_norm": "both",
