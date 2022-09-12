@@ -569,7 +569,8 @@ def annotate(
         sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
         sc.tl.leiden(adata_new, resolution = resolution, key_added = 'leiden', neighbors_key = neighbors_key)
         # save the leiden clusters and majority voting results in the original anndata
-        adata.obs["leiden_resolution_" + str(resolution)] = adata_new.obs["leiden"]
+        leiden_key_added = f"{model_name}.leiden_resolution_{str(resolution)}"
+        adata.obs[leiden_key_added] = adata_new.obs["leiden"]
         for m in range(len(model_paths)):
             celltypist_model_name = model_urls[m].split("/")[-1].split(".")[0]
             model_path = model_paths[m]
