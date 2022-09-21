@@ -124,7 +124,7 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 		is_new_version = True
 	return [is_new_version,"v"+str(version)]
 
-def get_latest_lib_version(s3_access_file: str, s3_lib_path: str):
+def get_latest_lib_version(s3_access_file: str, s3_lib_path: str, lib_folder_name: Optional[str] = None):
     set_access_keys(s3_access_file)
     latest_version = -1
     ls_cmd = 'aws s3 ls {} --recursive'.format(s3_lib_path)
@@ -135,6 +135,8 @@ def get_latest_lib_version(s3_access_file: str, s3_lib_path: str):
         pattern = "/v(\d+)/"
         filenames = ls.split("\n")
         for filename in filenames:
+            if lib_folder_name is not None and lib_folder_name not in filename:
+                continue
             m = re.search(pattern, filename)
             if bool(m):
                 version = int(m[1])
@@ -646,9 +648,9 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, r
                 raise NotImplementedError()
             file_name_partial = "{}_{}.{}".format(donor_id, seq_run, library_id)
             s3_aligned_lib_path = "s3://immuneaging/aligned_libraries"
-            version = get_latest_lib_version(s3_access_file, s3_aligned_lib_path)
-            file_name = "{}.{}.h5ad".format(file_name_partial, version)
             folder_name = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
+            version = get_latest_lib_version(s3_access_file, s3_aligned_lib_path, lib_folder_name=folder_name)
+            file_name = "{}.{}.h5ad".format(file_name_partial, version)
             sync_cmd = 'aws s3 sync --no-progress {}/{}/{} {} --exclude "*" --include {}'.format(
                 s3_aligned_lib_path, version, folder_name, working_dir, file_name
             )
@@ -673,3 +675,52 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, r
     if remove_adata:
         os.remove(adata_file)
     return adata
+
+def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
+    irs = get_vdj_lib_to_gex_lib_mapping()[0 if ir_type == "BCR" else 1]
+    df = pd.DataFrame(columns=["ir_lib", "ir_type", "gex_lib", "ir_gex_diff_pct", "ir_gex_pre_qc_diff_pct"])
+    samples = read_immune_aging_sheet("Samples")
+
+    for ir_id,gex_id in irs.items():
+        adata_ir = read_library(ir_type, ir_id, s3_access_file, working_dir, stage="processed", remove_adata=False, samples=samples)
+        adata_gex = read_library("GEX", gex_id, s3_access_file, working_dir, stage="processed", remove_adata=False, samples=samples)
+        adata_gex_pre_qc = read_library(
+            "GEX",
+            gex_id,
+            s3_access_file,
+            working_dir,
+            stage="aligned",
+            remove_adata=False,
+            samples=samples
+        )
+        # add the gex library ID to the cell barcode name for the aligned lib
+        adata_gex_pre_qc.obs_names = adata_gex_pre_qc.obs_names + "_" + gex_id
+        if adata_ir is None or adata_gex is None or adata_gex_pre_qc is None:
+            print(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
+            new_row = {
+                "ir_lib": ir_id,
+                "ir_type": "BCR",
+                "gex_lib": gex_id,
+                "ir_gex_diff_pct": "-1",
+                "ir_gex_pre_qc_diff_pct": "-1"
+            }
+            df = df.append(new_row, ignore_index=True)
+            continue
+        ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata_gex.obs.index))
+        ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
+        # same but pre gex qc
+        ir_gex_pre_qc_diff = len(np.setdiff1d(adata_ir.obs.index, adata_gex_pre_qc.obs.index))
+        ir_gex_pre_qc_diff_pct = (ir_gex_pre_qc_diff/len(adata_ir.obs.index)) * 100
+        print(f"👉👉 ir lib: {ir_id}, ir type: {ir_type}, gex lib: {gex_id}, ir_gex_diff_pct: {ir_gex_diff_pct:.2f}, ir_gex_pre_qc_diff_pct: {ir_gex_pre_qc_diff_pct:.2f}")
+        new_row = {
+            "ir_lib": ir_id,
+            "ir_type": ir_type,
+            "gex_lib": gex_id,
+            "ir_gex_diff_pct": f"{ir_gex_diff_pct:.2f}",
+            "ir_gex_pre_qc_diff_pct": f"{ir_gex_pre_qc_diff_pct:.2f}",
+        }
+        df = df.append(new_row, ignore_index=True)
+    csv_path = f"{save_csv_dir}/vdj_seq_sat_results_{str(uuid.uuid1())}.csv"
+    df.to_csv(csv_path)
+    print(f"✅✅ results: {csv_path}")
+    return df
