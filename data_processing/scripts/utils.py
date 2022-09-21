@@ -610,10 +610,11 @@ def annotate(
             dotplot_paths.append(os.path.join(os.getcwd(), "figures", dotplot_filename + ".pdf"))
     return dotplot_paths
 
-def get_donor_id_for_lib(library_type, library_id):
+def get_donor_id_for_lib(library_type, library_id, samples=None):
     if library_type not in ["GEX", "BCR", "TCR"]:
         raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(library_type))
-    samples = read_immune_aging_sheet("Samples")
+    if samples is None:
+        samples = read_immune_aging_sheet("Samples")
     column_name = "{} lib".format(library_type)
     donor_id_col_name = "Donor ID"
     libs_all = samples[[column_name, donor_id_col_name]]
@@ -626,8 +627,8 @@ def get_donor_id_for_lib(library_type, library_id):
             return libs_all.loc[i, donor_id_col_name]
     return ""
 
-def read_library(library_type, library_id, s3_access_file, working_dir, stage, remove_adata=True):
-    donor_id = get_donor_id_for_lib(library_type, library_id)
+def read_library(library_type, library_id, s3_access_file, working_dir, stage, remove_adata=True, samples=None):
+    donor_id = get_donor_id_for_lib(library_type, library_id, samples)
     # really hacky way to work around the fact that we don't have seq runs
     # at this layer. Almost all donors have 001 as the seq run, but a few
     # have 002 or 003 so try for those too
