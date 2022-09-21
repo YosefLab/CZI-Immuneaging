@@ -425,12 +425,13 @@ def gather_extra_info_for_ir_libs(
 
 def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
     irs = get_vdj_lib_to_gex_lib_mapping()[0 if ir_type == "BCR" else 1]
-    df = pd.DataFrame(columns=["ir_lib", "ir_type", "gex_lib", "ir_gex_diff_pct", "ir_gex_pre_qc_diff_pct"])
+    df = pd.DataFrame(columns=["donor_id", "ir_type", "ir_lib", "gex_lib", "ir_gex_diff_pct", "ir_gex_pre_qc_diff_pct"])
     samples = read_immune_aging_sheet("Samples")
 
     for ir_id,gex_id in irs.items():
-        adata_ir = read_library(ir_type, ir_id, s3_access_file, working_dir, stage="processed", remove_adata=False, samples=samples)
-        adata_gex = read_library("GEX", gex_id, s3_access_file, working_dir, stage="processed", remove_adata=False, samples=samples)
+        donor_id = get_donor_id_for_lib(ir_type, ir_id, samples)
+        adata_ir = read_library(ir_type, ir_id, s3_access_file, working_dir, stage="processed", remove_adata=False, donor_id=donor_id)
+        adata_gex = read_library("GEX", gex_id, s3_access_file, working_dir, stage="processed", remove_adata=False, donor_id=donor_id)
         adata_gex_pre_qc = read_library(
             "GEX",
             gex_id,
@@ -438,18 +439,19 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
             working_dir,
             stage="aligned",
             remove_adata=False,
-            samples=samples
+            donor_id=donor_id
         )
         # add the gex library ID to the cell barcode name for the aligned lib
         adata_gex_pre_qc.obs_names = adata_gex_pre_qc.obs_names + "_" + gex_id
         if adata_ir is None or adata_gex is None or adata_gex_pre_qc is None:
             print(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
             new_row = {
-                "ir_lib": ir_id,
+                "donor_id": donor_id,
                 "ir_type": "BCR",
+                "ir_lib": ir_id,
                 "gex_lib": gex_id,
                 "ir_gex_diff_pct": "-1",
-                "ir_gex_pre_qc_diff_pct": "-1"
+                "ir_gex_pre_qc_diff_pct": "-1",
             }
             df = df.append(new_row, ignore_index=True)
             continue
@@ -460,8 +462,9 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
         ir_gex_pre_qc_diff_pct = (ir_gex_pre_qc_diff/len(adata_ir.obs.index)) * 100
         print(f"👉👉 ir lib: {ir_id}, ir type: {ir_type}, gex lib: {gex_id}, ir_gex_diff_pct: {ir_gex_diff_pct:.2f}, ir_gex_pre_qc_diff_pct: {ir_gex_pre_qc_diff_pct:.2f}")
         new_row = {
+            "donor_id": donor_id,
+            "ir_type": "BCR",
             "ir_lib": ir_id,
-            "ir_type": ir_type,
             "gex_lib": gex_id,
             "ir_gex_diff_pct": f"{ir_gex_diff_pct:.2f}",
             "ir_gex_pre_qc_diff_pct": f"{ir_gex_pre_qc_diff_pct:.2f}",
