@@ -29,7 +29,7 @@ processed_ir_lib_version = sys.argv[8]
 sys.path.append(code_path)
 from utils import *
 
-celltypist_model_urls = "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v1/Immune_All_High.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_Conde/v1/Immune_All_PIP.pkl"
+celltypist_model_urls = "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v2/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v2/Immune_All_High.pkl"
 rbc_model_url = "s3://immuneaging/unpublished_celltypist_models/RBC_model_CZI.pkl"
 
 samples = read_immune_aging_sheet("Samples")
