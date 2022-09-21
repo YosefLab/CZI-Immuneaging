@@ -20,6 +20,7 @@ import scanpy as sc
 # import celltypist
 import logging
 import uuid
+from vdj_utils import *
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
