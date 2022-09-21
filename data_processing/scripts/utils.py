@@ -629,7 +629,7 @@ def get_donor_id_for_lib(library_type, library_id, samples=None):
 
 def read_library(library_type, library_id, s3_access_file, working_dir, stage, remove_adata=True, samples=None, donor_id=None):
     if donor_id is None:
-        donor_id = get_donor_id_for_lib(library_type, library_id, samples)
+        donor_id = get_donor_id_for_lib(library_type, library_id, samples)        
     # really hacky way to work around the fact that we don't have seq runs
     # at this layer. Almost all donors have 001 as the seq run, but a few
     # have 002 or 003 so try for those too

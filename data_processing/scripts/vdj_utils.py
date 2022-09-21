@@ -9,6 +9,7 @@ from typing import List
 import gc
 from utils import *
 import uuid
+from logger import SimpleLogger
 
 def get_vdj_lib_to_gex_lib_mapping(samples=None):
     # Returns a mapping of all vdj libraries to their corresponding gex libraries
@@ -423,7 +424,14 @@ def gather_extra_info_for_ir_libs(
     print(csv_file.getvalue())
     csv_file.close()
 
-def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
+def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, log_file_dir):
+    unique_artifact_prefix = f"{ir_type}_{str(uuid.uuid1())}"
+    log_file_path = f"{log_file_dir}/vdj_seq_sat_logs_{unique_artifact_prefix}.log"
+    logger = SimpleLogger(filename = log_file_path)
+    # quick and dirty workaround to get called functions to use logger rather than print
+    def print(msg):
+        logger.add_to_log(f"📨 msg")
+
     irs = get_vdj_lib_to_gex_lib_mapping()[0 if ir_type == "BCR" else 1]
     df = pd.DataFrame(columns=["donor_id", "ir_type", "ir_lib", "gex_lib", "ir_gex_diff_pct", "ir_gex_pre_qc_diff_pct"])
     samples = read_immune_aging_sheet("Samples")
@@ -444,7 +452,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
         # add the gex library ID to the cell barcode name for the aligned lib
         adata_gex_pre_qc.obs_names = adata_gex_pre_qc.obs_names + "_" + gex_id
         if adata_ir is None or adata_gex is None or adata_gex_pre_qc is None:
-            print(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
+            logger.add_to_log(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
             new_row = {
                 "donor_id": donor_id,
                 "ir_type": "BCR",
@@ -460,7 +468,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
         # same but pre gex qc
         ir_gex_pre_qc_diff = len(np.setdiff1d(adata_ir.obs.index, adata_gex_pre_qc.obs.index))
         ir_gex_pre_qc_diff_pct = (ir_gex_pre_qc_diff/len(adata_ir.obs.index)) * 100
-        print(f"👉👉 ir lib: {ir_id}, ir type: {ir_type}, gex lib: {gex_id}, ir_gex_diff_pct: {ir_gex_diff_pct:.2f}, ir_gex_pre_qc_diff_pct: {ir_gex_pre_qc_diff_pct:.2f}")
+        logger.add_to_log(f"👉👉 ir lib: {ir_id}, ir type: {ir_type}, gex lib: {gex_id}, ir_gex_diff_pct: {ir_gex_diff_pct:.2f}, ir_gex_pre_qc_diff_pct: {ir_gex_pre_qc_diff_pct:.2f}")
         new_row = {
             "donor_id": donor_id,
             "ir_type": "BCR",
@@ -470,7 +478,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir):
             "ir_gex_pre_qc_diff_pct": f"{ir_gex_pre_qc_diff_pct:.2f}",
         }
         df = df.append(new_row, ignore_index=True)
-    csv_path = f"{save_csv_dir}/vdj_seq_sat_results_{str(uuid.uuid1())}.csv"
+    csv_path = f"{save_csv_dir}/vdj_seq_sat_results_{unique_artifact_prefix}.csv"
     df.to_csv(csv_path)
-    print(f"✅✅ results: {csv_path}")
+    logger.add_to_log(f"✅✅ results: {csv_path}")
     return df
