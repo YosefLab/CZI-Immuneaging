@@ -428,9 +428,6 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
     unique_artifact_prefix = f"{ir_type}_{str(uuid.uuid1())}"
     log_file_path = f"{log_file_dir}/vdj_seq_sat_logs_{unique_artifact_prefix}.log"
     logger = SimpleLogger(filename = log_file_path)
-    # quick and dirty workaround to get called functions to use logger rather than print
-    def print(msg):
-        logger.add_to_log(f"📨 msg")
 
     irs = get_vdj_lib_to_gex_lib_mapping()[0 if ir_type == "BCR" else 1]
     df = pd.DataFrame(columns=["donor_id", "ir_type", "ir_lib", "gex_lib", "ir_gex_diff_pct", "ir_gex_pre_qc_diff_pct"])
@@ -438,14 +435,15 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
 
     for ir_id,gex_id in irs.items():
         donor_id = get_donor_id_for_lib(ir_type, ir_id, samples)
-        adata_ir = read_library(ir_type, ir_id, s3_access_file, working_dir, stage="processed", remove_adata=False, donor_id=donor_id)
-        adata_gex = read_library("GEX", gex_id, s3_access_file, working_dir, stage="processed", remove_adata=False, donor_id=donor_id)
+        adata_ir = read_library(ir_type, ir_id, s3_access_file, working_dir, "processed", logger, remove_adata=False, donor_id=donor_id)
+        adata_gex = read_library("GEX", gex_id, s3_access_file, working_dir, "processed", logger, remove_adata=False, donor_id=donor_id)
         adata_gex_pre_qc = read_library(
             "GEX",
             gex_id,
             s3_access_file,
             working_dir,
-            stage="aligned",
+            "aligned",
+            logger,
             remove_adata=False,
             donor_id=donor_id
         )

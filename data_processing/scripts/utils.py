@@ -627,7 +627,7 @@ def get_donor_id_for_lib(library_type, library_id, samples=None):
             return libs_all.loc[i, donor_id_col_name]
     return ""
 
-def read_library(library_type, library_id, s3_access_file, working_dir, stage, remove_adata=True, samples=None, donor_id=None):
+def read_library(library_type, library_id, s3_access_file, working_dir, stage, logger, remove_adata=True, samples=None, donor_id=None):
     if donor_id is None:
         donor_id = get_donor_id_for_lib(library_type, library_id, samples)        
     # really hacky way to work around the fact that we don't have seq runs
@@ -654,20 +654,20 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, r
                 s3_aligned_lib_path, version, folder_name, working_dir, file_name
             )
 
-        print("sync_cmd: {}".format(sync_cmd))
+        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         adata_file = os.path.join(working_dir, file_name)
         if os.path.isfile(adata_file):
             print(f"file {adata_file} already downloaded, skipping download")
             break
 
-        print("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
         if not os.path.isfile(adata_file):
-            print("Failed to download file {} from S3 using seq_run: {}".format(file_name, seq_run))
+            logger.add_to_log("Failed to download file {} from S3 using seq_run: {}".format(file_name, seq_run))
         else:
             break # don't need to try the other seq runs
     
     if not os.path.isfile(adata_file):
-        print("Failed to download file {} from S3.".format(file_name, seq_run))
+        logger.add_to_log("Failed to download file {} from S3.".format(file_name, seq_run))
         return None
         
     adata = anndata.read_h5ad(adata_file)
