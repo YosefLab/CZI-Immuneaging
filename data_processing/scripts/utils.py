@@ -19,7 +19,7 @@ from datetime import datetime
 import gc
 from logger import BaseLogger
 import scanpy as sc
-import celltypist
+# import celltypist
 import logging
 
 logging.getLogger('numba').setLevel(logging.WARNING)
@@ -124,10 +124,10 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 		is_new_version = True
 	return [is_new_version,"v"+str(version)]
 
-def get_latest_processed_lib_version(s3_access_file: str, s3_processed_lib_path: str):
+def get_latest_lib_version(s3_access_file: str, s3_lib_path: str):
     set_access_keys(s3_access_file)
     latest_version = -1
-    ls_cmd = 'aws s3 ls {} --recursive'.format(s3_processed_lib_path)
+    ls_cmd = 'aws s3 ls {} --recursive'.format(s3_lib_path)
     ls  = os.popen(ls_cmd).read()
     if len(ls) != 0:
         # search for patterns of /vX/. If there is a match, the regex group
@@ -141,7 +141,7 @@ def get_latest_processed_lib_version(s3_access_file: str, s3_processed_lib_path:
                 if latest_version < version:
                     latest_version = version
     if latest_version == -1:
-        print(f"Could not find latest version for lib. s3_processed_lib_path: {s3_processed_lib_path}")
+        print(f"Could not find latest version for lib. s3_lib_path: {s3_lib_path}")
     return "v" + str(latest_version)
 
 def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, variable_config_keys):
@@ -609,3 +609,63 @@ def annotate(
             # note that celltypist (which uses scanpy for plotting) will only output the figures into a "figures" directory under the current working directory.
             dotplot_paths.append(os.path.join(os.getcwd(), "figures", dotplot_filename + ".pdf"))
     return dotplot_paths
+
+def get_donor_id_for_lib(library_type, library_id):
+    if library_type not in ["GEX", "BCR", "TCR"]:
+        raise ValueError("Unsupported lib_type: {}. Must be one of: GEX, BCR, TCR".format(library_type))
+    samples = read_immune_aging_sheet("Samples")
+    column_name = "{} lib".format(library_type)
+    donor_id_col_name = "Donor ID"
+    libs_all = samples[[column_name, donor_id_col_name]]
+    for i in range(len(libs_all)):
+        if libs_all.loc[i, column_name] is np.nan:
+            continue
+        libs = libs_all.loc[i, column_name].split(",")
+        if library_id in libs:
+            # found it
+            return libs_all.loc[i, donor_id_col_name]
+    return ""
+
+def read_library(library_type, library_id, s3_access_file, working_dir, stage, remove_adata=True):
+    donor_id = get_donor_id_for_lib(library_type, library_id)
+    # really hacky way to work around the fact that we don't have seq runs
+    # at this layer. Almost all donors have 001 as the seq run, but a few
+    # have 002 or 003 so try for those too
+    for seq_run in ["001", "002", "003"]:
+        if stage == "processed":
+            file_name_partial = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
+            s3_processed_lib_path = "s3://immuneaging/processed_libraries/{}".format(file_name_partial)
+            version = get_latest_lib_version(s3_access_file, s3_processed_lib_path)
+            file_name = "{}.processed.{}.h5ad".format(file_name_partial, version)
+        elif stage == "aligned":
+            if library_type != "GEX":
+                raise NotImplementedError()
+            file_name_partial = "{}_{}.{}".format(donor_id, seq_run, library_id)
+            s3_aligned_lib_path = "s3://immuneaging/aligned_libraries"
+            version = get_latest_lib_version(s3_access_file, s3_aligned_lib_path)
+            file_name = "{}.{}.h5ad".format(file_name_partial, version)
+
+        sync_cmd = 'aws s3 sync --no-progress {}/{}/ {} --exclude "*" --include {}'.format(
+            s3_processed_lib_path, version, working_dir, file_name
+        )
+
+        print("sync_cmd: {}".format(sync_cmd))
+        adata_file = os.path.join(working_dir, file_name)
+        if os.path.isfile(adata_file):
+            print(f"file {adata_file} already downloaded, skipping download")
+            break
+
+        print("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        if not os.path.isfile(adata_file):
+            print("Failed to download file {} from S3 using seq_run: {}".format(file_name, seq_run))
+        else:
+            break # don't need to try the other seq runs
+    
+    if not os.path.isfile(adata_file):
+        print("Failed to download file {} from S3.".format(file_name, seq_run))
+        return None
+        
+    adata = anndata.read_h5ad(adata_file)
+    if remove_adata:
+        os.remove(adata_file)
+    return adata
