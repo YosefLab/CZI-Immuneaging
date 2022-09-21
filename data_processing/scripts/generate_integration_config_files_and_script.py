@@ -57,7 +57,7 @@ integration_configs = {
         "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
         "python_env_version": python_env,
         "r_setup_version": "immune_aging.R_setup.v2",
-        "pipeline_version": "v3",
+        "pipeline_version": "v4",
     }
     
 if tissue_integration:
