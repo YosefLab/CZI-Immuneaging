@@ -1,4 +1,3 @@
-import io
 import json
 import os
 import re
@@ -16,11 +15,11 @@ import csv
 from typing import Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
-import gc
 from logger import BaseLogger
 import scanpy as sc
 # import celltypist
 import logging
+import uuid
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
