@@ -637,6 +637,9 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, r
             s3_processed_lib_path = "s3://immuneaging/processed_libraries/{}".format(file_name_partial)
             version = get_latest_lib_version(s3_access_file, s3_processed_lib_path)
             file_name = "{}.processed.{}.h5ad".format(file_name_partial, version)
+            sync_cmd = 'aws s3 sync --no-progress {}/{}/ {} --exclude "*" --include {}'.format(
+                s3_processed_lib_path, version, working_dir, file_name
+            )
         elif stage == "aligned":
             if library_type != "GEX":
                 raise NotImplementedError()
@@ -644,10 +647,10 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, r
             s3_aligned_lib_path = "s3://immuneaging/aligned_libraries"
             version = get_latest_lib_version(s3_access_file, s3_aligned_lib_path)
             file_name = "{}.{}.h5ad".format(file_name_partial, version)
-
-        sync_cmd = 'aws s3 sync --no-progress {}/{}/ {} --exclude "*" --include {}'.format(
-            s3_processed_lib_path, version, working_dir, file_name
-        )
+            folder_name = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
+            sync_cmd = 'aws s3 sync --no-progress {}/{}/{} {} --exclude "*" --include {}'.format(
+                s3_aligned_lib_path, version, folder_name, working_dir, file_name
+            )
 
         print("sync_cmd: {}".format(sync_cmd))
         adata_file = os.path.join(working_dir, file_name)
