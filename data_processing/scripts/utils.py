@@ -657,7 +657,7 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, l
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         adata_file = os.path.join(working_dir, file_name)
         if os.path.isfile(adata_file):
-            print(f"file {adata_file} already downloaded, skipping download")
+            logger.add_to_log(f"file {adata_file} already downloaded, skipping download")
             break
 
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))

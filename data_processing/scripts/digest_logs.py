@@ -358,15 +358,16 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
         raise NotImplementedError
 
 
-process_type = sys.argv[2] # must be one of "sample" or "library"
-action = sys.argv[1] # must be one of "print_digest" or "get_csv"
-assert(process_type in ["sample", "library"])
-assert(action in ["print_digest", "get_csv"])
-if process_type == "sample":
-    digest_class = DigestSampleProcessingLogs(sys.argv)
-else:
-    digest_class = DigestLibraryProcessingLogs(sys.argv)
-if action == "print_digest":
-    digest_class.print_digest()
-else:
-    digest_class.get_digest_csv()
+if __name__ == "__main__":
+    process_type = sys.argv[2] # must be one of "sample" or "library"
+    action = sys.argv[1] # must be one of "print_digest" or "get_csv"
+    assert(process_type in ["sample", "library"])
+    assert(action in ["print_digest", "get_csv"])
+    if process_type == "sample":
+        digest_class = DigestSampleProcessingLogs(sys.argv)
+    else:
+        digest_class = DigestLibraryProcessingLogs(sys.argv)
+    if action == "print_digest":
+        digest_class.print_digest()
+    else:
+        digest_class.get_digest_csv()

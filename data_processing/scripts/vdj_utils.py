@@ -447,8 +447,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
             remove_adata=False,
             donor_id=donor_id
         )
-        # add the gex library ID to the cell barcode name for the aligned lib
-        adata_gex_pre_qc.obs_names = adata_gex_pre_qc.obs_names + "_" + gex_id
+
         if adata_ir is None or adata_gex is None or adata_gex_pre_qc is None:
             logger.add_to_log(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
             new_row = {
@@ -461,6 +460,8 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
             }
             df = df.append(new_row, ignore_index=True)
             continue
+        # add the gex library ID to the cell barcode name for the aligned lib
+        adata_gex_pre_qc.obs_names = adata_gex_pre_qc.obs_names + "_" + gex_id
         ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata_gex.obs.index))
         ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
         # same but pre gex qc
