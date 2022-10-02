@@ -452,7 +452,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
             logger.add_to_log(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
             new_row = {
                 "donor_id": donor_id,
-                "ir_type": "BCR",
+                "ir_type": ir_type,
                 "ir_lib": ir_id,
                 "gex_lib": gex_id,
                 "ir_gex_diff_pct": "-1",
@@ -470,7 +470,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
         logger.add_to_log(f"👉👉 ir lib: {ir_id}, ir type: {ir_type}, gex lib: {gex_id}, ir_gex_diff_pct: {ir_gex_diff_pct:.2f}, ir_gex_pre_qc_diff_pct: {ir_gex_pre_qc_diff_pct:.2f}")
         new_row = {
             "donor_id": donor_id,
-            "ir_type": "BCR",
+            "ir_type": ir_type,
             "ir_lib": ir_id,
             "gex_lib": gex_id,
             "ir_gex_diff_pct": f"{ir_gex_diff_pct:.2f}",

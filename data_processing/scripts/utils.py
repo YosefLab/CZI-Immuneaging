@@ -451,6 +451,12 @@ def get_all_libs(lib_type: str, donor_id: Optional[str] = None) -> set:
         all_libs.update(libs)
     return all_libs
 
+def get_all_donors() -> dict:
+    samples = read_immune_aging_sheet("Samples")
+    df = samples[["Donor ID", "Seq run"]].astype("str")
+    donor_to_seq = df.drop_duplicates().to_dict(orient="records")
+    return donor_to_seq
+
 def extend_removed_features_df(adata, obsm_key, exclude_df):
     if obsm_key not in adata.obsm:
         adata.obsm[obsm_key] = exclude_df.copy()

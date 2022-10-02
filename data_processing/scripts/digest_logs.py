@@ -138,7 +138,20 @@ class BaseDigestClass(ABC):
                     else:
                         logger.add_to_log("aws response: {}\n".format(resp))
             else:
-                object_versions = [self.version] * len(object_ids)
+                # object_versions = [self.version] * len(object_ids)
+                object_versions = []
+                versions = [f"v{num}" for num in range(1,9)]
+                for object_id in object_ids:
+                    found = False
+                    for v in versions:
+                        filename = self._get_log_file_name(object_id, v)
+                        filepath = os.path.join(self.logs_location, filename)
+                        if os.path.isfile(filepath):
+                            object_versions.append(v)
+                            found = True
+                            break
+                    if found is False:
+                        object_versions.append("-1")
 
             # for each object id, get all its log lines and add it to the dict
             for elem in zip(object_ids, object_versions):
@@ -168,7 +181,7 @@ class BaseDigestClass(ABC):
             sys.exit()
         return files_to_lines
 
-    def print_digest(self):
+    def print_digest(self, log_criterion_override=None):
         logger = RichLogger()
         try:
             files_to_lines = self._get_log_lines()
@@ -177,9 +190,8 @@ class BaseDigestClass(ABC):
             log_lines_to_print = {}
             for filepath,lines in files_to_lines.items():
                 for line in lines:
-                    # for now, we only print logs above a hard coded severity threshold (see `_is_alertable_log_line`),
-                    # but we can extend this script to take a user-provided threshold 
-                    if self._is_alertable_log_line(line):
+                    do_log = self._is_alertable_log_line(line) if log_criterion_override is None else log_criterion_override(line)
+                    if do_log:
                         if filepath not in log_lines_to_print:
                             log_lines_to_print[filepath] = [line]
                         else:
@@ -333,6 +345,10 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def __init__(self, args: List[str]):
         super().__init__(args)
 
+    def _get_object_id(self, log_file_name: str):
+        prefix = log_file_name.split(".")[1]
+        return prefix.split("_")[0]
+
     def _get_object_ids(self):
         object_ids = set()
         samples_df = self._get_all_samples()
@@ -354,8 +370,57 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def _get_aws_dir_name(self):
         return "processed_libraries"
 
-    def get_digest_csv(self):
-        raise NotImplementedError
+    def get_lib_metrics_csv(self, csv_file: str, lib_type: str):
+        assert lib_type in ["GEX", "BCR", "TCR"]
+        logger = RichLogger()
+        try:
+            files_to_lines = self._get_log_lines()
+
+            # define the csv digest headers
+            CSV_HEADER_LIBRARY_ID: str = "lib_id"
+            CSV_HEADER_CELL_COUNT_BEFORE_QC: str = "# Cells Before QC"
+            CSV_HEADER_CELL_COUNT_AFTER_QC: str = "# Cells After QC"
+            CORRESPONDING_GEX_LIB: str = "corresponding_gex_lib"
+            DONOR_ID: str = "donor_id"
+
+            def parse_line(line: str, formatted_str: str, formatted_str_index: int, csv_header: str, csv_row: Dict) -> bool:
+                parsed = search(formatted_str, line)
+                if parsed:
+                    csv_row[csv_header] = parsed[formatted_str_index]
+                    return True
+                return False
+
+            # for each file, parse its logs and add digest info to csv
+            csv_rows = []
+            for filepath,lines in files_to_lines.items():
+                lib_id = filepath.split(".")[1].split("_")[-1]
+                csv_row = {
+                    CSV_HEADER_LIBRARY_ID: lib_id,
+                    CSV_HEADER_CELL_COUNT_BEFORE_QC: 0,
+                    CSV_HEADER_CELL_COUNT_AFTER_QC: 0,
+                    CORRESPONDING_GEX_LIB: "?",
+                    DONOR_ID: "?",
+                }
+                for line in lines:
+                    FORMATTED_STRING_COUNTS_BEGIN = "Started with a total of {} cells"
+                    FORMATTED_STRING_COUNTS_END = "Final number of cells: {}."
+                    if lib_type == "GEX":
+                        FORMATTED_STRING_COUNTS_END = "Final number of cells: {},"
+                    FORMATTED_STRING_CORRESPONDING_GEX_LIB = ", 'corresponding_gex_lib': '{}',"
+                    FORMATTED_STRING_DONOR_ID = ", 'donor': '{}',"
+                    parse_line(line, FORMATTED_STRING_COUNTS_BEGIN, 0, CSV_HEADER_CELL_COUNT_BEFORE_QC, csv_row)
+                    parse_line(line, FORMATTED_STRING_COUNTS_END, 0, CSV_HEADER_CELL_COUNT_AFTER_QC, csv_row)
+                    if lib_type != "GEX":
+                        parse_line(line, FORMATTED_STRING_CORRESPONDING_GEX_LIB, 0, CORRESPONDING_GEX_LIB, csv_row)
+                    parse_line(line, FORMATTED_STRING_DONOR_ID, 0, DONOR_ID, csv_row)
+                csv_rows.append(csv_row)
+
+            # write the csv
+            df = pd.DataFrame.from_records(csv_rows)
+            df.to_csv(csv_file, mode="a", header=not os.path.isfile(csv_file), index=None) 
+        except Exception:
+            logger.add_to_log("Execution failed with the following error:\n{}".format(traceback.format_exc()), "critical")
+            sys.exit()
 
 
 if __name__ == "__main__":
