@@ -449,7 +449,7 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
         )
 
         if adata_ir is None or adata_gex is None or adata_gex_pre_qc is None:
-            logger.add_to_log(f"❌❌ oops. ir lib: {ir_id}, gex lib: {gex_id}")
+            logger.add_to_log(f"❌❌ error. ir lib: {ir_id}, gex lib: {gex_id}")
             new_row = {
                 "donor_id": donor_id,
                 "ir_type": ir_type,
