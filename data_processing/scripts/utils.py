@@ -12,7 +12,7 @@ import anndata
 from anndata import AnnData
 from math import floor
 import csv
-from typing import Type, List, NamedTuple, Optional
+from typing import Literal, Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
 from logger import BaseLogger
@@ -122,10 +122,10 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 		is_new_version = True
 	return [is_new_version,"v"+str(version)]
 
-def get_latest_lib_version(s3_access_file: str, s3_lib_path: str, lib_folder_name: Optional[str] = None):
+def get_latest_object_version(s3_access_file: str, s3_path: str, folder_name: Optional[str] = None):
     set_access_keys(s3_access_file)
     latest_version = -1
-    ls_cmd = 'aws s3 ls {} --recursive'.format(s3_lib_path)
+    ls_cmd = 'aws s3 ls {} --recursive'.format(s3_path)
     ls  = os.popen(ls_cmd).read()
     if len(ls) != 0:
         # search for patterns of /vX/. If there is a match, the regex group
@@ -133,7 +133,7 @@ def get_latest_lib_version(s3_access_file: str, s3_lib_path: str, lib_folder_nam
         pattern = "/v(\d+)/"
         filenames = ls.split("\n")
         for filename in filenames:
-            if lib_folder_name is not None and lib_folder_name not in filename:
+            if folder_name is not None and folder_name not in filename:
                 continue
             m = re.search(pattern, filename)
             if bool(m):
@@ -141,7 +141,7 @@ def get_latest_lib_version(s3_access_file: str, s3_lib_path: str, lib_folder_nam
                 if latest_version < version:
                     latest_version = version
     if latest_version == -1:
-        print(f"Could not find latest version for lib. s3_lib_path: {s3_lib_path}")
+        print(f"Could not find the latest version. s3_path: {s3_path}")
     return "v" + str(latest_version)
 
 def get_configs_version_alignment(configs, data_dir, configs_dir_remote, configs_file_remote_prefix, variable_config_keys):
@@ -356,7 +356,6 @@ def _run_model_impl(
     model.save(model_dir_path)
     # save the data used for fitting the model; this is useful for applying reference-based integration on query data later on (based on the current model and data).
     logger.add_to_log("Saving the data used for fitting the model...")
-    os.path.join(data_dir, model_file)
     data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
     adata_copy = adata.copy()
     write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
@@ -434,7 +433,7 @@ def strip_integration_markers(barcode: str, valid_libs: List[str] = None) -> str
     lib_id_plus_integration_markers = parts[1].split("-")
     lib_id = "-".join([lib_id_plus_integration_markers[0], lib_id_plus_integration_markers[1]])
     if valid_libs is not None and lib_id not in valid_libs:
-        raise ValueError(f"lib_id {lib_id} is not a valid library. Are you sure your barcode {barcode} contains a lib_id of the form xxx_yyy?")
+        raise ValueError(f"lib_id {lib_id} is not a valid library. Are you sure your barcode {barcode} contains a lib_id of the form xxx-yyy?")
     return "_".join([cell_barcode, lib_id])
    
 def get_all_libs(lib_type: str, donor_id: Optional[str] = None) -> set:
@@ -643,7 +642,7 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, l
         if stage == "processed":
             file_name_partial = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
             s3_processed_lib_path = "s3://immuneaging/processed_libraries/{}".format(file_name_partial)
-            version = get_latest_lib_version(s3_access_file, s3_processed_lib_path)
+            version = get_latest_object_version(s3_access_file, s3_processed_lib_path)
             file_name = "{}.processed.{}.h5ad".format(file_name_partial, version)
             sync_cmd = 'aws s3 sync --no-progress {}/{}/ {} --exclude "*" --include {}'.format(
                 s3_processed_lib_path, version, working_dir, file_name
@@ -654,7 +653,7 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, l
             file_name_partial = "{}_{}.{}".format(donor_id, seq_run, library_id)
             s3_aligned_lib_path = "s3://immuneaging/aligned_libraries"
             folder_name = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
-            version = get_latest_lib_version(s3_access_file, s3_aligned_lib_path, lib_folder_name=folder_name)
+            version = get_latest_object_version(s3_access_file, s3_aligned_lib_path, lib_folder_name=folder_name)
             file_name = "{}.{}.h5ad".format(file_name_partial, version)
             sync_cmd = 'aws s3 sync --no-progress {}/{}/{} {} --exclude "*" --include {}'.format(
                 s3_aligned_lib_path, version, folder_name, working_dir, file_name
@@ -680,3 +679,16 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, l
     if remove_adata:
         os.remove(adata_file)
     return adata
+
+def get_tissues_or_compartments(s3_access_file: str, tissue_or_compartment: Literal["tissue"], skip_tissues: Optional[List[str]] = None):
+    assert tissue_or_compartment in ["tissue", "compartment"]
+    set_access_keys(s3_access_file)
+    samples = read_immune_aging_sheet("Samples")
+    tissues_or_compartments = []
+    if tissue_or_compartment == "tissue":
+        tissues_or_compartments = np.unique(samples["Organ"][np.logical_not(pd.isnull(samples["Organ"]))])
+        if skip_tissues is not None:
+            tissues_or_compartments = [t for t in tissues_or_compartments if t not in skip_tissues]
+    else:
+        tissues_or_compartments = ["T", "B", "Myeloid", "Other"]
+    return tissues_or_compartments
