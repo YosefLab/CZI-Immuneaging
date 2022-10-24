@@ -59,7 +59,7 @@ integration_configs["latest_annotated_object_version"] = ann_version
 outfile = open(os.path.join(code_path,"integrate_using_scanvi_runs.sh"),'w') 
 outfile.write("source activate {}\n".format(python_env))
 
-tissues_or_compartments = get_tissues_or_compartments(s3_access_file)
+tissues_or_compartments = get_tissues_or_compartments(s3_access_file, integration_level, skip_tissues)
 not_found = []
 for tissue_or_compartment in tissues_or_compartments:
     s3_integrated_path = f"s3://immuneaging/integrated_samples/{integration_level}_level/{tissue_or_compartment}"
