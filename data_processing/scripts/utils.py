@@ -12,7 +12,7 @@ import anndata
 from anndata import AnnData
 from math import floor
 import csv
-from typing import Literal, Type, List, NamedTuple, Optional
+from typing import Type, List, NamedTuple, Optional
 import traceback
 from datetime import datetime
 from logger import BaseLogger
@@ -680,7 +680,7 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, l
         os.remove(adata_file)
     return adata
 
-def get_tissues_or_compartments(s3_access_file: str, tissue_or_compartment: Literal["tissue"], skip_tissues: Optional[List[str]] = None):
+def get_tissues_or_compartments(s3_access_file: str, tissue_or_compartment: str, skip_tissues: Optional[List[str]] = None):
     assert tissue_or_compartment in ["tissue", "compartment"]
     set_access_keys(s3_access_file)
     samples = read_immune_aging_sheet("Samples")
