@@ -12,7 +12,6 @@ import logging
 import os
 import json
 import scanpy as sc
-import numpy as np
 import pandas as pd
 import scvi
 import hashlib
@@ -20,7 +19,6 @@ import traceback
 import celltypist
 import urllib.request
 import zipfile
-import gc
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -31,11 +29,12 @@ scvi.settings.reset_logging_handler()
 scvi.settings.dl_pin_memory_gpu_training = False
 
 with open(configs_file) as f: 
-    data = f.read()	
+    data = f.read()
 
 configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
-tissue_integration = configs["integration_level"] == "tissue"
+integration_level = configs["integration_level"]
+tissue_integration = integration_level == "tissue"
 
 sys.path.append(configs["code_path"])
 from utils import *
@@ -59,7 +58,7 @@ data_dir = os.path.join(output_destination, output_prefix)
 os.system("mkdir -p " + data_dir)
 
 # check for previous versions of integrated data
-s3_url = "s3://immuneaging/scanvi_integrated_samples/{}_level".format(configs["integration_level"])
+s3_url = "s3://immuneaging/scanvi_integrated_samples/{}_level".format(integration_level)
 is_new_version, version = get_configs_status(configs, f'{s3_url}/{output_prefix}', f'integrate_using_scanvi.configs.{output_prefix}', VARIABLE_CONFIG_KEYS, data_dir)
 output_configs_file = f"integrate_using_scanvi.configs.{output_prefix}.{version}.txt"
 
@@ -95,7 +94,7 @@ else:
     logger.add_to_log("Checking if h5ad file already exists on S3...")
     h5ad_file_exists = False
     logger_file_exists = False
-    ls_cmd = "aws s3 ls {}/{}/{} --recursive".format(s3_url, output_prefix,version)
+    ls_cmd = "aws s3 ls {}/{}/{} --recursive".format(s3_url, output_prefix, version)
     files = os.popen(ls_cmd).read()
     logger.add_to_log("aws response: {}\n".format(files))
     for f in files.rstrip().split('\n'):
@@ -129,13 +128,13 @@ stim_unstim_integrated_files = []
 # BLO.stim.v4.h5ad
 # BLO.stim.v4.scvi_model.zip
 
-def append_stim_unsim(stim_status: str, path: str):
+def append_stim_unsim(stim_status: str, file: str):
     if stim_status == "stim":
-        stim_integrated_files.append(path)
+        stim_integrated_files.append(file)
     elif stim_status == "unstim":
-        unstim_integrated_files.append(path)
+        unstim_integrated_files.append(file)
     else:
-        stim_unstim_integrated_files.append(path)
+        stim_unstim_integrated_files.append(file)
 
 integration_modes = ["stim", "unstim", "stim_unstim"]
 batch_keys = configs["batch_key"].split(",")
@@ -143,34 +142,34 @@ for mode in integration_modes:
     mode_prefix = f"{mode}." if mode != "stim_unstim" else ""
     # add h5ad
     integrated_h5ad_file = f"{output_prefix}.{mode_prefix}{integrated_object_version}.h5ad" # e.g. T.stim.v4.h5ad or BLO.stim.v4.h5ad
-    integrated_h5ad_path = os.path.join(data_dir, integrated_h5ad_file)
-    append_stim_unsim(mode, integrated_h5ad_path)
+    append_stim_unsim(mode, integrated_h5ad_file)
     # add model(s)
     if tissue_integration:
         integrated_model_file = f"{output_prefix}.{mode_prefix}{integrated_object_version}.scvi_model.zip" # e.g. BLO.stim.v4.scvi_model.zip
-        integrated_model_path = os.path.join(data_dir, integrated_model_file)
-        append_stim_unsim(mode, integrated_model_path)
+        append_stim_unsim(mode, integrated_model_file)
     else:
         for bk in batch_keys:
             integrated_model_file = f"{output_prefix}.{mode_prefix}{integrated_object_version}.scvi_model_batch_key_{bk}.zip" # e.g. T.stim.v4.scvi_model_batch_key_donor_id.zip
-            integrated_model_path = os.path.join(data_dir, integrated_model_file)
-            append_stim_unsim(mode, integrated_model_path)
+            append_stim_unsim(mode, integrated_model_file)
 
 # sync down everything
 all_files = stim_integrated_files + unstim_integrated_files + stim_unstim_integrated_files
 for file in all_files:
-    sync_cmd = f'aws s3 sync --no-progress {s3_url}/{output_prefix}/{version} {data_dir} --exclude "*" --include {file}'
+    s3_url_integrated = "s3://immuneaging/integrated_samples/{}_level".format(integration_level)
+    sync_cmd = f'aws s3 sync --no-progress {s3_url_integrated}/{output_prefix}/{integrated_object_version} {data_dir} --exclude "*" --include {file}'
     logger.add_to_log("syncing {}...".format(file))
     logger.add_to_log("sync_cmd: {}".format(sync_cmd))
     aws_response = os.popen(sync_cmd).read()
     logger.add_to_log("aws response: {}\n".format(aws_response))
-    if not os.path.exists(file):
+    if not os.path.exists(os.path.join(data_dir, file)):
         if ".stim." in file:
             logger.add_to_log(f"file {file} not found on aws. Will skip stim-only integration", level="warning")
-            integration_modes.remove["stim"]
+            if "stim" in integration_modes:
+                integration_modes.remove("stim")
         elif ".unstim." in file:
             logger.add_to_log(f"file {file} not found on aws. Will skip unstim-only integration", level="warning")
-            integration_modes.remove["unstim"]
+            if "unstim" in integration_modes:
+                integration_modes.remove("unstim")
         else:
             logger.add_to_log(f"file {file} not found on aws. Terminating execution.", level="error")
             sys.exit()
@@ -201,35 +200,28 @@ valid_libs = get_all_libs("GEX")
 for integration_mode in integration_modes:
     logger.add_to_log("Running {} integration pipeline...".format(integration_mode))
     if integration_mode == "stim_unstim":
-        h5ad_file, model_files = get_h5ad_and_models(stim_unstim_integrated_files)
+        h5ad_file, _ = get_h5ad_and_models(stim_unstim_integrated_files)
         mode_suffix = ""
     elif integration_mode == "unstim":
-        h5ad_file, model_files = get_h5ad_and_models(unstim_integrated_files)
+        h5ad_file, _ = get_h5ad_and_models(unstim_integrated_files)
         mode_suffix = ".unstim"
     else:
-        h5ad_file, model_files = get_h5ad_and_models(stim_integrated_files)
+        h5ad_file, _ = get_h5ad_and_models(stim_integrated_files)
         mode_suffix = ".stim"
-    prefix = output_prefix + mode_suffix
+
     logger.add_to_log(f"Reading integrated h5ad file ({h5ad_file})...")
-    annotations = pd.read_csv(annotation_csv_path, index_col="barcode")
-    adata = anndata.read_h5ad(h5ad_file)
+    adata = anndata.read_h5ad(os.path.join(data_dir, h5ad_file))
+    prefix = output_prefix + mode_suffix
 
     logger.add_to_log(f"Adding any available manual labels to the adata...")
-    labels_key = configs["manual_labels"]
+    annotations = pd.read_csv(annotation_csv_path, index_col="barcode")
+    labels_key = configs["labels_key"]
     unlabeled_category = configs["unlabeled_category"]
-    adata.obs[labels_key] = pd.Series()
-    trimmed_index = adata.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
-    idx = trimmed_index.isin(annotations["barcode"])
-    # 1. select the indices that have annotations and then re-set the index to the trimmed one so that we can match it against the one in the annotations df
-    # 2. replace NaN values (i.e. missing annotations) with the annotations in the annotations df (note that both df's must have the labels_key column)
-    # 3. replace any remaining NaNs with the unlabeled_category to represent missing labels
-    df = adata.obs[idx].set_index(trimmed_index)
-    adata.obs[labels_key] = df[labels_key].combine_first(annotations[labels_key])
-    adata.obs[labels_key].fillna(unlabeled_category, inplace=True)
+    add_annotations_to_adata(adata, labels_key, unlabeled_category, annotations, valid_libs)
 
     n_labeled = adata[adata.obs[labels_key] != unlabeled_category].n_obs
     pct_labeled = 100*(n_labeled / adata.n_obs)
-    logger.add_to_log(f"A total of {adata.n_obs} cells (and {adata.n_vars} genes) are available in the dataset of which {n_labeled} (i.e. {pct_labeled:.2f}% have manual labels")
+    logger.add_to_log(f"A total of {adata.n_obs} cells (and {adata.n_vars} genes) are available in the dataset of which {n_labeled} (i.e. {pct_labeled:.2f}%) have manual labels.")
     logger.add_to_log(f"Manual label distribution:\n{adata.obs[labels_key].value_counts()}")
 
     try:
@@ -240,30 +232,39 @@ for integration_mode in integration_modes:
         scanvi_model_files = {}
         for batch_key in batch_keys:
             logger.add_to_log("Running for batch_key {}...".format(batch_key))
-            # unzip the model file
-            logger.add_to_log(f"Unzipping model file {model_file}...".format(batch_key))
             if tissue_integration:
                 model_file = f"{prefix}.{integrated_object_version}.scvi_model.zip"
-                model_path = os.path.join(data_dir, model_file)
+                data_file = f"{prefix}.{integrated_object_version}.scvi_model.data.h5ad"
             else:
                 model_file = f"{prefix}.{integrated_object_version}.scvi_model_batch_key_{batch_key}.zip"
-                model_path = os.path.join(data_dir, model_file)
+                data_file = f"{prefix}.{integrated_object_version}.scvi_model_batch_key_{batch_key}.data.h5ad"
+            # unzip the model file
+            logger.add_to_log(f"Unzipping model file {model_file}...".format(batch_key))
+            model_path = os.path.join(data_dir, model_file)
             shutil.unpack_archive(model_path, data_dir)
-            model_path = model_path[:-4] # remove the .zip
-            # if tissue_integration:
-            #     data_file = f"{prefix}.{integrated_object_version}.scvi_model.data.h5ad"
-            # else:
-            #     data_file = f"{prefix}.{integrated_object_version}.scvi_model_batch_key_{batch_key}.data.h5ad"
-            # data = anndata.read_h5ad(os.path.join(model_path, data_file))
-            vae = scvi.model.SCVI.load(model_path)
-            logger.add_to_log("Training scanvi model...")
+            model_path = model_path.replace(f"{integrated_object_version}.", "")[:-4] # remove the .zip
+            # # rename the adata file to adata.h5ad so that the model load call can pick it up
+            # old_name = os.path.join(model_path, data_file)
+            # new_name = os.path.join(model_path, "adata.h5ad")
+            # shutil.move(old_name, new_name)
+
+            logger.add_to_log("Loading the pre-trained scvi model and creating a scanvi model from it...")
+            vae_data = anndata.read_h5ad(os.path.join(model_path, data_file))
+            add_annotations_to_adata(vae_data, labels_key, unlabeled_category, annotations, valid_libs)
+            vae = scvi.model.SCVI.load(model_path, adata=vae_data)
+            scvi.model.SCANVI.setup_anndata(
+                vae.adata,
+                batch_key=batch_key,
+                labels_key=labels_key,
+            )
             lvae = scvi.model.SCANVI.from_scvi_model(
                 vae,
-                # adata=data,
+                unlabeled_category,
+                adata=vae.adata,
                 n_latent=configs["n_latent"],
-                labels_key=labels_key,
-                unlabeled_category=unlabeled_category,
             )
+
+            logger.add_to_log("Training scanvi model...")
             lvae.train(n_samples_per_label=configs["n_samples_per_label"])
             if "elbo_train" in lvae.history_:
                 logger.add_to_log(f'Number of scanvi training epochs: {len(lvae.history_["elbo_train"])}...')
@@ -290,7 +291,7 @@ for integration_mode in integration_modes:
             # done with training scanvi
             logger.add_to_log("Calculate neighbors graph and UMAP based on scanvi components...")
             neighbors_key = f"scanvi_integrated_neighbors_batch_key_{batch_key}"
-            sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=latent_key, key_added=neighbors_key) 
+            sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=latent_key, key_added=neighbors_key) 
             adata.obsm[f"X_umap_scvi_integrated_batch_key_{batch_key}"] = sc.tl.umap(
                 adata,
                 min_dist=configs["umap_min_dist"],

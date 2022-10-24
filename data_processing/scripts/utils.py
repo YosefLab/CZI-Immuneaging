@@ -692,3 +692,20 @@ def get_tissues_or_compartments(s3_access_file: str, tissue_or_compartment: str,
     else:
         tissues_or_compartments = ["T", "B", "Myeloid", "Other"]
     return tissues_or_compartments
+
+def add_annotations_to_adata(
+    adata: AnnData,
+    labels_key: str,
+    unlabeled_category: str,
+    annotations: pd.DataFrame,
+    valid_libs: List[str] = None,
+):
+    adata.obs[labels_key] = pd.Series()
+    trimmed_index = adata.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
+    idx = trimmed_index.isin(annotations.index)
+    # 1. select the indices that have annotations and re-set the index to the trimmed one so that we can match it against the one in the annotations df
+    # 2. replace NaN values (i.e. missing annotations) with the annotations in the annotations df (note that both df's must have the labels_key column)
+    # 3. replace any remaining NaNs with the unlabeled_category to represent missing labels
+    df = adata.obs.set_index(trimmed_index)[idx]
+    adata.obs[labels_key] = df[labels_key].combine_first(annotations[labels_key])
+    adata.obs[labels_key].fillna(unlabeled_category, inplace=True)
