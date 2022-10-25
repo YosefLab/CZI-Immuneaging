@@ -223,7 +223,10 @@ for integration_mode in integration_modes:
     pct_labeled = 100*(n_labeled / adata.n_obs)
     logger.add_to_log(f"A total of {adata.n_obs} cells (and {adata.n_vars} genes) are available in the dataset of which {n_labeled} (i.e. {pct_labeled:.2f}%) have manual labels.")
     logger.add_to_log(f"Manual label distribution:\n{adata.obs[labels_key].value_counts()}")
-
+    if n_labeled == 0:
+        logger.add_to_log(f"0 cells have a label, so we cannot run scanvi (and no point in doing so). Moving on...")
+        continue
+    
     try:
         # just log if we have proteins though we wont be running totalvi
         if "protein_expression" in adata.obsm:
