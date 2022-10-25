@@ -226,7 +226,7 @@ for integration_mode in integration_modes:
     if n_labeled == 0:
         logger.add_to_log(f"0 cells have a label, so we cannot run scanvi (and no point in doing so). Moving on...")
         continue
-    
+
     try:
         # just log if we have proteins though we wont be running totalvi
         if "protein_expression" in adata.obsm:
@@ -246,10 +246,6 @@ for integration_mode in integration_modes:
             model_path = os.path.join(data_dir, model_file)
             shutil.unpack_archive(model_path, data_dir)
             model_path = model_path.replace(f"{integrated_object_version}.", "")[:-4] # remove the .zip
-            # # rename the adata file to adata.h5ad so that the model load call can pick it up
-            # old_name = os.path.join(model_path, data_file)
-            # new_name = os.path.join(model_path, "adata.h5ad")
-            # shutil.move(old_name, new_name)
 
             logger.add_to_log("Loading the pre-trained scvi model and creating a scanvi model from it...")
             vae_data = anndata.read_h5ad(os.path.join(model_path, data_file))
@@ -295,7 +291,7 @@ for integration_mode in integration_modes:
             logger.add_to_log("Calculate neighbors graph and UMAP based on scanvi components...")
             neighbors_key = f"scanvi_integrated_neighbors_batch_key_{batch_key}"
             sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=latent_key, key_added=neighbors_key) 
-            adata.obsm[f"X_umap_scvi_integrated_batch_key_{batch_key}"] = sc.tl.umap(
+            adata.obsm[f"X_umap_scanvi_integrated_batch_key_{batch_key}"] = sc.tl.umap(
                 adata,
                 min_dist=configs["umap_min_dist"],
                 spread=float(configs["umap_spread"]),
