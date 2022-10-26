@@ -702,10 +702,14 @@ def add_annotations_to_adata(
 ):
     adata.obs[labels_key] = pd.Series()
     trimmed_index = adata.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
-    idx = trimmed_index.isin(annotations.index)
-    # 1. select the indices that have annotations and re-set the index to the trimmed one so that we can match it against the one in the annotations df
-    # 2. replace NaN values (i.e. missing annotations) with the annotations in the annotations df (note that both df's must have the labels_key column)
-    # 3. replace any remaining NaNs with the unlabeled_category to represent missing labels
-    df = adata.obs.set_index(trimmed_index)[idx]
-    adata.obs[labels_key] = df[labels_key].combine_first(annotations[labels_key])
+    df = adata.obs.set_index(trimmed_index)
+    # fillna replaces NaN's with values in the second df for any indices in the first df that have a match in the second df
+    # (indices dont have be in the same order in the two df's) and leaves all other NaN's untouched
+    temp = df[labels_key].fillna(annotations[labels_key])
+    # make sure that fillna didn't re-order the index or change it in any other way
+    assert temp.index.equals(trimmed_index)
+    # now we can safely replace the index with the untrimmed one
+    temp.index = adata.obs.index
+    adata.obs[labels_key] = temp
+    # replace any remaining NaN's with the unlabeled_category
     adata.obs[labels_key].fillna(unlabeled_category, inplace=True)
