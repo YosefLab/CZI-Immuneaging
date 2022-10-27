@@ -388,7 +388,7 @@ def gather_extra_info_for_ir_libs(
             for seq_run in ["001", "002", "003"]:
                 file_name_partial = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
                 s3_processed_lib_path = "s3://immuneaging/processed_libraries/{}".format(file_name_partial)
-                version = get_latest_lib_version(s3_access_file, s3_processed_lib_path)
+                version = get_latest_object_version(s3_access_file, s3_processed_lib_path)
                 file_name = "{}.processed.{}.h5ad".format(file_name_partial, version)
                 sync_cmd = 'aws s3 sync --no-progress {}/{}/ {} --exclude "*" --include {}'.format(
                     s3_processed_lib_path, version, working_dir, file_name

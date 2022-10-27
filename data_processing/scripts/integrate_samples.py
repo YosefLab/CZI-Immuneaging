@@ -1,4 +1,4 @@
-## For speed, this script should be executed on s130 which has a GPU. However, note that integrating a large number of samples may require high memory, which may not always be available on s130.
+## For speed, this script should be executed on s130 which has a GPU and high RAM
 import sys
 integrate_samples_script = sys.argv[0]
 configs_file = sys.argv[1]
