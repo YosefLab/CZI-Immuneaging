@@ -713,3 +713,22 @@ def add_annotations_to_adata(
     adata.obs[labels_key] = temp
     # replace any remaining NaN's with the unlabeled_category
     adata.obs[labels_key].fillna(unlabeled_category, inplace=True)
+
+# Helpful for some of our annotation evaluation efforts
+def get_cluster_wise_cell_type_overview(adata: AnnData, ct_key: str, leiden_key: str):
+    col1 = "number of cells"
+    col2 = "number of unique predicted cell types"
+    col3 = "top predicted cell type"
+    col4 = "proportion of the top predicted cell type"
+    clusters = adata.obs[leiden_key].unique()
+    df = pd.DataFrame(index=clusters, columns=[col1, col2, col3, col4])
+
+    for c in clusters:
+        cells_df = adata.obs[adata.obs[leiden_key] == c]
+        df.loc[c, col1] = len(cells_df)
+        df.loc[c, col2] = len(cells_df[ct_key].unique())
+        cell_types = cells_df[ct_key].value_counts(normalize=True)
+        df.loc[c, col3] = cell_types.index[0]
+        df.loc[c, col4] = cell_types[0]
+
+    return df
