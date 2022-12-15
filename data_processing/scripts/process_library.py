@@ -208,6 +208,7 @@ if configs["library_type"] == "GEX":
         # alignment and we didn't want to re-align all the libraries after the fix)
         # We patch that here by renaming the HTO tags to the new ones that match the IA
         # sample spreadsheet.
+        # Update: Owner 759B needs the same treatment...
         def old_name_to_new_name(old_name: str) -> str:
             # replace BLD with BLO since that is something else that we renamed after having aligned
             # the libraries
@@ -227,8 +228,6 @@ if configs["library_type"] == "GEX":
                     return "694B-SPL-205"
                 else:
                     return "694B-SPL-212"
-            elif old_name == "694B-MLN-206":
-                return "694B-MLN-206"
             elif old_name == "694B-JEJEPI-1":
                 if configs["library_id"] in ["CZI-IA11512685", "CZI-IA11512686", "CZI-IA11512687"]:
                     return "694B-JEJEPI-207"
@@ -241,6 +240,23 @@ if configs["library_type"] == "GEX":
                     return "694B-JEJLP-214"
             elif old_name == "694B-SKN-1":
                 raise ValueError("This is unexpected!")
+            # 759B
+            elif (old_name == "759B-MLN-1") and (configs["library_id"] in ["CZI-IA12953908", "CZI-IA12953909", "CZI-IA12953910", "CZI-IA12953911"]):
+                return "759B-MLN-263"
+            elif (old_name == "759B-LLN-1") and (configs["library_id"] in ["CZI-IA12953908", "CZI-IA12953909", "CZI-IA12953910", "CZI-IA12953911"]):
+                return "759B-LLN-264"
+            elif (old_name == "759B-SPL-1") and (configs["library_id"] in ["CZI-IA12953908", "CZI-IA12953909", "CZI-IA12953910", "CZI-IA12953911"]):
+                return "759B-SPL-265"
+            elif (old_name == "759B-BLO-1") and (configs["library_id"] in ["CZI-IA12953908", "CZI-IA12953909", "CZI-IA12953910", "CZI-IA12953911"]):
+                return "759B-BLO-266"
+            elif (old_name == "759B-BMA-1") and (configs["library_id"] in ["CZI-IA12953908", "CZI-IA12953909", "CZI-IA12953910", "CZI-IA12953911"]):
+                return "759B-BMA-267"
+            elif (old_name == "759B-JEJLP-1") and (configs["library_id"] in ["CZI-IA12953912"]):
+                return "759B-JEJLP-268"
+            elif (old_name == "759B-JEJEPI-1") and (configs["library_id"] in ["CZI-IA12953912"]):
+                return "759B-JEJEPI-269"
+            elif (old_name == "759B-SKN-1") and (configs["library_id"] in ["CZI-IA12953914"]):
+                return "759B-SKN-270"
             else:
                 return old_name
         new_cell_hashing = {c: old_name_to_new_name(c) for c in cell_hashing}
