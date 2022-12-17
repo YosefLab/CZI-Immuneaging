@@ -200,8 +200,6 @@ for integration_mode in integration_modes:
     dotplot_dirname = "dotplots" + mode_suffix
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
-    barcodes = pd.read_csv(barcodes_csv_path, header=None)
-    exclude_barcodes = pd.read_csv(exclude_barcodes_csv_path, header=None) if os.path.isfile(exclude_barcodes_csv_path) else None
     try:
         if adata_dict is not None:
             logger.add_to_log("Cleaning up adata_dict to free up some memory before the next run...")
@@ -216,6 +214,8 @@ for integration_mode in integration_modes:
         if tissue_integration:
             adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
         else:
+            barcodes = pd.read_csv(barcodes_csv_path, header=None)
+            exclude_barcodes = pd.read_csv(exclude_barcodes_csv_path, header=None) if os.path.isfile(exclude_barcodes_csv_path) else None
             adata_temp = sc.read_h5ad(h5ad_file)
             # replace adata with the subset of adata that is limited to the compartment barcodes
             trimmed_adata_index = adata_temp.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
