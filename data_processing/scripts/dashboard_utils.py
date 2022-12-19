@@ -69,7 +69,6 @@ def get_tissue_coverage_csv():
     csv_file.close()
 
 def generate_tissue_integration_figures(adata, tissue, version, working_dir, base_aws_url, base_s3_url, base_s3_dir):
-    
     # add two age fields for the umaps - age as a quantitative variable and as a categorical variable using 3 age groups
     ages_str = np.unique(adata.obs["age"])
     ages = {}
@@ -113,10 +112,10 @@ def generate_tissue_integration_figures(adata, tissue, version, working_dir, bas
     figures_urls = []
 
     # plot umaps and color by metadata; plot all umap versions (i.e. based on all dimensionality reductions we have)
-    umap_keys = ["X_umap_scvi_integrated","X_umap_pca"]
+    umap_keys = ["X_umap_scvi_integrated_batch_key_donor_id","X_umap_pca"]
     integration_models = ["scvi","pca"]
-    if "X_umap_totalvi_integrated" in adata.obsm:
-        umap_keys.append("X_umap_totalvi_integrated")
+    if "X_umap_totalvi_integrated_batch_key_donor_id" in adata.obsm:
+        umap_keys.append("X_umap_totalvi_integrated_batch_key_donor_id")
         integration_models.append("totalvi")
     
     for mdl in range(len(umap_keys)):
@@ -183,7 +182,6 @@ def get_tissue_integration_results_csv(working_dir: str, s3_access_file: str, rm
 
     # prepare the needful for downloading data from aws
     utils.set_access_keys(s3_access_file)
-    #BASE_AWS_URL = "https://immuneaging.s3.us-west-1.amazonaws.com"
     BASE_AWS_URL = "https://s3.console.aws.amazon.com/s3/object/immuneaging?prefix="
     BASE_S3_URL = "s3://immuneaging"
     BASE_S3_DIR = "integrated_samples/tissue_level"
