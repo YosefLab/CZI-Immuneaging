@@ -481,3 +481,110 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
     df.to_csv(csv_path)
     logger.add_to_log(f"✅✅ results: {csv_path}")
     return df
+
+def report_vdj_lib_ss_and_fp_metrics_for_all_libs(
+        ir_lib_type: str,
+        b_adata_path: str,
+        t_adata_path: str,
+        myeloid_adata_path: str,
+        other_adata_path: str,
+    ):
+    assert ir_lib_type in ["BCR", "TCR"]
+    cols = ['BCR-has_ir', 'TCR-has_ir', 'bcr_library_id', 'tcr_library_id']
+    b_cells = anndata.read_h5ad(b_adata_path, backed=True).obs[cols]
+    t_cells = anndata.read_h5ad(t_adata_path, backed=True).obs[cols]
+    myeloid_cells = anndata.read_h5ad(myeloid_adata_path, backed=True).obs[cols]
+    other_cells = anndata.read_h5ad(other_adata_path, backed=True).obs[cols]
+    
+    def run_for_lib(
+        lib_id: str,
+        ir_lib_type: str,
+        site: str,
+        donor: str,
+        organs: List[str],
+        skip_header: bool = False
+    ):
+        cell_type = "b" if ir_lib_type == "BCR" else "t"
+        print("Running for {} of type {}...".format(lib_id, ir_lib_type))
+        lib_id_str = f"{cell_type}cr_library_id"
+        has_ir_str = f"{ir_lib_type}-has_ir"
+        # get the subset of the cells that have the given library ID
+        b_cells_lib = b_cells[b_cells[lib_id_str] == lib_id]
+        t_cells_lib = t_cells[t_cells[lib_id_str] == lib_id]
+        m_cells_lib = myeloid_cells[myeloid_cells[lib_id_str] == lib_id]
+        o_cells_lib = other_cells[other_cells[lib_id_str] == lib_id]
+
+        # Look at the presence of b cell receptors for b cells (will give us a hint about BCR library seq. saturation)
+        # same for t depending on the ir_lib_type
+        print("Looking at the presence of {}'s for {} cells...".format(ir_lib_type, cell_type))
+        cells = b_cells_lib if ir_lib_type == "BCR" else t_cells_lib
+        num_cells = len(cells)
+        receptors = cells[cells[has_ir_str] == "True"]
+        num_receptors = len(receptors)
+        # num_cells can be 0 e.g. in the case of SKIN
+        pct_receptors = -1 if num_cells == 0 else (num_receptors * 100) / num_cells
+        # look for any cell receptors of the "opposite" cell type
+        opposite_ir_lib_type = "TCR" if ir_lib_type == "BCR" else "BCR"
+        opposite_receptors = cells[cells["{}-has_ir".format(opposite_ir_lib_type)] == "True"]
+        num_opposite_receptors = len(opposite_receptors)
+        pct_opposite_receptors = -1 if num_cells == 0 else (num_opposite_receptors * 100) / num_cells
+
+        # Look at the presence of b cell receptors for non-b cells (will give us a hint about false positive receptors)
+        # same for t depending on the ir_lib_type
+        print("Looking at the presence of {}'s for non-{} cells...".format(ir_lib_type, cell_type))
+        opposite_type_cells = t_cells_lib if ir_lib_type == "BCR" else b_cells_lib
+        num_cells_other_types = len(opposite_type_cells) + len(m_cells_lib) + len(o_cells_lib)
+        num_receptors_other_types = len(opposite_type_cells[opposite_type_cells[has_ir_str] == "True"])
+        num_receptors_other_types += len(m_cells_lib[m_cells_lib[has_ir_str] == "True"])
+        num_receptors_other_types += len(o_cells_lib[o_cells_lib[has_ir_str] == "True"])
+        pct_receptors_other_types = (num_receptors_other_types * 100) / num_cells_other_types
+
+        print("✅✅ Results:")
+        csv_rows = [
+            {
+                "Lib Id": lib_id,
+                "Site": site,
+                "Donor ID": donor,
+                "Organ(s)": ",".join([str(o) for o in organs]),
+
+                f"# {cell_type} cells": num_cells,
+                f"# {cell_type} cells with {ir_lib_type}": num_receptors,
+                f"(# {cell_type} cells with {ir_lib_type} * 100)/# {cell_type} cells (aka seq. saturation)": pct_receptors,
+
+                f"# {cell_type} cells with {opposite_ir_lib_type}": num_opposite_receptors,
+                f"(# {cell_type} cells with {opposite_ir_lib_type} * 100)/# {cell_type} cells": pct_opposite_receptors,
+
+                f"# non-{cell_type} cells": num_cells_other_types,
+                f"# non-{cell_type} cells with {ir_lib_type}": num_receptors_other_types,
+                f"(# non-{cell_type} cells with {ir_lib_type} * 100)/# non-{cell_type} cells (aka false positive)": pct_receptors_other_types,
+            }
+        ]
+        csv_file = io.StringIO()
+        field_names = list(csv_rows[0].keys())
+        writer = csv.DictWriter(csv_file, fieldnames=field_names)
+        if not skip_header:
+            writer.writeheader()
+        writer.writerows(csv_rows)
+        print(csv_file.getvalue())
+        csv_file.close()
+
+    ir_libs = list(get_vdj_lib_to_gex_lib_mapping()[0 if ir_lib_type == "BCR" else 1].keys())
+    samples = read_immune_aging_sheet("Samples")
+    first = True
+    for lib in ir_libs:
+        # get some other metadata associated with this lib
+        col_name = "{} lib".format(ir_lib_type)
+        samples["Pick?"] = samples[col_name].fillna('').apply(lambda x: "Yes" if lib in x.split(",") else "No")
+        idx = samples["Pick?"] == "Yes"
+        sites = samples[idx]["Site"]
+        donors = samples[idx]["Donor ID"]
+        organs = set(samples[idx]["Organ"])
+        if len(set(sites)) > 1:
+            raise ValueError("More than one site was found for lib id {} of type {}".format(lib, ir_lib_type))
+        if len(set(donors)) > 1:
+            raise ValueError("More than one donor was found for lib id {} of type {}".format(lib, ir_lib_type))
+        site, donor = set(sites).pop(), set(donors).pop()
+        # run for lib
+        run_for_lib(lib, site, donor, organs, skip_header=not first)
+        if first:
+            first = False
