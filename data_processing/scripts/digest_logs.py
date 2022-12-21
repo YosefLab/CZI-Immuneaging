@@ -8,7 +8,7 @@ import sys
 import os
 import traceback
 from abc import ABC, abstractmethod
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 import pandas as pd
 import csv
@@ -373,8 +373,7 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
     def get_digest_csv(self):
         raise NotImplementedError
 
-    def get_lib_metrics_csv(self, csv_file: str, lib_type: str):
-        assert lib_type in ["GEX", "BCR", "TCR"]
+    def get_lib_metrics_csv(self, csv_file: str, lib_types: Optional[List[str]] = None):
         logger = RichLogger()
         try:
             files_to_lines = self._get_log_lines()
@@ -385,6 +384,7 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
             CSV_HEADER_CELL_COUNT_AFTER_QC: str = "# Cells After QC"
             CORRESPONDING_GEX_LIB: str = "corresponding_gex_lib"
             DONOR_ID: str = "donor_id"
+            LIB_TYPE: str = "lib_type"
 
             def parse_line(line: str, formatted_str: str, formatted_str_index: int, csv_header: str, csv_row: Dict) -> bool:
                 parsed = search(formatted_str, line)
@@ -397,12 +397,16 @@ class DigestLibraryProcessingLogs(BaseDigestClass):
             csv_rows = []
             for filepath,lines in files_to_lines.items():
                 lib_id = filepath.split(".")[1].split("_")[-1]
+                lib_type = filepath.split(".")[1].split("_")[-2] # e.g. GEX, BCR, TCR
+                if lib_types is not None and lib_type not in lib_types:
+                    continue
                 csv_row = {
                     CSV_HEADER_LIBRARY_ID: lib_id,
                     CSV_HEADER_CELL_COUNT_BEFORE_QC: 0,
                     CSV_HEADER_CELL_COUNT_AFTER_QC: 0,
                     CORRESPONDING_GEX_LIB: "?",
                     DONOR_ID: "?",
+                    LIB_TYPE: lib_type,
                 }
                 for line in lines:
                     FORMATTED_STRING_COUNTS_BEGIN = "Started with a total of {} cells"

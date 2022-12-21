@@ -653,7 +653,7 @@ def read_library(library_type, library_id, s3_access_file, working_dir, stage, l
             file_name_partial = "{}_{}.{}".format(donor_id, seq_run, library_id)
             s3_aligned_lib_path = "s3://immuneaging/aligned_libraries"
             folder_name = "{}_{}_{}_{}".format(donor_id, seq_run, library_type, library_id)
-            version = get_latest_object_version(s3_access_file, s3_aligned_lib_path, lib_folder_name=folder_name)
+            version = get_latest_object_version(s3_access_file, s3_aligned_lib_path, folder_name=folder_name)
             file_name = "{}.{}.h5ad".format(file_name_partial, version)
             sync_cmd = 'aws s3 sync --no-progress {}/{}/{} {} --exclude "*" --include {}'.format(
                 s3_aligned_lib_path, version, folder_name, working_dir, file_name
