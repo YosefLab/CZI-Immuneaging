@@ -424,7 +424,14 @@ def gather_extra_info_for_ir_libs(
     print(csv_file.getvalue())
     csv_file.close()
 
-def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, log_file_dir):
+def get_ir_gex_intersection(
+    ir_type,
+    s3_access_file,
+    working_dir,
+    save_csv_dir,
+    log_file_dir,
+    only_donors: Optional[List[str]] = None
+):
     unique_artifact_prefix = f"{ir_type}_{str(uuid.uuid1())}"
     log_file_path = f"{log_file_dir}/vdj_seq_sat_logs_{unique_artifact_prefix}.log"
     logger = SimpleLogger(filename = log_file_path)
@@ -435,6 +442,8 @@ def get_ir_gex_intersection(ir_type, s3_access_file, working_dir, save_csv_dir, 
 
     for ir_id,gex_id in irs.items():
         donor_id = get_donor_id_for_lib(ir_type, ir_id, samples)
+        if only_donors is not None and donor_id not in only_donors:
+            continue
         adata_ir = read_library(ir_type, ir_id, s3_access_file, working_dir, "processed", logger, remove_adata=False, donor_id=donor_id)
         adata_gex = read_library("GEX", gex_id, s3_access_file, working_dir, "processed", logger, remove_adata=False, donor_id=donor_id)
         adata_gex_pre_qc = read_library(
