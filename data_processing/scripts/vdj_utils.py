@@ -497,7 +497,8 @@ def report_vdj_lib_ss_and_fp_metrics_for_all_libs(
         t_adata_path: str,
         myeloid_adata_path: str,
         other_adata_path: str,
-        csv_file_path: str,
+        csv_file_path: Optional[str] = None,
+        only_donors: Optional[List[str]] = None,
     ):
     assert ir_lib_type in ["BCR", "TCR"]
     cols = ['BCR-has_ir', 'TCR-has_ir', 'bcr_library_id', 'tcr_library_id']
@@ -571,20 +572,22 @@ def report_vdj_lib_ss_and_fp_metrics_for_all_libs(
                 f"(# non-{cell_type} cells with {ir_lib_type} * 100)/# non-{cell_type} cells (aka false positive)": pct_receptors_other_types,
             }
         ]
-        # csv_file = io.StringIO()
-        # field_names = list(csv_rows[0].keys())
-        # writer = csv.DictWriter(csv_file, fieldnames=field_names)
-        # if not skip_header:
-        #     writer.writeheader()
-        # writer.writerows(csv_rows)
-        # print(csv_file.getvalue())
-        # csv_file.close()
-        field_names = list(csv_rows[0].keys())
-        with open(csv_file_path, "a") as f:
-            writer = csv.DictWriter(f, fieldnames=field_names)
+        if csv_file_path is not None:
+            field_names = list(csv_rows[0].keys())
+            with open(csv_file_path, "a") as f:
+                writer = csv.DictWriter(f, fieldnames=field_names)
+                if not skip_header:
+                    writer.writeheader()
+                writer.writerows(csv_rows)
+        else:
+            csv_file = io.StringIO()
+            field_names = list(csv_rows[0].keys())
+            writer = csv.DictWriter(csv_file, fieldnames=field_names)
             if not skip_header:
                 writer.writeheader()
             writer.writerows(csv_rows)
+            print(csv_file.getvalue())
+            csv_file.close()
 
     ir_libs = list(get_vdj_lib_to_gex_lib_mapping()[0 if ir_lib_type == "BCR" else 1].keys())
     samples = read_immune_aging_sheet("Samples")
@@ -602,6 +605,8 @@ def report_vdj_lib_ss_and_fp_metrics_for_all_libs(
         if len(set(donors)) > 1:
             raise ValueError("More than one donor was found for lib id {} of type {}".format(lib, ir_lib_type))
         site, donor = set(sites).pop(), set(donors).pop()
+        if only_donors is not None and donor not in only_donors:
+            continue
         # run for lib
         run_for_lib(lib, ir_lib_type, site, donor, organs, skip_header=not first)
         if first:
