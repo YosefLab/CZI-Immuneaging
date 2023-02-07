@@ -493,6 +493,8 @@ You DO have to be on a machine with  a GPU for this stage.
 1. Run the generated bash script
 1. Once done, run the digest process sample logs script against the generated process sample logs:
 `python digest_logs.py print_digest sample <donor_id> <seq_run> aws <version of the processed samples> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
+1. Update the dashboard using the output of the below (you still need to copy and paste it manually in the dashboard):  
+`python digest_logs.py get_csv sample <donor_id> <seq_run> aws <version of the processed samples> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
 
 ### <a name="integrating_samples"></a> Integrating samples
 
@@ -517,10 +519,8 @@ You DO have to be on a machine with  a GPU for this stage.
 1. Start a tmux session
 1. Integrate all tissues. For example for the spleen tissue:   
 `python integrate_samples.py /data/yosef2/scratch/immuneaging/vv_runs/process_configs/integrate_samples.SPL.configs.txt`
-
-### <a name="dashboard_update"></a> Updating the dashboard
-
-TODO
+1. Update the dashboard using the output of the below (you still need to copy and paste it manually in the dashboard):   
+`python dashboard_utils.py tissue_integration_results <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh> <version of integrated tissues> True`
 
 ### <a name="version_control"></a> Reproducibility and version control
 
