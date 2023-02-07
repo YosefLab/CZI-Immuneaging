@@ -9,33 +9,32 @@ This page did not answer your question? Please <a href="https://github.com/Yosef
 1. [Overview](#overview)
 1. [Preliminaries](#preliminaries)
     1. [Setting up data access](#preliminaries_access)
-    2. [The Immune Aging samples spreadsheet](#preliminaries_spreadsheet)
-    3. [The Immune Aging Dashboard](#dashboard)
+    1. [The Immune Aging samples spreadsheet](#preliminaries_spreadsheet)
+    1. [The Immune Aging Dashboard](#dashboard)
 1. [Code organization](#code_organization)
     1. [Align library overview](#align_library_overview)
-    2. [Process library overview](#process_library_overview)
-    3. [Process sample overview](#process_sample_overview)
+    1. [Process library overview](#process_library_overview)
+    1. [Process sample overview](#process_sample_overview)
 1. [Data Download](#download)
     1. [Directory structure on S3](#download_structure)
-    2. [Downloading data via the AWS console](#download_console)
-    3. [Downloading data via terminal](#download_terminal)
+    1. [Downloading data via the AWS console](#download_console)
+    1. [Downloading data via terminal](#download_terminal)
 1. [Data upload](#upload)
     1. [File naming conventions](#upload_naming)
-    2. [Upload to S3](#upload_upload)
+    1. [Upload to S3](#upload_upload)
 1. [Data visualization](#visualization)
 1. [Data Processing](#processing)
     1. [Prerequisites](#processing_prerequisites)
-    2. [Processing libraries](#processing_libraries)
-    3. [Processing samples](#processing_samples)
-    4. [Sandbox envorinment](#sandbox_envorinment)
-    5. [Job queue](#job_queue)
-    6. [Reproducibility and version control](#version_control)
-    7. [Running the pipeline](#running_the_pipeline)
-1. [Data Hub admins](#admins)
-    1. [Aligning libraries](#admins_lib_alignment)
-    2. [Executing job queue jobs](#admins_job_queue_execution)
-    3. [Generating job configs](#admins_job_configs_generation)
-    4. [Sample integration](#sample_integration)
+    1. [Aligning libraries](#aligning_libraries)
+    1. [Processing libraries](#processing_libraries)
+    1. [Processing samples](#processing_samples)
+    1. [Integrating samples](#integrating_samples)
+    1. [Updating the dashboard](#dashboard_update)
+    1. [Reproducibility and version control](#version_control)
+    1. [Sandbox environment](#sandbox_environment)
+    1. [Job queue](#job_queue)
+    1. [Generating job configs](#job_configs_generation)
+    1. [Executing job queue jobs](#job_queue_execution)
 ---
 
 ## <a name="overview"></a> Overview
@@ -138,7 +137,7 @@ There are 4 main classes of scripts that comprise our codebase:
 - Concatenate the concatenated BCR and TCR libs together in an object called adata_ir.
 - Merge adata_gex with adata_ir, discarding any cells in the latter that dont have a match in the former. Call this adata.
 - Compute the per-cell protein coverage (total number of protein reads per cell across control and non-control proteins). If the median per-cell protein coverage across all cells is 0, disregard protein counts altogether.
-- Run decontX for estimating contamination levels from ambient RNA. Run a Rscript command for this. If there is more than one GEX library, yse the “batch” column from the GEX concatenation done earlier. decontX returns contamination_levels per cells (save it as an obs in adata) and decontaminated counts (save it in a layer in adata).
+- Run decontX for estimating contamination levels from ambient RNA. Run a Rscript command for this. If there is more than one GEX library, use the “batch” column from the GEX concatenation done earlier. decontX returns contamination_levels per cells (save it as an obs in adata) and decontaminated counts (save it in a layer in adata).
 - Filter out all cells from adata whose total decontaminated counts (after rounding), is less than 100.
 - Make a copy of adata, call it adata_copy. Have adata_copy.X be the rounded decontaminated counts.
 - Keep only the genes in adata_copy that are in solo_genes.
@@ -177,18 +176,18 @@ The root directory of the Immune Aging S3 bucket includes the following sub-dire
 👉 for each tissue, contains a list of cells that we decided to filter out due to being non immune cell types. We download and use these files during library processing. This also contains the list of poor quality libraries to exclude (poor_quality_libs.csv).  
 📂 combined_lib_alignment_metrics/  
 👉 contains, for each donor (and also one file for all_donors), some high level metrics for all processed GEX/IR libraries for that donor. These are pulled from cellranger output and aggregated here.  
-📂 job_queue/  
-👉 a job queue that is used during processing (more details under [Data Processing](#processing))  
 📂 per-compartment-barcodes/  
-👉 contains the list of manually curated barcodes for each compartment. Under archived I store the previous versions before replacing them with new ones.
+👉 contains the list of manually curated barcodes for each compartment. Under archived/ I store the previous versions before replacing them with new ones.  
 📂 annotated_objects/  
 👉 used to store annotated data objects  
 📂 scratch/  
-👉 used as an unstructured dropbox for testing or temporary artifacts  
+👉 used as an unstructured "dropbox" for testing or temporary artifacts  
 📂 unpublished_celltypist_models/  
-👉 contains a celltypist model we use for RBC detection (not officially publisehd by celltypist). During sample processing we download the model from this location.  
+👉 contains a celltypist model we use for RBC detection (not officially published by celltypist). During sample processing we download the model from this location.  
 📂 vdj_genes/  
 👉 contains a csv file with the list of VDJ genes to exclude. During library processing we download the csv from this location.  
+📂 job_queue/  
+👉 a job queue that is used during processing (more details under [Data Processing](#processing))  
 
 Here is more detail about some of the main directories listed above that contain outputs from the final and intermediate steps of the pipeline:
 
@@ -203,7 +202,7 @@ The structure of the `aligned_libraries` directory is as follows:
         * align_library.v2.txt
         * ...
     * v1/
-        * library1
+        * library1_gex
             * library1.cellranger.cloupe.cloupe
             * library1.cellranger.feature_ref.csv
             * library1.cellranger.libraries.csv
@@ -211,20 +210,23 @@ The structure of the `aligned_libraries` directory is as follows:
             * library1.cellranger.web_summary.html
             * library1.v1.h5ad
             * align_library.library1.v1.log
-        * library2
-            * library2.cellranger.cloupe.cloupe
-            * library2.cellranger.feature_ref.csv
-            * library2.cellranger.libraries.csv
+        * library2_ir
+            * library2.cellranger.airr_rearrangement.tsv
+            * library2.cellranger.all_contig_annotations.csv
+            * library2.cellranger.all_contig_annotations.json
+            * library2.cellranger.all_contig.fasta
+            * library2.cellranger.filtered_contig_annotations.v1.csv
+            * library2.cellranger.filtered_contig.fasta
             * library2.cellranger.metrics_summary.csv
+            * library2.cellranger.vloupe.vloupe
             * library2.cellranger.web_summary.html
-            * library2.v1.h5ad
             * align_library.library2.v1.log
         * ...
     * v2/
         * ...
     * ...
 
-The `configs` directory includes versioned configuration files for the alignment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alignment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log file documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
+The `configs` directory includes versioned configuration files for the alignment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alignment outputs for each library. Particularly, it includes a .h5ad file (or filtered_contig_annotations.csv file), output files from cellranger, and a .log file documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
 The `processed_libraries` directory stores data of processed libraries (i.e., beyond alignment), an intermediate product before the sample-level processing; its structure is as follows:
 
@@ -434,11 +436,11 @@ Note that the script `generate_library_alignment_script.py` requires a configura
 <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library.configs_file.example.txt">Here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library_configs.md">here</a> you can find a description of each of the configuration fields.
 
 ⚙️ How to align libraries  
-You don't have to be on a machine wiuth a GPU for this stage.
+You don't have to be on a machine with  a GPU for this stage.
 1. Start a tmux session
 2. Activate your IA environment
 3. Create alignment configs text file
-4. Generate alignment script (bash script) by running:
+4. Generate alignment script (bash script) by running:  
 `python generate_library_alignment_script.py <donor_id> <seq_run> <path to your data_processing/scripts code> <path to your configs.txt file> <output dir where to place alignment results>`
 5. Run the bash script
 
@@ -452,19 +454,19 @@ python process_library.py configs.txt
 <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_library.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_library.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_library_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
 ⚙️ How to process libraries  
-You don't have to be on a machine wiuth a GPU for this stage.
+You don't have to be on a machine with  a GPU for this stage.
 1. Locally create a directory called process_configs
+1. Generate processing library config files -- for output destination use the absolute path to the process_configs dir above  
 `python generate_processing_config_files.py library <path to your data_processing/scripts code>  <path to your process_configs directory> <donor_id> <seq_run> <path to your AWS_immuneaging_credentials_file.sh> v1 v1`
-1. Generate processing library config files -- for output destination use the absolute path to the process_configs dir above
 1. Make sure on AWS the job queue folders are all empty
 1. Upload the results of generate configs script to AWS
 1. Locally create a directory called processing_results
-1. Generate process library scripts
-`python generate_processing_scripts.py <path to your AWS_immuneaging_credentials_file.sh> <path to your processing_results directory> <path to your data_processing/scripts code> <output dir where to place the generated sh files>`
-1. Make sure you've done the needful to avoid overwritign the existing version AWS (by having a different config file than the on on AWS) if that is your intention
-1. Start a tmux session if not already
-1. Run the sh file (under job_run)
-1. Once done, run the digest process library logs script against the generated process library logs:
+1. Generate process library bash script  
+`python generate_processing_scripts.py <path to your AWS_immuneaging_credentials_file.sh> <path to your processing_results directory> <path to your data_processing/scripts code> <output dir where to place the generated bash file>`
+1. Make sure you've done the needful to avoid overwriting the existing version AWS (by having a different config file than the on on AWS) if that is your intention
+1. Start a tmux session
+1. Run the generated bash script
+1. Once done, run the digest process library logs script against the generated process library logs:  
 `python digest_logs.py print_digest library <donor_id> <seq_run> aws <version of the processed libs> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
 
 ### <a name="processing_samples"></a> Processing samples
@@ -476,44 +478,44 @@ python process_sample.py configs.txt
 ```
 <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_sample.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
-⚙️ How to process samples
-You DO have to be on a machine wiuth a GPU for this stage.
+⚙️ How to process samples  
+You DO have to be on a machine with  a GPU for this stage.  
 1. Locally create a directory called process_configs
-`python generate_processing_config_files.py sample <path to your data_processing/scripts code>  <path to your process_configs directory> <donor_id> <seq_run> <path to your AWS_immuneaging_credentials_file.sh> <latest_processed_gex_lib_version> <latest_processed_ir_lib_version>`
-1. Generate processing sample config files -- for output destination use the absolute path to the process_configs dir above
+1. Generate processing sample config files -- for output destination use the absolute path to the process_configs dir above  
+`python generate_processing_config_files.py sample <path to your data_processing/scripts code> <path to your process_configs directory> <donor_id> <seq_run> <path to your AWS_immuneaging_credentials_file.sh> <latest processed gex lib version for this donor> <latest processed ir lib version for this donor>`
 1. Make sure on AWS the job queue folders are all empty
 1. Upload the results of generate configs script to AWS
 1. Locally create a directory called processing_results
-1. Generate process sample scripts
-`python generate_processing_scripts.py <path to your AWS_immuneaging_credentials_file.sh> <path to your processing_results directory> <path to your data_processing/scripts code> <output dir where to place the generated sh files>`
-1. Make sure you've done the needful to avoid overwritign the existing version on AWS (by having a different config file than the on on AWS) if that is your intention
-1. Start a tmux session if not already
-1. Run the sh file (under job_run)
+1. Generate process sample bash script  
+`python generate_processing_scripts.py <path to your AWS_immuneaging_credentials_file.sh> <path to your processing_results directory> <path to your data_processing/scripts code> <output dir where to place the generated bash file>`
+1. Make sure you've done the needful to avoid overwriting the existing version on AWS (by having a different config file than the on on AWS) if that is your intention
+1. Start a tmux session
+1. Run the generated bash script
 1. Once done, run the digest process sample logs script against the generated process sample logs:
 `python digest_logs.py print_digest sample <donor_id> <seq_run> aws <version of the processed samples> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
 
-### <a name="integrating_samples"></a> Integration samples
+### <a name="integrating_samples"></a> Integrating samples
 
 The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue or compartment, thus creating tissue-level or compartment-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
 
 In addition, the script `generate_integration_config_files_and_scripts.py` automatically generates configuration files for `integrate_samples.py` - one per tissue or compartment - by collecting for each tissue/compartment the list of available processed samples. Note that for a compartment, we simply grab all samples at this stage. Later, during the execution of the integrate_samples script, we only select cells from each sample that belong to that compartment.
 
 ⚙️ How to integrate samples compartment-wise   
-You DO have to be on a machine wiuth a GPU for this stage.
+You DO have to be on a machine with  a GPU for this stage.
 1. Locally create a directory called process_configs
-1. Generate processing sample config files -- for output destination use the absolute path to the process_configs dir above
-`python generate_integration_config_files_and_script.py <path to your data_processing/scripts code> <path to your process_configs directory> path to your AWS_immuneaging_credentials_file.sh> compartment`
+1. Generate integration config files and script (though we won't use the script below) -- for output destination use the absolute path to the process_configs dir above  
+`python generate_integration_config_files_and_script.py <path to your data_processing/scripts code> <path to your process_configs directory> <path to your AWS_immuneaging_credentials_file.sh> compartment`
 1. Start a tmux session
-1. Integrate all compartments. For example:
+1. Integrate all compartments. For example for the B compartment:  
 `python integrate_samples.py process_configs/integrate_samples.B.configs.txt`
 
 ⚙️ How to integrate samples tissue-wise   
-You DO have to be on a machine wiuth a GPU for this stage.
+You DO have to be on a machine with  a GPU for this stage.
 1. Locally create a directory called process_configs
-1. Generate processing sample config files -- for output destination use the absolute path to the process_configs dir above
-`python generate_integration_config_files_and_script.py <path to your data_processing/scripts code> <path to your process_configs directory> path to your AWS_immuneaging_credentials_file.sh> tissue`
+1. Generate integration config files and script (though we won't use the script below) -- for output destination use the absolute path to the process_configs dir above  
+`python generate_integration_config_files_and_script.py <path to your data_processing/scripts code> <path to your process_configs directory> <path to your AWS_immuneaging_credentials_file.sh> tissue`
 1. Start a tmux session
-1. Integrate all tissues. For example:
+1. Integrate all tissues. For example for the spleen tissue:   
 `python integrate_samples.py /data/yosef2/scratch/immuneaging/vv_runs/process_configs/integrate_samples.SPL.configs.txt`
 
 ### <a name="dashboard_update"></a> Updating the dashboard
@@ -524,16 +526,14 @@ TODO
 
 Our pipeline is versioned via:
 - built-in versioning on the AWS S3 bucket
-- an ad-hoc versioning mechanism we implemented
-
-More details on the second poind above: Each layer of the pipeline (library alignment, processing, sample integration, etc.) is associated with a configuration file that drives the parameters of that step. A snapshot of this config file is uploaded and saved on S3. The "version" of a run is essentially the version of the config file for that run (for each part of the pipeline).
+- an ad-hoc versioning mechanism we implemented as follows: Each stage of the pipeline (library alignment, processing, sample integration, etc.) is associated with a configuration file that drives the parameters of that step. A snapshot of this config file is uploaded and saved on S3. The "version" of a run is essentially the version of the config file for that run (for each part of the pipeline). Outputs of that stage are also stamped with the version of the run (for each run).
 
 In some scripts you will also see a variable called "VARIABLE_CONFIG_KEYS". This indicates parameters that can be changed in the config file without causing the system to create a new version (for example name of the person who ran the script).
 
 Adding keys to config files:
-If adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files. Also, to ensure backwards compatiblity, make sure that when you reference the new key in the code, you account for the scenario where it may not exist.
+If adding keys that should not affect versioning then update VARIABLE_CONFIG_KEYS in the processing files. Also, to ensure backwards compatiblity, make sure that when you reference the new key in the code, you account for the scenario where it may not exist.
 
-### <a name="sandbox_envorinment"></a> Sandbox envorinment
+### <a name="sandbox_environment"></a> Sandbox environment
 
 The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with different configurations. Once the configurations were tuned and reported by the data owner as appropriate (see next subsection), a system admin can run the processing while setting `sandbox_mode` to `"False"`.
 
@@ -549,7 +549,7 @@ Once an admin starts executing the jobs in the queue (see [Executing job queue j
 **NOTE**:
 At the moment, the system does not notify the admins about new jobs in the queue. If you upload new jobs please notify Elior Rahmani by email (erahmani@berkeley.edu).
 
-### <a name="admins_job_configs_generation"></a> Generating job configs
+### <a name="job_configs_generation"></a> Generating job configs
 A job can be of two types: library processing or sample processing. Each job is characterized by a config file that describes how the job needs to run. The script `generate_processing_config_files` can be used to generate config files for all process_library and process_sample jobs associated with a given donor. It can be run as follows:
 
 ```
@@ -572,7 +572,7 @@ assuming config_files is the directory containing the config files.
 
 Once these jobs are generated and uploaded to AWS, we can proceed to executing them, see [Executing job queue jobs](#admins_job_queue_execution).
 
-### <a name="admins_job_queue_execution"></a> Executing job queue jobs
+### <a name="job_queue_execution"></a> Executing job queue jobs
 Once the job queue on AWS (see [Job queue](#job_queue)) has jobs to run, we need to generate processing scripts for each type of job (sample processing or library processing) and execute them. The script `generate_processing_scripts.sh` helps automate this process. It can be run as follows:
 
 ```
