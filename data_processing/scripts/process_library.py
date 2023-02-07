@@ -6,7 +6,6 @@ import scanpy as sc
 import numpy as np
 import hashlib
 import scirpy as ir
-from typing import List
 
 process_lib_script = sys.argv[0]
 configs_file = sys.argv[1]

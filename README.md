@@ -1,39 +1,40 @@
 # The Immune Aging Data Hub
 
 This repository serves as the data hub of the Immune Aging project.
-Here you can find all the resources and information needed for accessing the currently available processed data of the project, as well as a complete documentation of the data collection process, including instructions for data upload (for designated data uploaders), data processing (for designated data owners) and other data management procedures (for designated system admins).
+Here you can find all the resources and information needed for accessing the currently available processed data of the project, as well as a complete documentation of the data collection process, including instructions for data upload, data processing and other data management procedures.
 
 This page did not answer your question? Please <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/issues">open an issue</a> and label it as a 'question'.
 
 ## Table of contents
 1. [Overview](#overview)
-2. [Preliminaries](#preliminaries)
+1. [Preliminaries](#preliminaries)
     1. [Setting up data access](#preliminaries_access)
-    2. [The Immune Aging samples spreadsheet](#preliminaries_spreadsheet)
-    3. [The Immune Aging Dashboard](#dashboard)
-3. [Data Download](#download)
+    1. [The Immune Aging samples spreadsheet](#preliminaries_spreadsheet)
+    1. [The Immune Aging Dashboard](#dashboard)
+1. [Code organization](#code_organization)
+    1. [Align library overview](#align_library_overview)
+    1. [Process library overview](#process_library_overview)
+    1. [Process sample overview](#process_sample_overview)
+1. [Data Download](#download)
     1. [Directory structure on S3](#download_structure)
-    2. [Downloading data via the AWS console](#download_console)
-    3. [Downloading data via terminal](#download_terminal)
-4. [Data upload](#upload)
+    1. [Downloading data via the AWS console](#download_console)
+    1. [Downloading data via terminal](#download_terminal)
+1. [Data upload](#upload)
     1. [File naming conventions](#upload_naming)
-    2. [Upload to S3](#upload_upload)
-5. [Data visualization](#visualization)
-    1. [Visualization using cellxgene](#visualization_cellxgene)
-    2. [Live VISION Sessions](#visualization_live)
-    3. [Local VISION Sessions](#visualization_local)
-6. [Data Processing](#processing)
+    1. [Upload to S3](#upload_upload)
+1. [Data visualization](#visualization)
+1. [Data Processing](#processing)
     1. [Prerequisites](#processing_prerequisites)
-    2. [Processing libraries](#processing_libraries)
-    3. [Processing samples](#processing_samples)
-    4. [Sandbox envorinment](#sandbox_envorinment)
-    5. [Job queue](#job_queue)
-7. [Data Hub admins](#admins)
-    1. [Aligning libraries](#admins_lib_alignment)
-    2. [Executing job queue jobs](#admins_job_queue_execution)
-    3. [Generating job configs](#admins_job_configs_generation)
-    4. [Sample integration](#sample_integration)
-
+    1. [Aligning libraries](#aligning_libraries)
+    1. [Processing libraries](#processing_libraries)
+    1. [Processing samples](#processing_samples)
+    1. [Integrating samples](#integrating_samples)
+    1. [Updating the dashboard](#dashboard_update)
+    1. [Reproducibility and version control](#version_control)
+    1. [Sandbox environment](#sandbox_environment)
+    1. [Job queue](#job_queue)
+    1. [Generating job configs](#job_configs_generation)
+    1. [Executing job queue jobs](#job_queue_execution)
 ---
 
 ## <a name="overview"></a> Overview
@@ -46,7 +47,7 @@ Here is an overview of the various components involved in this project:
 
 ### <a name="preliminaries_access"></a> Setting up data access
 
-The project's data is stored on an Amazon Web Services (AWS) Simple Storage Service (S3; "S3 bucket"). Whether you will be uploading data to the Immune Aging S3 bucket or just using it for downloading data, you will need to set up your access as follows:
+The project's data is stored on an Amazon Web Services (AWS) Simple Storage Service (S3) bucket. Whether you will be uploading data to the Immune Aging S3 bucket or just using it for downloading data, you will need to set up your access as follows:
 
 1. Get an IAM user and credentials file:
 You will need an Identity and Access Management (IAM) user account, which will be associated with a specific user in the Immune Aging S3 bucket. Your user account will allow you to access the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>.
@@ -86,6 +87,69 @@ We provide this <a href= "https://docs.google.com/spreadsheets/d/1v1TT1uJHTAxemn
 2. Samples QC - provides basic quality control summaries for each processed sample, as well as detailed warnings and/or errors that were issued during processing.
 3. Tissue Integration - shows basic information on the current tissue-level integrations in the project, including the sample IDs and ages of the samples that were used for generating the data for each tissue. The last two columns provide links to the data files and to figures that demonstrate the integration through multiple UMAPs colored by different metadata and variables of the experimental design. Note that these links are accessible only after logging into the AWS console ([see instructions here](#preliminaries_access)).
 
+## <a name="code_organization"></a> Code organization
+There are 4 main classes of scripts that comprise our codebase:
+- Library alignment
+- Library processing
+- Sample processing
+- Sample integration
+- Bash script and config file generation scripts
+- Utilities
+
+### <a name="align_library_overview"></a> Align library overview
+- Align and count using cellranger count for GEX and GEX+ADT and GEX+HTO and cellranger vdj for BCR and TCR
+
+### <a name="process_library_overview"></a> Process library overview
+- If GEX:
+    - Start with the aligned library h5ad adata file
+    - Add library alignment metrics (from cellranger count) as .obs columns in the adata
+    - Check the library against a list of known poor quality libraries and if so terminate execution.
+    - Append library name to the cell barcodes to unique-ify them.
+    - For each tissue, download the csv file containing its non-immune cell barcodes and remove them from adata.
+    - Move any features in adata.X that are HTO counts to adata.obs.
+    - Move any features in adata.X that are protein counts to adata.obsm.
+    - Switch protein names to their internal names defined in the protein panels.
+    - Save control and non-control proteins in different obsm objects.
+    - Filter cells that dont have less than 600 genes expressed.
+    - Compute for each cell the percentage of total counts that come from mitochondrial genes (start with “MT-”) and discard cells that have >20%.
+    - Compute for each cell the percentage of total counts that come from ribosomal genes (start with “RPS” or “RPL”). We currently dont filter cells based on this metric.
+    - Exclude any mitochondrial genes and the “MALAT1” gene.
+    - If applicable, use hashsolo to classify cells as Doublet or assign them to the correct sample, based on their HTO counts.
+    - Save and upload the results to AWS.
+- If BCR or TCR:
+    - Start with the filtered_contig_annotations.csv file
+    - Use scirpy.io.read_10x_vdj to read it as an adata object.
+    - Add library alignment metrics (from cellranger vdj) as .obs columns in the adata.
+    - Filter out cells that were called with low_confidence by cellranger vdj.
+    - Filter out cells that are considered multichain or ambiguous by scipry (are likely doublets).
+    - Validate that there are no non-IR cells, and that cells' receptor_type match the library type being processed. Else terminate execution.
+    - Save and upload the results to AWS.
+
+### <a name="process_sample_overview"></a> Process sample overview
+- Download h5ad files of processed libraries (GEX, BCR, and TCR) from AWS.
+- For each GEX library that is multiplexed (has Classification obs column), select cells that correspond to this sample, if any.
+- Skip a GEX library if it has less than N cells for this sample. N = 50 if this is a jejunum sample otherwise else 200.
+- This is something we will need later: For each library take all genes that are expressed in at least 5 cells then take the intersection of all such genes across all libraries. Call these solo_genes.
+- Concatenate cells from all GEX libraries, call this adata_gex.
+- Skip any BCR/TCR library whose corresponding GEX library was not selected above.
+- Concatenate cells from all BCR libraries. Same for TCR. Make sure the concatenation appends the same “-x” suffix to cells that it did for the cells of the corresponding GEX lib.
+- Filter out any cells that are both in the concatenated BCR and TCR libs.
+- Concatenate the concatenated BCR and TCR libs together in an object called adata_ir.
+- Merge adata_gex with adata_ir, discarding any cells in the latter that dont have a match in the former. Call this adata.
+- Compute the per-cell protein coverage (total number of protein reads per cell across control and non-control proteins). If the median per-cell protein coverage across all cells is 0, disregard protein counts altogether.
+- Run decontX for estimating contamination levels from ambient RNA. Run a Rscript command for this. If there is more than one GEX library, use the “batch” column from the GEX concatenation done earlier. decontX returns contamination_levels per cells (save it as an obs in adata) and decontaminated counts (save it in a layer in adata).
+- Filter out all cells from adata whose total decontaminated counts (after rounding), is less than 100.
+- Make a copy of adata, call it adata_copy. Have adata_copy.X be the rounded decontaminated counts.
+- Keep only the genes in adata_copy that are in solo_genes.
+- Filter out any genes from adata_copy that are categorized as VDJ genes (the full list of this is kept on AWS). This set of is expected to express high donor-level variability (per the property of the adaptive immune repertoire) that is not interesting to us in the context of this study. Thus we filter these out prior to HVG selection in adata_copy.
+- Detect the top 3k highly variable genes in adata_copy using seurat_v3 flavor.
+- Download all celltypist models specified in the config file. Run prediction on adata_copy using every specified celltypist model and store the results (predicted labels and majority voting) in adata.obs.
+- Using a custom-made celltypist model specifically trained to detect red blood cells, detect any erythrocytes (“RBC” predicted label) in adata and filter them out.
+- If we have proteins, train a TotalVI model on adata_copy. Store the resulting latent representation in adata.obxm[“X_totalVI”]. Use it to compute UMAP coordinates and store it in adata.obsm[“X_umap_totalvi”].
+- Train a SCVI model on adata_copy. Store the resulting latent representation in adata.obxm[“X_scVI”]. Use it to compute UMAP coordinates and store it in adata.obsm[“X_umap_scVI”].
+- Train a SOLO model (one per-batch, if needed) from the pre-trained SCVI model and use it to filter cells in adata to only those predicted by SOLO as “singlet”.
+- Run PCA on adata_copy. Use it to compute UMAP coordinates and store it in adata.obsm[“X_umap_pca”].
+
 ## <a name="download"></a> Data Download
 
 ### <a name="download_structure"></a> Directory structure on S3
@@ -94,18 +158,38 @@ Whether you will be downloading data from the S3 bucket [directly from the AWS c
 
 The root directory of the Immune Aging S3 bucket includes the following sub-directories:
 
-* aligned_libraries/
-* job_queue/
-* integrated_samples/
-* processed_libraries/
-* processed_samples/
-* raw_columbia/
-* raw_sanger/
-* test_folder/
+📂 raw_columbia/  
+👉 contain raw sequencing data from NY  
+📂 raw_sanger/  
+👉 contain raw sequencing data from UK  
+📂 aligned_libraries/  
+👉 contains the output of library alignment for each library in the project. An intermediate output of the pipeline.   
+📂 processed_libraries/  
+👉 contains the output of library processing for each library in the project. An intermediate output of the pipeline.  
+📂 processed_samples/   
+👉 contains a processed data file for each sample in the project. An intermediate output of the pipeline    
+📂 **integrated_samples**/   
+👉 includes integration of samples. This is the directory that contains the final output of the pipeline  
+📂 scanvi_integrated_samples/    
+👉 includes integration of samples using SCANVI  
+📂 cell_filtering/  
+👉 for each tissue, contains a list of cells that we decided to filter out due to being non immune cell types. We download and use these files during library processing. This also contains the list of poor quality libraries to exclude (poor_quality_libs.csv).  
+📂 combined_lib_alignment_metrics/  
+👉 contains, for each donor (and also one file for all_donors), some high level metrics for all processed GEX/IR libraries for that donor. These are pulled from cellranger output and aggregated here.  
+📂 per-compartment-barcodes/  
+👉 contains the list of manually curated barcodes for each compartment. Under archived/ I store the previous versions before replacing them with new ones.  
+📂 annotated_objects/  
+👉 used to store annotated data objects  
+📂 scratch/  
+👉 used as an unstructured "dropbox" for testing or temporary artifacts  
+📂 unpublished_celltypist_models/  
+👉 contains a celltypist model we use for RBC detection (not officially published by celltypist). During sample processing we download the model from this location.  
+📂 vdj_genes/  
+👉 contains a csv file with the list of VDJ genes to exclude. During library processing we download the csv from this location.  
+📂 job_queue/  
+👉 a job queue that is used during processing (more details under [Data Processing](#processing))  
 
-Most of the users should mostly care about the `processed_samples` directory, which includes a processed data file for each sample in the project, and the `integrated_samples` directory, which includes integration of samples.
-This directory, as well as the directories `aligned_libraries` and `processed_libraries` -  intermediate products of the data processing pipline - are discussed in detail below.
-Briefly, the directories `raw_columbia` and `raw_sanger` are designated for raw data uploads (more details under [Data upload](#upload)) ,`job_queue` is a job queue to be used by data processors (more details under [Data Processing](#processing)), and `test_folder` is being used by the system admins for testing.
+Here is more detail about some of the main directories listed above that contain outputs from the final and intermediate steps of the pipeline:
 
 The `aligned_libraries` directory stores data of aligned libraries and supplementary files related to the alignment. Particularly, it includes a `h5ad` file for each sequenced library (a file format which can be used for downstream analysis in single-cell analysis tools such as <a href="https://scvi-tools.org/">scvi-tools</a> and <a href="https://satijalab.org/seurat/">Seurat</a>).
 Throughout the life cycle of the Immune Aging project we expect to improve our data processing pipelines. We therefore version each intermediate step of processed data by structuring the directories accordingly and by including a `.log` file with each processed data file that describes in details the processing pipeline used. The log file is important to guarantee reproducibility at the long-term, as we expect our pipeline to update from time to time, as new best practices in the field emerge.
@@ -118,7 +202,7 @@ The structure of the `aligned_libraries` directory is as follows:
         * align_library.v2.txt
         * ...
     * v1/
-        * library1
+        * library1_gex
             * library1.cellranger.cloupe.cloupe
             * library1.cellranger.feature_ref.csv
             * library1.cellranger.libraries.csv
@@ -126,20 +210,23 @@ The structure of the `aligned_libraries` directory is as follows:
             * library1.cellranger.web_summary.html
             * library1.v1.h5ad
             * align_library.library1.v1.log
-        * library2
-            * library2.cellranger.cloupe.cloupe
-            * library2.cellranger.feature_ref.csv
-            * library2.cellranger.libraries.csv
+        * library2_ir
+            * library2.cellranger.airr_rearrangement.tsv
+            * library2.cellranger.all_contig_annotations.csv
+            * library2.cellranger.all_contig_annotations.json
+            * library2.cellranger.all_contig.fasta
+            * library2.cellranger.filtered_contig_annotations.v1.csv
+            * library2.cellranger.filtered_contig.fasta
             * library2.cellranger.metrics_summary.csv
+            * library2.cellranger.vloupe.vloupe
             * library2.cellranger.web_summary.html
-            * library2.v1.h5ad
             * align_library.library2.v1.log
         * ...
     * v2/
         * ...
     * ...
 
-The `configs` directory includes versioned configuration files for the alignment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alignment outputs for each library. Particularly, it includes a .h5ad file, output files from cellranger, and a .log file documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library 2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
+The `configs` directory includes versioned configuration files for the alignment pipeline. For each version of the aligned data, one designated directory (e.g., directory `v1` for version 1) includes the alignment outputs for each library. Particularly, it includes a .h5ad file (or filtered_contig_annotations.csv file), output files from cellranger, and a .log file documenting the execution of the pipeline on the library. Note: libraries are not named arbitrarily as library1, library2 etc. but rather take the following naming convention: `<donor_id>_<seq_run>_<library_type>_<library_id>`.
 
 The `processed_libraries` directory stores data of processed libraries (i.e., beyond alignment), an intermediate product before the sample-level processing; its structure is as follows:
 
@@ -184,7 +271,6 @@ The `processed_samples` directory stores data of processed samples (i.e., sample
 Here, files with the prefix `process_sample.configs.` include the configurations that were used in the execution of the sample processing pipeline, and files with a `.log` suffix are documentation of the execution of the pipeline. 
 Actual sample names follow the naming convention `<sample_id>_<data_type>`.
 
-
 **Note**:
 In some cases, the sub-directories under `processed_libraries` and `processed_samples` may not contain data files (i.e., h5ad files) due to a failure of the processing pipeline to run on a specific library or sample. In such cases, there will still be a log file that should include some error message at the end.
 
@@ -195,17 +281,32 @@ The `integrated_samples` directory stores integrated data. Particularly, integra
         * tissue1/
             * v1/
                 * tissue1.v1.h5ad
-                * tissue1.v1.pca.figures.zip
-                * tissue1.v1.scvi_model.zip
-                * tissue1.v1.scvi.figures.zip
-                * tissue1.v1.totalvi_model.zip
-                * tissue1.v1.totalvi.figures.zip
+                * tissue1.v1.gene_stats.csv
+                * tissue1.v1.celltypist_dotplots.zip
+                * tissue1.v1.scvi_model_batch_key_donor_id.zip
+                * tissue1.v1.totalvi_model_batch_key_donor_id.zip
                 * integrate_samples.tissue1.v1.log
                 * integrate_samples.configs.tissue1.v1.txt
+                * [same as above for stim and unstim segments of the tissue if applicable]
         * tissue2/
         * ...
+    * compartment_level/
+        * compartment1/
+            * v1/
+                * compartment1.v1.h5ad
+                * compartment1.v1.gene_stats.csv
+                * compartment1.v1.celltypist_dotplots.zip
+                * compartment1.v1.scvi_model_batch_key_donor_id.zip
+                * compartment1.v1.totalvi_model_batch_key_donor_id.zip
+                * compartment1.v1.scvi_model_batch_key_donor_id+tissue.zip
+                * compartment1.v1.totalvi_model_batch_key_donor_id+tissue.zip
+                * integrate_samples.compartment1.v1.log
+                * integrate_samples.configs.compartment1.v1.txt
+                * [same as above for stim and unstim segments of the compartment if applicable]
+        * compartment2/
+        * ...
 
-The `.h5ad` file is the integrated data file, the `.zip` files incudes the scVI and totalVI models and figures showing the integration (UMAPs colored by different variables), the `.txt` file includes the configurations that were used in the execution of the sample integration (i.e., `integrate_samples.py`), and the `.log` file provides a documentation of the execution of the integration. 
+The `.h5ad` file is the integrated data file, the `.zip` files incudes the scVI and totalVI models, the `.txt` file includes the configurations that were used in the execution of the sample integration (i.e., `integrate_samples.py`), and the `.log` file provides a documentation of the execution of the integration. 
 
 ### <a name="download_console"></a> Downloading data via the AWS console
 
@@ -216,8 +317,6 @@ Data can be downloaded from the Immune Aging S3 bucket by logging in to AWS thro
 To read from the S3 bucket via terminal:
 1. Run your user-specific credentials file to set the aws keys (note that the credential file is a shell file, which can be executed in a linux/mac environment).
 2. Sync directories to your local machine via `aws s3 sync <source> <target> [--options]` (where source is the aws folder). You can also use `aws s3 ls <target> [--options]` to list contents of a directory. Check out more commands <a href= "https://docs.aws.amazon.com/cli/latest/userguide/cli-services-s3-commands.html">here</a>.
-
-
 
 ## <a name="upload"></a> Data upload
 
@@ -286,8 +385,6 @@ Notes:
 
 ## <a name="visualization"></a> Data visualization
 
-### <a name="visualization_cellxgene"></a> Visualization using cellxgene
-
 Processed data can be easily visualized using <a href="https://chanzuckerberg.github.io/cellxgene/">cellxgene</a>, which provides a browser-based user-interface for basic data exploration. Currently, only our sample-level data files can be visualized by cellxgene (i.e., .h5ad files under the `processed_samples` directory on the S3 bucket).
 
 In order to run cellxgene, first install it via terminal by running:
@@ -298,52 +395,16 @@ Then, after downloading a processed .h5ad file from the S3 bucket (see [Data Dow
 
 ``cellxgene launch filename.h5ad --open``
 
+## <a name="data_processing"></a> Data Processing
 
-### <a name="visualization_live"></a> Live VISION Sessions
+The processing scripts can be found in this repository, <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/scripts">here</a>. It is advised that you clone the repository and make sure to pull updates before working on new data.
 
-Coming soon...
-<!--
-We provide a live VISION session of the latest version of the harmonized data.
-VISION allows to... [ref]...
-Every time a new sample or a batch of samples has been uploaded, the data will be processed and harmonized with all the existing samples in the project, followed by generating a new VISION session.
-
-The most updated VISION sessions can be found here, separated by tissue:
-* <a href="...">Lung</a> 
-* <a href="...">Liver</a> 
--->
-
-### <a name="visualization_local"></a> Local VISION Sessions
-
-Coming soon...
-<!--
-VISION can also be launched locally given a vision object.
-We keep the previous VISION objects (i.e., that were previously displayed in the live session) as well as the latest vision object on the S3 bucket.
-
-In more detail the S3 bucket includes a directory named `vision`, which follows the following structure:
-* vision/
-    * ...
-
-A VISION object can be downloaded by using the `sync` AWS CLI command as follows:
-```
-...
-```
-
-For example...
-```
-...
-```
-
-Then, in order to start a VISION session locally, we run:
-```
-...
-```
-
--->
-
-## <a name="processing"></a> Data Processing
-
-This section documents the pipeline for data processing (post-alignment processing of libraries and sample-level integration).
-Data processing should be performed by data owners in a sandbox environment (on their own local machine or server), which allows to fine tune processing configurations. Once such configurations are curated by a data owner, they can be uploaded to the S3 bucket into a queue, from which a system admin from the Yosef group will execute the final processing (i.e., based on the configurations provided by the data owners) to generate the processed data files and make them downloadable for other users in the project. This process is detailed below.
+Our pipeline is largely composed of a body of scripts, each run in sequence depending on the stage of the pipeline that is being executed. As a reminder, here are the 4 stages involved:
+- Library alignment
+- Library processing
+- Sample processing
+- Sample integration
+- [Recommended] Updating the dasboard
 
 ### <a name="processing_prerequisites"></a> Prerequisites
 
@@ -367,34 +428,118 @@ Note that every time you wish to run the processing scripts you need to activate
 conda deactivate
 ```
 
-Finally, as a data owner, you will need to fine tune processing configurations for each of the libraries and each of the samples that you are in charge of. This will require you to run the processing scripts locally. The processing scripts can be found in this repository, <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/tree/main/data_processing/scripts">here</a>. It is advised that you clone the repository and make sure to pull updates before working on new data.
+### <a name="aligning_libraries"></a> Aligning libraries
+
+Once the fastq files of new data from a donor have been uploaded to the S3 bucket and the Google Spreadsheet has been properly updated to include all metadata about the donor and the associated samples we can start the library alignment. The script `generate_library_alignment_script.py` generates a shell script that can be used to execute the library alignment script `align_library.py` on all the libraries associated with the donor.
+
+Note that the script `generate_library_alignment_script.py` requires a configuration file, which will be used for the execution of `align_library.py`.
+<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library.configs_file.example.txt">Here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library_configs.md">here</a> you can find a description of each of the configuration fields.
+
+⚙️ How to align libraries  
+You don't have to be on a machine with  a GPU for this stage.
+1. Start a tmux session
+2. Activate your IA environment
+3. Create alignment configs text file
+4. Generate alignment script (bash script) by running:  
+`python generate_library_alignment_script.py <donor_id> <seq_run> <path to your data_processing/scripts code> <path to your configs.txt file> <output dir where to place alignment results>`
+5. Run the bash script
 
 ### <a name="processing_libraries"></a> Processing libraries
 
-The script `process_library.py` runs on a single aligned library and performs basic filtering as well as demultiplexing if applicable. All the parameters for the filtering steps and the demultiplexing are defined in a configuration file. Once you set up a configuration file you can run the library processing script as follows:
+The script `process_library.py` runs on a single aligned library. All the parameters for library processing are defined in a configuration file. Once you set up a configuration file you can run the library processing script as follows:
 
 ```python
 python process_library.py configs.txt
 ```
 <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_library.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_library.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_library_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
+⚙️ How to process libraries  
+You don't have to be on a machine with  a GPU for this stage.
+1. Locally create a directory called process_configs
+1. Generate processing library config files -- for output destination use the absolute path to the process_configs dir above  
+`python generate_processing_config_files.py library <path to your data_processing/scripts code>  <path to your process_configs directory> <donor_id> <seq_run> <path to your AWS_immuneaging_credentials_file.sh> v1 v1`
+1. Make sure on AWS the job queue folders are all empty
+1. Upload the results of generate configs script to AWS
+1. Locally create a directory called processing_results
+1. Generate process library bash script  
+`python generate_processing_scripts.py <path to your AWS_immuneaging_credentials_file.sh> <path to your processing_results directory> <path to your data_processing/scripts code> <output dir where to place the generated bash file>`
+1. Make sure you've done the needful to avoid overwriting the existing version AWS (by having a different config file than the on on AWS) if that is your intention
+1. Start a tmux session
+1. Run the generated bash script
+1. Once done, run the digest process library logs script against the generated process library logs:  
+`python digest_logs.py print_digest library <donor_id> <seq_run> aws <version of the processed libs> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
+
 ### <a name="processing_samples"></a> Processing samples
 
-The script `process_sample.py` process data from a single sample (i.e., specific donor, tissue, and stimulation/no-stimulation). For samples that were sequenced using multiple libraries this script integrates the data from the different libraries. Briefly, the script performs filtering, integration, normalization, batch correction, ambient RNA filtering, and doublet detection, as well as collects all available metadata for the sample (from the IA Google Spreadsheet). All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
+The script `process_sample.py` processes data for a single sample (i.e., specific donor, tissue, and stimulation/non-stimulation). For samples that were sequenced using multiple libraries this script integrates the data from the different libraries. All the parameters for the different steps are defined in a configuration file. Once you set up a configuration file you can run the sample processing script as follows:
 
 ```python
 python process_sample.py configs.txt
 ```
 <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample.configs_file.example.txt">Here</a> you can find a template for generating configuration files for `process_sample.py`, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/process_sample_configs.md">here</a> you can find a description of each of the fields in the configuration file.
 
+⚙️ How to process samples  
+You DO have to be on a machine with  a GPU for this stage.  
+1. Locally create a directory called process_configs
+1. Generate processing sample config files -- for output destination use the absolute path to the process_configs dir above  
+`python generate_processing_config_files.py sample <path to your data_processing/scripts code> <path to your process_configs directory> <donor_id> <seq_run> <path to your AWS_immuneaging_credentials_file.sh> <latest processed gex lib version for this donor> <latest processed ir lib version for this donor>`
+1. Make sure on AWS the job queue folders are all empty
+1. Upload the results of generate configs script to AWS
+1. Locally create a directory called processing_results
+1. Generate process sample bash script  
+`python generate_processing_scripts.py <path to your AWS_immuneaging_credentials_file.sh> <path to your processing_results directory> <path to your data_processing/scripts code> <output dir where to place the generated bash file>`
+1. Make sure you've done the needful to avoid overwriting the existing version on AWS (by having a different config file than the on on AWS) if that is your intention
+1. Start a tmux session
+1. Run the generated bash script
+1. Once done, run the digest process sample logs script against the generated process sample logs:
+`python digest_logs.py print_digest sample <donor_id> <seq_run> aws <version of the processed samples> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
+1. Update the dashboard using the output of the below (you still need to copy and paste it manually in the dashboard):  
+`python digest_logs.py get_csv sample <donor_id> <seq_run> aws <version of the processed samples> <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh>`
 
-### <a name="sandbox_envorinment"></a> Sandbox envorinment
+### <a name="integrating_samples"></a> Integrating samples
+
+The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue or compartment, thus creating tissue-level or compartment-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
+
+In addition, the script `generate_integration_config_files_and_scripts.py` automatically generates configuration files for `integrate_samples.py` - one per tissue or compartment - by collecting for each tissue/compartment the list of available processed samples. Note that for a compartment, we simply grab all samples at this stage. Later, during the execution of the integrate_samples script, we only select cells from each sample that belong to that compartment.
+
+⚙️ How to integrate samples compartment-wise   
+You DO have to be on a machine with  a GPU for this stage.
+1. Locally create a directory called process_configs
+1. Generate integration config files and script (though we won't use the script below) -- for output destination use the absolute path to the process_configs dir above  
+`python generate_integration_config_files_and_script.py <path to your data_processing/scripts code> <path to your process_configs directory> <path to your AWS_immuneaging_credentials_file.sh> compartment`
+1. Start a tmux session
+1. Integrate all compartments. For example for the B compartment:  
+`python integrate_samples.py process_configs/integrate_samples.B.configs.txt`
+
+⚙️ How to integrate samples tissue-wise   
+You DO have to be on a machine with  a GPU for this stage.
+1. Locally create a directory called process_configs
+1. Generate integration config files and script (though we won't use the script below) -- for output destination use the absolute path to the process_configs dir above  
+`python generate_integration_config_files_and_script.py <path to your data_processing/scripts code> <path to your process_configs directory> <path to your AWS_immuneaging_credentials_file.sh> tissue`
+1. Start a tmux session
+1. Integrate all tissues. For example for the spleen tissue:   
+`python integrate_samples.py /data/yosef2/scratch/immuneaging/vv_runs/process_configs/integrate_samples.SPL.configs.txt`
+1. Update the dashboard using the output of the below (you still need to copy and paste it manually in the dashboard):   
+`python dashboard_utils.py tissue_integration_results <working dir for this script> <path to your AWS_immuneaging_credentials_file.sh> <version of integrated tissues> True`
+
+### <a name="version_control"></a> Reproducibility and version control
+
+Our pipeline is versioned via:
+- built-in versioning on the AWS S3 bucket
+- an ad-hoc versioning mechanism we implemented as follows: Each stage of the pipeline (library alignment, processing, sample integration, etc.) is associated with a configuration file that drives the parameters of that step. A snapshot of this config file is uploaded and saved on S3. The "version" of a run is essentially the version of the config file for that run (for each part of the pipeline). Outputs of that stage are also stamped with the version of the run (for each run).
+
+In some scripts you will also see a variable called "VARIABLE_CONFIG_KEYS". This indicates parameters that can be changed in the config file without causing the system to create a new version (for example name of the person who ran the script).
+
+Adding keys to config files:
+If adding keys that should not affect versioning then update VARIABLE_CONFIG_KEYS in the processing files. Also, to ensure backwards compatiblity, make sure that when you reference the new key in the code, you account for the scenario where it may not exist.
+
+### <a name="sandbox_environment"></a> Sandbox environment
 
 The configuration files for running `process_library.py` and `process_sample.py` include a `sandbox_mode` argument. Setting this argument to `"True"` indicates that outputs should not be uploaded to the S3 bucket. The sandbox environment allows data owners to experiment with different configurations. Once the configurations were tuned and reported by the data owner as appropriate (see next subsection), a system admin can run the processing while setting `sandbox_mode` to `"False"`.
 
 It is likely that during data curation data owners will find bugs and/or will have suggestions for implementing additional/different logics in the processing scripts. You can either post an issue or make a pull request with your suggestions. If you are suggesting any changes please bear in mind that any updates will have to maintain backwards compatibility in order to guarantee reproducibility of previous versions of the processed data.
 
-### <a name="job_queue"></a> Job queue
+## <a name="job_queue"></a> Job queue
 
 Once a data owner makes a final decision about configurations for the processing of specific libraries and samples, the final configuration files should be uploaded to the S3 bucket through the <a href="https://911998420209.signin.aws.amazon.com/console">AWS console</a>. Specifically, configurations for processing libraries should be uploaded to `s3://immuneaging/job_queue/process_library/` and configurations for processing samples should be uploaded to `s3://immuneaging/job_queue/process_sample/`. Once configuration files are uploaded to these directories they are considered as jobs to be executed, and the outputs of the processing will be saved, stamped with a version, and become viewable via the S3 bucket to everyone with data access in the project.
 
@@ -404,21 +549,7 @@ Once an admin starts executing the jobs in the queue (see [Executing job queue j
 **NOTE**:
 At the moment, the system does not notify the admins about new jobs in the queue. If you upload new jobs please notify Elior Rahmani by email (erahmani@berkeley.edu).
 
-
-## <a name="admins"></a> Data Hub admins
-
-This section is a documentation for system admins.
-
-### <a name="admins_lib_alignment"></a> Aligning libraries
-
-Once the fastq files of new data from a donor have been uploaded to the S3 bucket and the Google Spreadsheet has been properly updated to include all metadata about the donor and the associated samples we can start the library alignment. The script `generate_library_alignment_script.py` generates a shell script that can be used to execute the library alignment script `align_library.py` on all the libraries associated with the donor.
-
-Note that the script `generate_library_alignment_script.py` requires a configuration file, which will be used for the execution of `align_library.py`.
-<a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library.configs_file.example.txt">Here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/align_library_configs.md">here</a> you can find a description of each of the configuration fields.
-
-Following alignment, we can now process the libraries and then the samples - see [Data processing](#processing).
-
-### <a name="admins_job_configs_generation"></a> Generating job configs
+### <a name="job_configs_generation"></a> Generating job configs
 A job can be of two types: library processing or sample processing. Each job is characterized by a config file that describes how the job needs to run. The script `generate_processing_config_files` can be used to generate config files for all process_library and process_sample jobs associated with a given donor. It can be run as follows:
 
 ```
@@ -441,7 +572,7 @@ assuming config_files is the directory containing the config files.
 
 Once these jobs are generated and uploaded to AWS, we can proceed to executing them, see [Executing job queue jobs](#admins_job_queue_execution).
 
-### <a name="admins_job_queue_execution"></a> Executing job queue jobs
+### <a name="job_queue_execution"></a> Executing job queue jobs
 Once the job queue on AWS (see [Job queue](#job_queue)) has jobs to run, we need to generate processing scripts for each type of job (sample processing or library processing) and execute them. The script `generate_processing_scripts.sh` helps automate this process. It can be run as follows:
 
 ```
@@ -453,21 +584,6 @@ The script syncs the job queue from AWS down to the local machine. It then crawl
 Once all the shell script files are generated, you can execute them in the shell to kick off the execution of each corresponding job. Make sure to execute all process_library jobs before executing any process_sample jobs.
 
 **Note:** `output_dir` specifies the location for the processing outputs and `output_path` specifies the location to which the shell file with the run commands will be saved.
-
-<!--
-install cellranger and download ref genome..
-
-adding keys to the config files - (1) if adding keys that should not affect on versioning then update VARIABLE_CONFIG_KEYS in the processing files... (2) otherwise it will automatically generate a new version etc.. but need to make sure the script is backwards compatible...
-
-link to the configs template and description of `align_library.py`
--->
-
-### <a name="sample_integration"></a> Sample integration
-
-The script `integrate_samples.py` can be used for integrating a specified list of processed samples. More specifically, we use it for integrating all samples of a given tissue or compartment, thus creating tissue-level or compartment-level integration of the data. This script requires a configuration file - <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples.configs_file.example.txt">here</a> you can find a template for generating such a configuration file, and <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/blob/main/data_processing/configs_templates/integrate_samples_configs.md">here</a> you can find a description of each of the configuration fields.
-
-In addition, the script `generate_integration_config_files_and_scripts.py` automatically generates configuration files for `integrate_samples.py` - one per tissue or compartment - by collecting for each tissue/compartment the list of available processed samples. Note that for a compartment, we simply grab all samples at this stage. Later, during the execution of the integrate_samples script, we only select cells from each sample that belong to that compartment.
-
 
 ---
 
