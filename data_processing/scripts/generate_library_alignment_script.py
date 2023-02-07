@@ -22,7 +22,6 @@ sys.path.append(code_path)
 from utils import *
 
 configs = load_configs(configs_file)
-python_env_version = configs["python_env_version"]
 
 samples = read_immune_aging_sheet(sheet="Samples")
 sample_indices = samples.index[(samples["Donor ID"] == donor_id) & (samples["Seq run"] == float(seq_run))]
@@ -79,19 +78,14 @@ for r in TCR_runs:
     l_align_lib.append("python {0}/align_library.py {1} {0} TCR {2}".format(code_path, configs_file, r))
     l_align_msg.append("echo \"Execution of align_library.py on TCR {} is complete.\"".format(r))
 
-l1 = ["source activate {}".format(python_env_version),
-    "mkdir -p " + os.path.join(output_dir, "S3"),
-    "mkdir -p " + os.path.join(output_dir, "S3", donor_run)]
-l2 = ["conda deactivate"] 
-
 alignment_script = "{}_align_libraries.sh".format(donor_run)
 f = open(alignment_script,'w')
+l1 = ["mkdir -p " + os.path.join(output_dir, "S3"), "mkdir -p " + os.path.join(output_dir, "S3", donor_run)]
 f.write("\n".join(l1) + "\n")
 for i in range(len(l_cd_mkdir)):
     f.write("mkdir -p " + l_cd_mkdir[i] + "\n")
     f.write("cd " + l_cd_mkdir[i] + "\n")
     f.write(l_align_lib[i] + "\n")
     f.write(l_align_msg[i] + "\n")
-f.write("\n".join(l2) + "\n")
 f.close()
 print("generated file " + alignment_script)
