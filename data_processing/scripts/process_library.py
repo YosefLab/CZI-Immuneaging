@@ -297,7 +297,8 @@ if configs["library_type"] == "GEX":
 
     adata.var['mt'] = adata.var_names.str.startswith('MT-') # mitochondrial genes
     adata.var['ribo'] = adata.var_names.str.startswith(("RPS","RPL")) # ribosomal genes
-    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt','ribo'], percent_top=None, log1p=False, inplace=True)
+    adata.var['hb'] = adata.var_names.str.startswith(("^HB[^(P)]")) # ribosomal genes
+    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt','ribo', 'hb'], percent_top=None, log1p=False, inplace=True)
     n_cells_before = adata.n_obs
     adata = adata[adata.obs['pct_counts_mt'] <= configs["filter_cells_max_pct_counts_mt"], :].copy()
     logger.add_to_log("Filtered out {} cells with more than {}\% counts coming from mitochondrial genes.".format(n_cells_before-adata.n_obs, configs["filter_cells_max_pct_counts_mt"]))
@@ -336,6 +337,8 @@ if configs["library_type"] == "GEX":
         level = "error" if percent_doublets > 40 else "info"
         logger.add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(percent_doublets, num_doublets, adata.n_obs), level=level)
         adata = adata[adata.obs["Classification"] != "Doublet"].copy()
+    adata.obsm['hash_tags'] = adata.obs[cell_hashing]
+    adata.obs.drop([cell_hashing], axis='columns')
 
     summary.append("Final number of cells: {}, final number of genes: {}.".format(adata.n_obs, adata.n_vars))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":

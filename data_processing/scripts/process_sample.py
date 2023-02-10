@@ -339,15 +339,17 @@ tcr_cells = 0 if adata_tcr is None else adata_tcr.n_obs
 logger.add_to_log("Total cells from GEX lib(s): {}, from BCR lib(s): {}, from TCR lib(s): {}".format(adata.n_obs, bcr_cells, tcr_cells))
 
 if adata_bcr is not None and adata_tcr is not None:
-    logger.add_to_log("Filtering out cells that have both BCR and TCR...")
     intersection = np.intersect1d(adata_bcr.obs.index, adata_tcr.obs.index)
     intersection_pct = (len(intersection)/(adata_bcr.n_obs + adata_tcr.n_obs)) * 100
-    adata_bcr = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
-    adata_tcr = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
-    logger.add_to_log("Filtered out {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
-
+    logger.add_to_log("Filtering out cells that have both BCR and TCR...")
+    logger.add_to_log("Detected {} cells that have both BCR and TCR ({:.2f}% of total). Unique cell count from BCR+TCR libs: {}".format(len(intersection), intersection_pct, adata_bcr.n_obs + adata_tcr.n_obs))
+    
+    adata_bcr_new = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
+    adata_tcr_new = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
+    adata.obs['double_ir'] = adata.obs_names.isin(intersection)
+    
     logger.add_to_log("Concatenating BCR and TCR lib(s)...")
-    adata_ir = adata_bcr.concatenate(adata_tcr, batch_key="temp_batch", index_unique=None)
+    adata_ir = adata_bcr_new.concatenate(adata_tcr_new, batch_key="temp_batch", index_unique=None)
     del adata_ir.obs["temp_batch"]
 elif adata_bcr is not None:
     adata_ir = adata_bcr
@@ -372,7 +374,10 @@ else:
     ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
     logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
     logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
-    ir.pp.merge_with_ir(adata, adata_ir)
+if adata_bcr is not None:
+    ir.pp.merge_with_ir(adata, adata_bcr)
+if adata_tcr is not None:
+    ir.pp.merge_with_ir(adata, adata_tcr)
 
 logger.add_to_log("A total of {} cells and {} genes were found.".format(adata.n_obs, adata.n_vars))
 summary.append("Started with a total of {} cells and {} genes coming from {} GEX libraries, {} BCR libraries and {} TCR libraries.".format(
@@ -515,10 +520,10 @@ if not no_cells:
         # filter out RBC's
         if rbc_model_name:
             n_obs_before = rna.n_obs
-            rna = rna[rna.obs["celltypist_predicted_labels."+rbc_model_name] != "RBC", :].copy()
-            percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
+            rna.obs['predicted_erythrocyte'] = rna.obs["celltypist_predicted_labels."+rbc_model_name] == "RBC"
+            percent_removed = 100*(np.sum(rna.obs['predicted_erythrocyte']))/n_obs_before
             level = "warning" if percent_removed > 20 else "info"
-            logger.add_to_log(QC_STRING_RBC.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
+            logger.add_to_log(QC_STRING_RBC.format(np.sum(rna.obs['predicted_erythrocyte']), percent_removed, rna.n_obs), level=level)
         if is_cite:
             # there are known spurious failures with totalVI (such as "invalid parameter loc/scale")
             # so we try a few times then carry on with the rest of the script as we can still mine the
@@ -534,24 +539,27 @@ if not no_cells:
         if len(library_ids_gex)>1:
             batches = pd.unique(rna.obs[batch_key])
             logger.add_to_log("Running solo on the following batches separately: {}".format(batches))
-            is_solo_singlet = np.ones((rna.n_obs,), dtype=bool)
+            rna.obs[['solo_prediction', 'doublet_score', 'singlet_score']] = 0
             for batch in batches:
                 logger.add_to_log("Running solo on batch {}...".format(batch))
                 solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch)
                 solo_batch.train(max_epochs=configs["solo_max_epochs"])
-                is_solo_singlet[(rna.obs["batch"] == batch).values] = solo_batch.predict(soft=False) == "singlet"
-                rna.obs["is_solo_singlet"] = is_solo_singlet
+                rna.obs.loc[
+                    rna[rna.obs["batch"] == batch].obs_names, ['doublet_score', 'singlet_score']] = solo_batch.predict(soft=True)
+                rna.obs.loc[
+                    rna[rna.obs["batch"] == batch].obs_names, 'solo_prediction'] = solo_batch.predict(soft=False)
         else:
             logger.add_to_log("Running solo...")
             solo = scvi.external.SOLO.from_scvi_model(scvi_model)
             solo.train(max_epochs=configs["solo_max_epochs"])
-            is_solo_singlet = solo.predict(soft=False) == "singlet"
+            rna.obs[['doublet_score', 'singlet_score']] = solo.predict(soft=True)
+            rna.obs['solo_prediction'] = solo.predict(soft=False)
+                
         logger.add_to_log("Removing doublets...")
         n_obs_before = rna.n_obs
-        rna = rna[is_solo_singlet,].copy()
-        percent_removed = 100*(n_obs_before-rna.n_obs)/n_obs_before
+        percent_removed = 100*(np.sum(rna.obs['solo_prediction']!='singlet'))/n_obs_before
         level = "warning" if percent_removed > 40 else "info"
-        logger.add_to_log(QC_STRING_DOUBLETS.format(n_obs_before-rna.n_obs, percent_removed, rna.n_obs), level=level)
+        logger.add_to_log(QC_STRING_DOUBLETS.format(np.sum(rna.obs['solo_prediction']!='singlet'), percent_removed, rna.n_obs), level=level)
         summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
             logger.add_to_log("No cells left after doublet detection. Skipping the next processing steps.", "error")
@@ -584,9 +592,13 @@ if not no_cells:
                 rna.obsm["X_umap_totalvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                     n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
         logger.add_to_log("Gathering data...")
-        # keep only the cells that passed all filters
+        # copy all filters into adata
         keep = adata.obs.index.isin(rna.obs.index)
         adata = adata[keep,].copy()
+        
+        adata.obs[['doublet_score', 'singlet_score', 'solo_prediction', 'predicted_erythrocyte']] = rna[
+            ['doublet_score', 'singlet_score', 'solo_prediction', 'predicted_erythrocyte']
+        ]
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
         # save raw rna counts
