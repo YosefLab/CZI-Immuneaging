@@ -559,7 +559,7 @@ if not no_cells:
             rna.obs[['solo_prediction', 'doublet_score', 'singlet_score']] = 0
             for batch in batches:
                 logger.add_to_log("Running solo on batch {}...".format(batch))
-                solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch)
+                solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch, doublet_ratio=6)
                 solo_batch.train(max_epochs=configs["solo_max_epochs"], validation_size=0.1, train_size=0.9, **train_params, use_gpu=select_free_gpu())
                 rna.obs.loc[
                     rna[rna.obs[batch_key] == batch].obs_names, ['doublet_score', 'singlet_score']] = solo_batch.predict(soft=True).values
@@ -645,8 +645,8 @@ if not no_cells:
         sys.exit()
 
 logger.add_to_log("Saving h5ad file...")
-adata.obs['sample_pipeline_version'] = configs["pipeline_version"]
-adata.obs['sample_code_version'] = configs["code_version"]
+adata.obs['sample_pipeline_version'] = f"{configs['donor']}__{configs['pipeline_version']}"
+adata.obs['sample_code_version'] =  f"{configs['donor']}__{configs['code_version']}"
 write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 ###############################################################
