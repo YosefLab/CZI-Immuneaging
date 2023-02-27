@@ -23,7 +23,7 @@ import gc
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
-# This does two things:
+# This does two things:.
 # 1. Makes the logger look good in a log file
 # 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
 scvi.settings.reset_logging_handler()
@@ -55,7 +55,7 @@ configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_
 assert(len(all_sample_ids)>1)
 
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
-sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
+sc.settings.verbosity = 1   # verbosity: errors (0), warnings (1), info (2), hilltypistnts (3)
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(s3_access_file, return_dict = True)
@@ -84,8 +84,9 @@ output_h5ad_model_file = "{}.{}.model_data.h5ad".format(configs["output_prefix"]
 output_h5ad_file_unstim = "{}.unstim.{}.h5ad".format(configs["output_prefix"], version)
 output_h5ad_model_file_unstim = "{}.unstim.{}.model_data.h5ad".format(configs["output_prefix"], version)
 
-output_h5ad_file_stim = "{}.stim.{}.h5ad".format(configs["output_prefix"], version)
-output_h5ad_model_file_stim = "{}.stim.{}.model_data.h5ad".format(configs["output_prefix"], version)
+if configs['include_stim']:
+    output_h5ad_file_stim = "{}.stim.{}.h5ad".format(configs["output_prefix"], version)
+    output_h5ad_model_file_stim = "{}.stim.{}.model_data.h5ad".format(configs["output_prefix"], version)
 
 logger = SimpleLogger(filename = logger_file_path)
 logger.add_to_log("Running integrate_samples.py...")
@@ -133,8 +134,9 @@ all_h5ad_files = []
 # for collecting the sample IDs of unstim and stim samples for which we will generate an additional, separate integration:
 unstim_sample_ids = [] 
 unstim_h5ad_files = []
-stim_sample_ids = [] 
-stim_h5ad_files = []
+if configs['include_stim']:
+    stim_sample_ids = [] 
+    stim_h5ad_files = []
 for j in range(len(all_sample_ids)):
     sample_id = all_sample_ids[j]
     sample_version = processed_sample_configs_version[j]
@@ -145,7 +147,7 @@ for j in range(len(all_sample_ids)):
     if stim_status == "Nonstim":
         unstim_sample_ids.append(sample_id)
         unstim_h5ad_files.append(sample_h5ad_path)
-    else:
+    elif configs['include_stim']:
         stim_sample_ids.append(sample_id)
         stim_h5ad_files.append(sample_h5ad_path)
     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
@@ -177,9 +179,12 @@ if not tissue_integration:
 ############################################
 
 # run the following integration pipeline three times if there is a combination of stim and unstim samples - once using the stim and unstim samples, once using unstim only, once using stim only
-integration_modes = ["stim_unstim"]
-if (len(unstim_sample_ids) > 0) and (len(all_sample_ids)-len(unstim_sample_ids)>0):
-    integration_modes += ["unstim", "stim"]
+if configs['include_stim']:
+    integration_modes = ["stim_unstim"]
+    if (len(unstim_sample_ids) > 0) and (len(all_sample_ids)-len(unstim_sample_ids)>0):
+        integration_modes += ["unstim", "stim"]
+else:
+    integration_modes = ["unstim"]
 
 valid_libs = get_all_libs("GEX")
 for integration_mode in integration_modes:
@@ -339,8 +344,6 @@ for integration_mode in integration_modes:
     logger.add_to_log("A total of {} cells and {} genes are available after merge.".format(adata.n_obs, adata.n_vars))
     # set the train size; this train size was justified by an experiment that is described here https://yoseflab.github.io/scvi-tools-reproducibility/runtime_analysis_reproducibility/
     configs["train_size"] = 0.9 if 0.1 * adata.n_obs < 20000 else 1-(20000/adata.n_obs)
-    if (not tissue_integration) and adata.n_obs > 200000:
-        configs["early_stopping"] = "True"
     try:
         is_cite = "protein_expression" in adata.obsm
         if is_cite:
@@ -377,24 +380,30 @@ for integration_mode in integration_modes:
                     sys.exit()
             logger.add_to_log("Filtering out vdj genes...")
             rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
-            rna.layers["rounded_decontaminated_counts"] = rna.layers["decontaminated_counts"].copy()
-            rna.layers["rounded_decontaminated_counts"].data = np.round(rna.layers["rounded_decontaminated_counts"].data)
-            rna.X = rna.layers["rounded_decontaminated_counts"].copy()
+            rna.X = rna.layers["raw_counts"].copy()
+            sc.pp.normalize_total(rna)
             sc.pp.log1p(rna)
             rna.layers["log1p_transformed"] = rna.X.copy()
             logger.add_to_log("Detecting highly variable genes...")
             if configs["highly_variable_genes_flavor"] == "seurat_v3":
                 # highly_variable_genes requires counts data in this case
-                rna.X = rna.layers["rounded_decontaminated_counts"]
+                rna.X = rna.layers["raw_counts"]
             sc.pp.highly_variable_genes(
                 rna,
                 n_top_genes=configs["n_highly_variable_genes"],
-                subset=True,
+                subset=False,
                 flavor=configs["highly_variable_genes_flavor"],
                 batch_key=batch_key,
-                span = 1.0
-            )
-            rna.X = rna.layers["rounded_decontaminated_counts"]
+                span = 1.0)
+
+            sc.pp.highly_variable_genes(
+                rna,
+                n_top_genes=configs["n_highly_variable_genes"],
+                subset=False,
+                flavor=configs["highly_variable_genes_flavor"],
+                span = 1.0)
+            rna = rna[:, np.logical_and(rna.var['highly_variable']==True, rna.var['highly_variable_nbatches']>max(2.5, 0.1*len(rna.obs[batch_key].unique())))].copy()
+            rna.X = rna.layers["raw_counts"]
             # scvi
             key = f"X_scvi_integrated_batch_key_{batch_key}"
             _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
@@ -508,6 +517,14 @@ for integration_mode in integration_modes:
                 dotplot_min_frac = celltypist_dotplot_min_frac,
                 logger = logger,
             )
+    sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
+    sc.tl.leiden(adata, key_added='overclustering_tissue_percolate', resolution=3.0, neighbors_key=neighbors_key)
+    
+    df = adata.obs.groupby('overclustering_tissue_percolate')['sum_percolation_score'].agg(['median', 'mean'])
+    for cluster in df.index:
+        ad.obs.loc[ad.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_median_cluster'] = df.loc[cluster, 'median']
+        ad.obs.loc[ad.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_mean_cluster'] = df.loc[cluster, 'mean']
+    
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))
     os.system("mkdir {}".format(dotplot_dir))

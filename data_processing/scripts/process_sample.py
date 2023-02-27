@@ -10,6 +10,7 @@ import scanpy as sc
 import numpy as np
 import pandas as pd
 from scipy.sparse.csr import csr_matrix
+import scipy.sparse as sparse
 import scvi
 import hashlib
 import celltypist
@@ -246,7 +247,6 @@ logger.add_to_log("Concatenating all cells of sample {} from available GEX libra
 adata = adata_dict[library_ids_gex[0]]
 if len(library_ids_gex) > 1:
     adata = adata.concatenate([adata_dict[library_ids_gex[j]] for j in range(1,len(library_ids_gex))], join="outer")
-
 def build_adata_from_ir_libs(lib_type: str, library_ids_ir: List[str]) -> Optional[AnnData]:
     assert lib_type in ["BCR", "TCR"]
     logger.add_to_log("Reading h5ad files of processed libraries for {} libs...".format(lib_type))
@@ -346,7 +346,7 @@ if adata_bcr is not None and adata_tcr is not None:
     
     adata_bcr_new = adata_bcr[~adata_bcr.obs.index.isin(intersection), :].copy()
     adata_tcr_new = adata_tcr[~adata_tcr.obs.index.isin(intersection), :].copy()
-    adata.obs['double_ir'] = adata.obs_names.isin(intersection)
+    adata.obs['double_ir'] = adata.obs_names.isin(intersection).astype(str)
     
     logger.add_to_log("Concatenating BCR and TCR lib(s)...")
     adata_ir = adata_bcr_new.concatenate(adata_tcr_new, batch_key="temp_batch", index_unique=None)
@@ -357,7 +357,6 @@ elif adata_tcr is not None:
     adata_ir = adata_tcr
 else:
     adata_ir = None
-
 if adata_ir is None:
     logger.add_to_log("No anndata with BCR/TCR data")
 else:
@@ -370,7 +369,7 @@ else:
             len(adata_ir.obs.index),
             len(np.intersect1d(adata.obs.index, adata_ir.obs.index))
         ))
-    ir_gex_diff = len(np.setdiff1d(adata_ir.obs.index, adata.obs.index))
+    ir_gex_diff = len(set(adata_ir.obs.index) - set(adata.obs.index))
     ir_gex_diff_pct = (ir_gex_diff/len(adata_ir.obs.index)) * 100
     logger.add_to_log("{} cells coming from BCR+TCR libs have no GEX (mRNA) info (percentage: {:.2f}%)".format(ir_gex_diff, ir_gex_diff_pct))
     logger.add_to_log("Merging IR data from BCR and TCR lib(s) with count data from GEX lib(s)...")
@@ -416,57 +415,64 @@ if not no_cells:
     try:
         prot_exp_obsm_key = "protein_expression"
         prot_exp_ctrl_obsm_key = "protein_expression_Ctrl"
-        is_cite = prot_exp_obsm_key in adata.obsm or prot_exp_ctrl_obsm_key in adata.obsm
+        is_cite = prot_exp_obsm_key in adata.obsm
         if is_cite:
             logger.add_to_log("Detected Antibody Capture features.")
             protein_df = adata.obsm[prot_exp_obsm_key].merge(adata.obsm[prot_exp_ctrl_obsm_key], left_index=True, right_index=True, validate="one_to_one")
             if np.median(protein_df.fillna(0).sum(axis=1)) == 0:
                 logger.add_to_log("median coverage (total number of protein reads per cell) across cells is 0. Removing protein information from data.", level = "warning")
                 is_cite = False
-        rna = adata.copy() # this is redundant but am keeping it to avoid having to update all references to rna that follow
-        logger.add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
-        decontx_data_dir = os.path.join(data_dir,"decontx")
-        os.system("mkdir -p " + decontx_data_dir)
-        raw_counts_file = os.path.join(decontx_data_dir, "{}.raw_counts.txt".format(prefix))
-        decontaminated_counts_file = os.path.join(decontx_data_dir, "{}.decontx.decontaminated.txt".format(prefix))
-        contamination_levels_file = os.path.join(decontx_data_dir, "{}.decontx.contamination.txt".format(prefix))
-        decontx_model_file = os.path.join(decontx_data_dir, "{}.processed.{}.decontx_model.RData".format(prefix, version))
-        r_script_file = os.path.join(decontx_data_dir, "{}.decontx.script.R".format(prefix))
-        df = pd.DataFrame(rna.X.todense().T)
-        df.index = rna.var.index
-        df.columns = rna.obs.index
-        df.to_csv(raw_counts_file)
+            adata.obs['n_proteins'] = adata.obsm[prot_exp_obsm_key].sum(1)
+        else:
+            adata.obs['n_proteins'] = 0
         if len(library_ids_gex)>1:
             batch_key = "batch"
-            batch_file = os.path.join(decontx_data_dir, "{}.batch.txt".format(prefix))
-            pd.DataFrame(rna.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
         else:
             batch_key = None
+        logger.add_to_log("Running decontX for estimating contamination levels from ambient RNA...")
+        
+        decontx_data_dir = os.path.join(data_dir,"decontx")
+        os.system("mkdir -p " + decontx_data_dir)
+        raw_counts_file = os.path.join(decontx_data_dir, "{}_raw_counts.npz".format(prefix))
+        decontaminated_counts_file = os.path.join(decontx_data_dir, "{}_decontx_decontaminated.npz".format(prefix))
+        contamination_levels_file = os.path.join(decontx_data_dir, "{}_decontx_contamination.txt".format(prefix))
+        decontx_model_file = os.path.join(decontx_data_dir, "{}_{}_decontx_model.RData".format(prefix, version))
+        r_script_file = os.path.join(decontx_data_dir, "{}_decontx_script.R".format(prefix))
+        sparse.save_npz(raw_counts_file, adata.X.T)
+        if len(library_ids_gex)>1:
+            batch_file = os.path.join(decontx_data_dir, "{}_batch.txt".format(prefix))
+            pd.DataFrame(adata.obs[batch_key].values.astype(str)).to_csv(batch_file, header=False, index=False)
+        else:
             batch_file = None
         # R commands for running and outputing decontx
-        l = ["library('celda')",
-            "x <- as.matrix(read.csv('{}', row.names=1))".format(raw_counts_file),
+        l = [
+            "library('celda')",
+            "library('reticulate')",
+            "scipy_sparse <- import('scipy.sparse')",
+            "x <- scipy_sparse$load_npz('{}')".format(raw_counts_file),
+            "dimnames(x) <- list(NULL,NULL)",
             "batch <- if ('{0}' == 'None') NULL else as.character(read.table('{0}', header=FALSE)$V1)".format(batch_file),
             "res <- decontX(x=x, batch=batch)",
             "write.table(res$contamination, file ='{}',quote = FALSE,row.names = FALSE,col.names = FALSE)".format(contamination_levels_file),
-            "write.table(as.matrix(res$decontXcounts), file ='{}',quote = FALSE,sep = ',')".format(decontaminated_counts_file),
+            "scipy_sparse$save_npz('{}', res$decontXcounts)".format(decontaminated_counts_file),
             "decontx_model <- list('estimates'=res$estimates, 'z'= res$z)",
-            "save(decontx_model, file='{}')".format(decontx_model_file)]
+            "save(decontx_model, file='{}')".format(decontx_model_file)
+        ]
         with open(r_script_file,'w') as f: 
             f.write("\n".join(l))
-        logger.add_to_log("Running the script in {}".format(decontx_model_file))
-        os.system("Rscript " + r_script_file)
+        logger.add_to_log("Running the script in {}".format(decontx_data_dir))
+        os.system(f"{configs['rscript']} {r_script_file}")
         logger.add_to_log("Adding decontaminated counts and contamination levels to data object...")
         contamination_levels = pd.read_csv(contamination_levels_file, index_col=0, header=None).index
-        decontaminated_counts = pd.read_csv(decontaminated_counts_file).transpose()
-        decontaminated_counts.index = rna.obs.index # note that decontx replaces "-" with "." in the cell names
-        rna.obs["contamination_levels"] = contamination_levels
-        rna.X = csr_matrix(np.round(decontaminated_counts))
+        decontaminated_counts = sparse.load_npz(decontaminated_counts_file).T
+        adata.obs["contamination_levels"] = contamination_levels
+        adata.layers['decontaminated_counts'] = decontaminated_counts
+        rna = adata.copy()
         # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
         rna = rna[:,rna.var.index.isin(solo_genes)].copy()
         # remove empty cells after decontaminations
         n_obs_before = rna.n_obs
-        rna = rna[rna.X.sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:].copy()
+        rna = rna[rna.layers['decontaminated_counts'].sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:].copy()
         n_decon_cells_filtered = n_obs_before-rna.n_obs
         percent_removed = 100*n_decon_cells_filtered/n_obs_before
         level = "warning" if percent_removed > 10 else "info"
@@ -491,29 +497,37 @@ if not no_cells:
             model_urls.append(configs["rbc_model_url"])
         # run prediction using every specified model (url)
         rbc_model_name = None
+        rna_copy = rna.copy()
+        # normalize the copied data with a scale of 10000 (which is the scale required by celltypist)
+        logger.add_to_log("normalizing data for celltypist...")
+        sc.pp.normalize_total(rna_copy, target_sum=10000)
+        sc.pp.log1p(rna_copy)
         for i in range(len(model_urls)):
             model_file = model_urls[i].split("/")[-1]
             celltypist_model_name = model_file.split(".")[0]
             model_path = os.path.join(data_dir,model_file)
             # download reference data
-            if model_urls[i].startswith("s3://"):
+            if model_file in os.listdir(data_dir):
+                pass
+            elif model_urls[i].startswith("s3://"):
                 model_folder = model_urls[i][:-len(model_file)] # remove the model_file suffix
                 aws_sync(model_folder, data_dir, model_file, logger)
             else:
                 urllib.request.urlretrieve(model_urls[i], model_path)
             model = celltypist.models.Model.load(model = model_path)
+            if "celltypist_over_clustering" in rna.obs.columns:
+                over_clustering = rna.obs["celltypist_over_clustering"]
+            else:
+                over_clustering = None
             # for some reason celltypist changes the anndata object in a way that then doesn't allow to copy it (which is needed later); a fix is to use a copy of the anndata object.
-            rna_copy = rna.copy()
-            # normalize the copied data with a scale of 10000 (which is the scale required by celltypist)
-            logger.add_to_log("normalizing data for celltypist...")
-            sc.pp.normalize_total(rna_copy, target_sum=10000)
-            sc.pp.log1p(rna_copy)
-            predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True)
+            predictions = celltypist.annotate(rna_copy, model = model, majority_voting = True, over_clustering=over_clustering)
             # save the index for the RBC model if one exists, since we will need it further below
             if model_file.startswith("RBC_model"):
                 rbc_model_name = celltypist_model_name
             logger.add_to_log("Saving celltypist annotations for model {}, model description:\n{}".format(model_file, json.dumps(model.description, indent=2)))
-            rna.obs["celltypist_over_clustering."+celltypist_model_name] = predictions.predicted_labels["over_clustering"]
+            rna.obs["celltypist_over_clustering"+celltypist_model_name] = predictions.predicted_labels["over_clustering"]
+            if "celltypist_over_clustering" not in rna.obs.columns:
+                rna.obs["celltypist_over_clustering"] = rna.obs["celltypist_over_clustering"+celltypist_model_name]
             rna.obs["celltypist_majority_voting."+celltypist_model_name] = predictions.predicted_labels["majority_voting"]
             rna.obs["celltypist_predicted_labels."+celltypist_model_name] = predictions.predicted_labels["predicted_labels"]
             rna.obs["celltypist_model."+celltypist_model_name] = model_urls[i]
@@ -536,6 +550,9 @@ if not no_cells:
                 is_cite = False
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
         logger.add_to_log("Running solo for detecting doublets...")
+        train_params = get_train_parameters(configs)
+        # Setting doesn't exist for SOLO
+        train_params['plan_kwargs'].pop('reduce_lr_on_plateau', 0)
         if len(library_ids_gex)>1:
             batches = pd.unique(rna.obs[batch_key])
             logger.add_to_log("Running solo on the following batches separately: {}".format(batches))
@@ -543,15 +560,15 @@ if not no_cells:
             for batch in batches:
                 logger.add_to_log("Running solo on batch {}...".format(batch))
                 solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch)
-                solo_batch.train(max_epochs=configs["solo_max_epochs"])
+                solo_batch.train(max_epochs=configs["solo_max_epochs"], validation_size=0.1, train_size=0.9, **train_params, use_gpu=select_free_gpu())
                 rna.obs.loc[
-                    rna[rna.obs["batch"] == batch].obs_names, ['doublet_score', 'singlet_score']] = solo_batch.predict(soft=True)
+                    rna[rna.obs[batch_key] == batch].obs_names, ['doublet_score', 'singlet_score']] = solo_batch.predict(soft=True).values
                 rna.obs.loc[
-                    rna[rna.obs["batch"] == batch].obs_names, 'solo_prediction'] = solo_batch.predict(soft=False)
+                    rna[rna.obs[batch_key] == batch].obs_names, 'solo_prediction'] = solo_batch.predict(soft=False).astype(str).values
         else:
             logger.add_to_log("Running solo...")
             solo = scvi.external.SOLO.from_scvi_model(scvi_model)
-            solo.train(max_epochs=configs["solo_max_epochs"])
+            solo.train(max_epochs=configs["solo_max_epochs"], validation_size=0.1, train_size=0.9, **train_params, use_gpu=select_free_gpu())
             rna.obs[['doublet_score', 'singlet_score']] = solo.predict(soft=True)
             rna.obs['solo_prediction'] = solo.predict(soft=False)
                 
@@ -568,20 +585,22 @@ if not no_cells:
             logger.add_to_log("Normalizing RNA...")
             sc.pp.normalize_total(rna, target_sum=configs["normalize_total_target_sum"])
             sc.pp.log1p(rna)
-            sc.pp.scale(rna)
             rna.raw = rna
+            sc.pp.scale(rna, zero_center=False)
             logger.add_to_log("Calculating PCA...")
             sc.pp.pca(rna)
             logger.add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
             key = "pca_neighbors"
             sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-                use_rep="X_pca", key_added=key) 
+                use_rep="X_pca", key_added=key)
             rna.obsm["X_umap_pca"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
+                                                
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             logger.add_to_log("Calculating neighborhood graph and UMAP based on SCVI components...")
             key = "scvi_neighbors"
             sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"],
-                use_rep="X_scVI", key_added=key) 
+                use_rep="X_scVI", key_added=key)
+            sc.tl.leiden(rna, key_added='overclustering_percolate', resolution=2.0, neighbors_key=key)
             rna.obsm["X_umap_scvi"] = sc.tl.umap(rna, min_dist=configs["umap_min_dist"], spread=float(configs["umap_spread"]),
                 n_components=configs["umap_n_components"], neighbors_key=key, copy=True).obsm["X_umap"]
             logger.add_to_log("Calculating neighborhood graph and UMAP based on TOTALVI components...")
@@ -596,15 +615,20 @@ if not no_cells:
         keep = adata.obs.index.isin(rna.obs.index)
         adata = adata[keep,].copy()
         
-        adata.obs[['doublet_score', 'singlet_score', 'solo_prediction', 'predicted_erythrocyte']] = rna[
-            ['doublet_score', 'singlet_score', 'solo_prediction', 'predicted_erythrocyte']
-        ]
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
+        adata.obs[['doublet_probability', 'singlet_probability']] = softmax(adata.obs[['doublet_score', 'singlet_score']])
         # save raw rna counts
+        adata.obs['sum_percolation_score'] = 0
+        if 'percolation_score' in configs:
+            for obs_key in configs['percolation_score']:
+                if obs_key in adata.obs.columns:
+                    percolate_observation(adata, overclustering_key='overclustering_percolate', **configs['percolation_score'][obs_key])
+                    adata.obs['sum_percolation_score'] += adata.obs[f'{obs_key}_percolation'].astype(int)
+                else:
+                    logger.add_to_log(f"Percolation score {obs_key} was not found in obs. Skipping computation.")
+        adata.obs['sum_percolation_score'] = adata.obs['sum_percolation_score'].astype('category')
         adata.layers["raw_counts"] = adata.X.copy()
-        # save decontaminated counts (only applies to rna data; consider only cells that we keep after filters)
-        adata.layers["decontaminated_counts"] = csr_matrix(decontaminated_counts.loc[adata.obs.index,adata.var.index])
         if adata.n_obs > 0:
             logger.add_to_log("Normalize rna counts in adata.X...")
             sc.pp.normalize_total(adata, target_sum=configs["normalize_total_target_sum"])
@@ -621,6 +645,8 @@ if not no_cells:
         sys.exit()
 
 logger.add_to_log("Saving h5ad file...")
+adata.obs['sample_pipeline_version'] = configs["pipeline_version"]
+adata.obs['sample_code_version'] = configs["code_version"]
 write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 ###############################################################

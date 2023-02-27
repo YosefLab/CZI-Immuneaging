@@ -21,3 +21,6 @@ data_management/test_data/bad/*
 
 # local
 local/
+
+#jupyter notebook
+.ipynb_checkpoints

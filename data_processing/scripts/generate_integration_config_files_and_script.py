@@ -24,29 +24,29 @@ python_env = "immune_aging.py_env.v4"
 pilot_donors = ["CUIMC-457","CUIMC-471","390C"]
 
 celltypist_model_urls = "https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v2/Immune_All_Low.pkl,https://celltypist.cog.sanger.ac.uk/models/Pan_Immune_CellTypist/v2/Immune_All_High.pkl"
-leiden_resolutions = "1.0,2.0,3.0,5.0,7.0,10.0"
+leiden_resolutions = "3.0, 10.0"
 
 tissue_integration = integration_level == "tissue"
 integration_configs = {
         "sandbox_mode": "False",
-        "data_owner": "erahmani",
+        "data_owner": "cane11",
         "code_path": code_path,
         "output_destination": output_destination,
         "s3_access_file": s3_access_file,
         "integration_level": integration_level,
         "protein_levels_max_sds": 5,
-        "n_highly_variable_genes": 3000 if tissue_integration else 10000,
+        "n_highly_variable_genes": 10000,
         "highly_variable_genes_flavor": "seurat_v3",
         "batch_key": "donor_id" if tissue_integration else "donor_id,donor_id+tissue",
         "empirical_protein_background_prior": "False",
-        "n_latent": 30,
-        # The following non-default configurations of scvi and totalvi can be used for speed up in case of very large numbers of cells.
-        #"use_layer_norm": "none",
-        #"use_batch_norm": "both",
-        #"early_stopping": "True",
-        #"early_stopping_patience": 45,
-        #"batch_size": 1024,
-        #"limit_train_batches": 20,
+        "n_layers": 2,
+        "gene_likelihood": "nb",
+        "scvi_max_epochs": 200,
+        "totalvi_max_epochs": 200,
+        "early_stopping": True,
+        "reduce_lr_on_plateau": False,
+        "n_epochs_kl_warmup": 10,
+        "reduce_lr_on_plateau": False,
         "neighborhood_graph_n_neighbors": 15,
         "umap_min_dist": 0.5,
         "umap_spread": 1.0,
@@ -57,12 +57,13 @@ integration_configs = {
         "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
         "python_env_version": python_env,
         "r_setup_version": "immune_aging.R_setup.v2",
-        "pipeline_version": "v5",
+        "pipeline_version": "qc_230227",
+        "include_stim": False,
     }
     
 if tissue_integration:
-    integration_configs["scvi_max_epochs"] = 400
-    integration_configs["totalvi_max_epochs"] = 400
+    integration_configs["scvi_max_epochs"] = None
+    integration_configs["totalvi_max_epochs"] = None
 
 set_access_keys(s3_access_file)
 
@@ -73,8 +74,7 @@ if tissue_integration:
 else:
     tissues_or_compartments = ["T", "B", "Myeloid", "Other"]
 
-outfile = open(os.path.join(code_path,"integrate_samples_runs.sh"),'w') 
-outfile.write("source activate {}\n".format(python_env))
+outfile = open(os.path.join(output_destination,"integrate_samples_runs.sh"),'w')
 
 no_integration = []
 
@@ -90,26 +90,21 @@ for tissue_or_compartment in tissues_or_compartments:
         versions = []
         sample_ids = samples["Sample_ID"][indices]
         for sample_id in sample_ids:
-            ls_cmd = "aws s3 ls s3://immuneaging/processed_samples/{}_GEX --recursive".format(sample_id)
+            ls_cmd = "aws s3 ls s3://immuneaging/processed_samples/{}_GEX --recursive | grep .log".format(sample_id)
             ls  = os.popen(ls_cmd).read()
             if len(ls) == 0:
                 continue
             # find the latest version available
-            filenames = ls.split("\n")
-            latest_version = -1
-            for filename in filenames:
-                p = re.search("(.)(\d)+(.)log$", filename)
-                if bool(p):
-                    version = int(filename[p.span()[0]+1:-4])
-                    if latest_version<version:
-                        latest_version = version
-            if latest_version>-1:
-                version = "v"+str(latest_version)
-                # check if h5ad file is available
-                ls_cmd = "aws s3 ls s3://immuneaging/processed_samples/{0}_GEX/{1}/{0}_GEX.processed.{1}.h5ad".format(sample_id,version)
-                if len(os.popen(ls_cmd).read())>0:
-                    versions.append(version)
-                    final_sample_ids.append(sample_id)
+            filenames = ls.split("\n")[:-1]
+            if len(filenames):
+                for latest_version in sorted([int(i.split('.')[-2][1:]) for i in filenames], reverse=True):
+                    version = "v"+str(latest_version)
+                    # check if h5ad file is available
+                    ls_cmd = "aws s3 ls s3://immuneaging/processed_samples/{0}_GEX/{1}/{0}_GEX.processed.{1}.h5ad".format(sample_id,version)
+                    if len(os.popen(ls_cmd).read())>0:
+                        versions.append(version)
+                        final_sample_ids.append(sample_id)
+                        break
         done = True
     if len(final_sample_ids)>1:
         final_integration_configs = integration_configs
@@ -120,12 +115,11 @@ for tissue_or_compartment in tissues_or_compartments:
         with open(filename, 'w') as f:
             json.dump(final_integration_configs, f)
         print("generated configs file " + filename)
-        outfile.write("python integrate_samples.py {}\n".format(filename))
+        outfile.write("{}\n".format(filename))
     else:
         assert tissue_integration
         no_integration.append((tissue_or_compartment, len(final_sample_ids)))
 
-outfile.write("conda deactivate")
 outfile.close()
 
 if len(no_integration) > 0:

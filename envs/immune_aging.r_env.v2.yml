@@ -1,0 +1,13 @@
+name: immune_aging.r_env.v2
+channels:
+  - conda-forge
+  - r
+  - defaults
+  - bioconda
+prefix: $CONDA_PREFIX"/envs/immune_aging.r_env.v2"
+dependencies:
+  - pip=20.3.3=pyhd8ed1ab_0
+  - python=3.7.9=h7579374_0
+  - r-base=3.6.1=h3a67422_6
+  - r-essentials=3.6
+  - r-devtools=2.4.0

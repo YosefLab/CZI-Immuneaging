@@ -25,7 +25,7 @@ from logger import SimpleLogger
 from utils import *
 
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
-sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
+sc.settings.verbosity = 1   # verbosity: errors (0), warnings (1), info (2), hints (3)
 
 timestamp = get_current_time()
 sandbox_mode = configs["sandbox_mode"] == "True"
@@ -179,16 +179,11 @@ if configs["library_type"] == "GEX":
         else:
             exclude_cells_barcodes = non_immune_cells_df["cell_barcode"]
         n_obs_before = adata.n_obs
-        adata = adata[~adata.obs_names.isin(exclude_cells_barcodes.values), :].copy()
+        n_obs_after = np.sum(~adata.obs_names.isin(exclude_cells_barcodes.values))
         n_cells_filtered = n_obs_before-adata.n_obs
         percent_removed = 100*n_cells_filtered/n_obs_before
-        level = "warning" if percent_removed > 40 else "info"
+        level = "warning" if percent_removed > 20 else "info"
         logger.add_to_log("Filtered out {} non-immune cells for tissue {}, percent_removed: {}".format(n_cells_filtered, tissue, percent_removed), level=level)
-
-    if adata.n_obs == 0:
-        logger.add_to_log("No cells left after filtering out non-immune cells. Exiting...", level="warning")
-        flush_logs_and_upload()
-        sys.exit()
 
     # move protein/hto data out of adata.X into adata.obsm/obs
     hto_tag = configs["donor"]+"-"
@@ -297,8 +292,11 @@ if configs["library_type"] == "GEX":
 
     adata.var['mt'] = adata.var_names.str.startswith('MT-') # mitochondrial genes
     adata.var['ribo'] = adata.var_names.str.startswith(("RPS","RPL")) # ribosomal genes
-    adata.var['hb'] = adata.var_names.str.startswith(("^HB[^(P)]")) # ribosomal genes
-    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt','ribo', 'hb'], percent_top=None, log1p=False, inplace=True)
+    hb_genes = list(adata.var_names[adata.var_names.str.contains(("^HB[^(P)]"))]) + ['ALAS2', 'EPOR']
+    adata.var['hb'] = [i in hb_genes for i in adata.var_names]
+    hsp_genes = ['HSPA6', 'HSPA1A', 'HSPA1B', 'HSPB1', 'HSPH1']
+    adata.var['hsp'] = [i in hsp_genes for i in adata.var_names]
+    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt','ribo', 'hb', 'hsp'], percent_top=None, log1p=False, inplace=True)
     n_cells_before = adata.n_obs
     adata = adata[adata.obs['pct_counts_mt'] <= configs["filter_cells_max_pct_counts_mt"], :].copy()
     logger.add_to_log("Filtered out {} cells with more than {}\% counts coming from mitochondrial genes.".format(n_cells_before-adata.n_obs, configs["filter_cells_max_pct_counts_mt"]))
@@ -337,8 +335,6 @@ if configs["library_type"] == "GEX":
         level = "error" if percent_doublets > 40 else "info"
         logger.add_to_log("Removing {:.2f}% of the droplets ({} droplets out of {}) called by hashsolo as doublets...".format(percent_doublets, num_doublets, adata.n_obs), level=level)
         adata = adata[adata.obs["Classification"] != "Doublet"].copy()
-    adata.obsm['hash_tags'] = adata.obs[cell_hashing]
-    adata.obs.drop([cell_hashing], axis='columns')
 
     summary.append("Final number of cells: {}, final number of genes: {}.".format(adata.n_obs, adata.n_vars))
 elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
@@ -378,7 +374,6 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
     n_ambiguous_cells = sum(adata.obs["chain_pairing"] == "ambiguous")
     n_ambiguous_cells_pct = (n_ambiguous_cells/adata.n_obs) * 100
     indices = (adata.obs["multi_chain"] == "False") & (adata.obs["chain_pairing"] != "ambiguous")
-    adata = adata[indices].copy()
     level = "warning" if n_multichain_cells_pct > 5 else "info"
     logger.add_to_log("Removed multichains (individual count and percentage: {}, {:.2f}%).".format(n_multichain_cells, n_multichain_cells_pct), level=level)
     level = "warning" if n_ambiguous_cells_pct > 5 else "info"
@@ -396,7 +391,8 @@ elif configs["library_type"] == "BCR" or configs["library_type"] == "TCR":
         logger.add_to_log("Detected {} cells with no IR detected.".format(n_no_ir_cells), level = "error")
         sys.exit()
     elif n_unexpected_ir_type_cells > 0:
-        logger.add_to_log("Detected {} cells with a different receptor_type than expected. unique receptor types found: {}.".format(n_unexpected_ir_type_cells, np.unique(adata.obs["receptor_type"])), level = "error")
+        logger.add_to_log("Detected {} cells with a different receptor_type than expected. unique receptor types found: {}.".format(
+            n_unexpected_ir_type_cells, np.unique(adata.obs["receptor_type"])), level = "error")
         sys.exit()
 
     # this is for clarity and also to distinguish similarly-named BCR and TCR obs columns
@@ -412,6 +408,8 @@ else:
     raise ValueError("Unrecognized lib type: {}".format(configs["library_type"]))
 
 logger.add_to_log("Saving h5ad file...")
+adata.obs['library_pipeline_version'] = configs["pipeline_version"]
+adata.obs['library_code_version'] = configs["code_version"]
 write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 if not sandbox_mode:

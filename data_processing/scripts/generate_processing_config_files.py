@@ -25,6 +25,7 @@ seq_run = sys.argv[5]
 s3_access_file = sys.argv[6]
 processed_gex_lib_version = sys.argv[7]
 processed_ir_lib_version = sys.argv[8]
+sandbox_mode = sys.argv[9]
 
 sys.path.append(code_path)
 from utils import *
@@ -44,6 +45,11 @@ if config_type in ["library", "all"]:
         libs_all = samples[indices][column_name]
         gex_libs_all = samples[indices]["GEX lib"]
         failed_libs = set()
+        #Read from AWS, single call and fetching is faster.
+        set_access_keys(s3_access_file)
+        ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
+        ls  = os.popen(ls_cmd).read()
+        
         for i in range(len(libs_all)):
             if libs_all.iloc[i] is np.nan:
                 continue
@@ -53,10 +59,7 @@ if config_type in ["library", "all"]:
                 lib = libs[j]
                 corresponding_gex_lib = gex_libs[j]
                 # find the latest aligned_lib_version
-                set_access_keys(s3_access_file)
                 latest_version = -1
-                ls_cmd = "aws s3 ls s3://immuneaging/aligned_libraries --recursive"
-                ls  = os.popen(ls_cmd).read()
                 if len(ls) != 0:
                     filenames = ls.split("\n")
                     if lib_type == "GEX":
@@ -84,7 +87,7 @@ if config_type in ["library", "all"]:
     all_libs = set()
     add_lib("GEX", all_libs)
     add_lib("BCR", all_libs)
-    add_lib("TCR", all_libs)
+    add_lib("TCR", all_libs)    
 
     for lib in all_libs:
         lib_id = lib[0]
@@ -92,29 +95,28 @@ if config_type in ["library", "all"]:
         aligned_lib_version = lib[2]
         corresponding_gex_lib = lib[3]
         lib_configs = {
-            "sandbox_mode": "False",
-            "data_owner": "valehvpa",
-            "code_path": "./",
-            "output_destination": "./",
-            "s3_access_file": "./",
+            "sandbox_mode": sandbox_mode,
+            "data_owner": "cane11",
+            "code_path": code_path,
+            "output_destination": output_destination,
+            "s3_access_file": s3_access_file,
             "donor": donor_id,
             "seq_run": seq_run,
             "library_type": lib_type,
             "library_id": lib_id,
             "corresponding_gex_lib": corresponding_gex_lib,
-            "filter_cells_min_genes": 600,
-            "filter_cells_min_umi": 1000,
+            "filter_cells_min_genes": 400,
+            "filter_cells_min_umi": 800,
             "filter_genes_min_cells": 0,
             "filter_cells_max_pct_counts_mt": 20,
             "filter_cells_min_pct_counts_ribo": 0,
             "genes_to_exclude": "MALAT1",
             "exclude_mito_genes": "True",
-            "hashsolo_priors": "0.01,0.8,0.19",
-            "hashsolo_number_of_noise_barcodes": 2,
+            "hashsolo_priors": "0.05,0.7,0.25",
+            "hashsolo_number_of_noise_barcodes": None,
             "aligned_library_configs_version": aligned_lib_version,
             "python_env_version": "immune_aging.py_env.v4",
-            "r_setup_version": "immune_aging.R_setup.v2",
-            "pipeline_version": "v3",
+            "pipeline_version": "qc_230227",
         }
         filename = os.path.join(output_destination,
             "process_library.{}.{}.{}.{}.configs.txt".format(donor_id,seq_run,lib_id, lib_type))
@@ -147,11 +149,13 @@ if config_type in ["sample", "all"]:
         add_libs("TCR", all_libs, all_lib_types, all_lib_versions)
 
         sample_configs = {
-            "sandbox_mode": "False",
-            "data_owner": "valehvpa",
-            "code_path": "./",
-            "output_destination": "./",
-            "s3_access_file": "./",
+            "sandbox_mode": sandbox_mode,
+            "data_owner": "cane11",
+            "code_path": code_path,
+            "output_destination": output_destination,
+            "s3_access_file": s3_access_file,
+            "donor": donor_id,
+            "seq_run": seq_run,
             "processed_libraries_dir": "",
             "donor": donor_id,
             "seq_run": seq_run,
@@ -159,16 +163,21 @@ if config_type in ["sample", "all"]:
             "library_ids": ",".join(all_libs),
             "library_types": ",".join(all_lib_types),
             "processed_library_configs_version": ",".join(all_lib_versions),
-            "min_cells_per_library": 50 if is_jejunum else 200, # jejunum samples are generally less enriched as they are less available to sequence
-            "filter_decontaminated_cells_min_genes": 100,
+            "min_cells_per_library": 50, # jejunum samples are generally less enriched as they are less available to sequence, otherwise completely removing skin sample.
+            "filter_decontaminated_cells_min_genes": 30,
             "normalize_total_target_sum": 10000,
             "n_highly_variable_genes": 3000,
+            "gene_likelihood": "nb",
             "highly_variable_genes_flavor": "seurat_v3",
-            "scvi_max_epochs": 400,
-            "totalvi_max_epochs": 400,
+            "scvi_max_epochs": None,
+            "totalvi_max_epochs": None,
+            "early_stopping": True,
+            "reduce_lr_on_plateau": False,
+            "n_epochs_kl_warmup": 30,
+            "reduce_lr_on_plateau": False,
             "empirical_protein_background_prior": "False",
             "solo_filter_genes_min_cells": 5,
-            "solo_max_epochs": 400,
+            "solo_max_epochs": 100,
             "neighborhood_graph_n_neighbors": 15,
             "umap_min_dist": 0.5,
             "umap_spread": 1.0,
@@ -177,8 +186,20 @@ if config_type in ["sample", "all"]:
             "rbc_model_url": rbc_model_url,
             "vdj_genes": "s3://immuneaging/vdj_genes/vdj_gene_list_v1.csv",
             "python_env_version": "immune_aging.py_env.v4",
-            "r_setup_version": "immune_aging.R_setup.v2",
-            "pipeline_version": "v3",
+            "rscript": "/home/eecs/cergen/anaconda3/envs/new_decontx/bin/Rscript",
+            "pipeline_version": "qc_230227",
+            "percolation_score": {
+                "pct_counts_hsp": {"score_key": "pct_counts_hsp"},
+                "doublet_probability" : {"score_key": "doublet_probability"},
+                "doublet_hypothesis_probability": {"score_key": "doublet_hypothesis_probability"},
+                "pct_counts_hb": {"score_key": "pct_counts_hb"},
+                "double_ir": {"score_key": "double_ir", "threshold": "True"},
+                "celltypist_predicted_labels.RBC_model_CZI": {"score_key": "celltypist_predicted_labels.RBC_model_CZI", "threshold": "RBC"},
+                "pct_counts_mt": {"score_key": "pct_counts_mt"},
+                "total_counts" : {"score_key": "total_counts", "threshold": 2000, "exclude_high": False},
+                "n_genes" : {"score_key": "n_genes", "threshold": 1200, "exclude_high": False},
+                "n_proteins" : {"score_key": "n_proteins", "threshold": 200, "exclude_high": False}
+            }
         }
         filename = os.path.join(output_destination,"process_sample.configs.{}.txt".format(sample_id))
         with open(filename, 'w') as f:
