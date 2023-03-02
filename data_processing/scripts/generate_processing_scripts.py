@@ -68,7 +68,7 @@ for job_type in ("process_library", "process_sample"):
             outfiles.append(os.path.join(output_path,"{}/{}.{}_jobs.sh".format(job_type,i,job_type)))
             with open(outfiles[-1], 'w') as f:
                 for cmd in sh_cmds[i]:
-                    f.write(cmd)
+                    f.write(cmd+"\n")
 
 if (len(outfiles)):
     print("Generated the following files:")

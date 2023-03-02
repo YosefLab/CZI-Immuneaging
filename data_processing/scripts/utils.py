@@ -288,7 +288,7 @@ def select_free_gpu():
         memory_free = subprocess.check_output(memory_free_command.split(), stderr=subprocess.STDOUT)
         # Get use of each GPU.
         mem_free = np.array([int(i.split(' ')[0]) for i in memory_free.decode().split('\n')[1:] if i])
-        if np.max(mem_free) < 1000:
+        if np.max(mem_free) < 3000:
             time.sleep(10)
         else:
             break

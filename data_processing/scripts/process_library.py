@@ -408,8 +408,8 @@ else:
     raise ValueError("Unrecognized lib type: {}".format(configs["library_type"]))
 
 logger.add_to_log("Saving h5ad file...")
-adata.obs['library_pipeline_version'] = f"{configs['library_type']}__{configs['library_id']}__{configs['pipeline_version']}"
-adata.obs['library_code_version'] =  f"{configs['library_type']}__{configs['library_id']}__{configs['code_version']}"
+adata.obs[f'library_pipeline_version_{configs["library_type"]}'] = f"{configs['library_type']}__{configs['library_id']}__{configs['pipeline_version']}"
+adata.obs[f'library_code_version__{configs["library_type"]}'] =  f"{configs['library_type']}__{configs['library_id']}__{configs['code_version']}"
 write_anndata_with_object_cols(adata, data_dir, h5ad_file)
 
 if not sandbox_mode:

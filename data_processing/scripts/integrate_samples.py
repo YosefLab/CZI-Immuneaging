@@ -517,13 +517,14 @@ for integration_mode in integration_modes:
                 dotplot_min_frac = celltypist_dotplot_min_frac,
                 logger = logger,
             )
-    sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep=key, key_added=neighbors_key) 
-    sc.tl.leiden(adata, key_added='overclustering_tissue_percolate', resolution=3.0, neighbors_key=neighbors_key)
+    sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+                    use_rep=f"X_scvi_integrated_batch_key_{batch_key}", key_added="overclustering") 
+    sc.tl.leiden(adata, key_added='overclustering_tissue_percolate', resolution=3.0, neighbors_key="overclustering")
     
     df = adata.obs.groupby('overclustering_tissue_percolate')['sum_percolation_score'].agg(['median', 'mean'])
     for cluster in df.index:
-        ad.obs.loc[ad.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_median_cluster'] = df.loc[cluster, 'median']
-        ad.obs.loc[ad.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_mean_cluster'] = df.loc[cluster, 'mean']
+        adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_median_cluster'] = df.loc[cluster, 'median']
+        adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_mean_cluster'] = df.loc[cluster, 'mean']
     
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))
