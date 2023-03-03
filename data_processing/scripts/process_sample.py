@@ -489,8 +489,7 @@ if not no_cells:
         if configs["highly_variable_genes_flavor"] != "seurat_v3":
             # highly_variable_genes requires log-transformed data in this case
             sc.pp.log1p(rna)
-        sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True,
-            flavor=configs["highly_variable_genes_flavor"], batch_key=batch_key, span = 1.0)
+        sc.pp.highly_variable_genes(rna, n_top_genes=configs["n_highly_variable_genes"], subset=True, flavor=configs["highly_variable_genes_flavor"], span = 1.0)
         rna.X = rna.layers["rounded_decontaminated_counts_copy"]
         logger.add_to_log("Predict cell type labels using celltypist...")
         model_urls = configs["celltypist_model_urls"].split(",")
@@ -574,8 +573,8 @@ if not no_cells:
             X = rna.X.A
             doublet_scores, doublet_predictions = scrublet.Scrublet(X, sim_doublet_ratio=10.).scrub_doublets()
             
-        rna.obs['scrublet_score'] = doublet_scores
-        rna.obs['scrublet_prediction'] = doublet_predictions
+        rna.obs['doublet_probability'] = doublet_scores
+        rna.obs['doublet_prediction'] = doublet_predictions
                 
         logger.add_to_log("Removing doublets...")
         n_obs_before = rna.n_obs

@@ -166,7 +166,7 @@ if config_type in ["sample", "all"]:
             "min_cells_per_library": 50, # jejunum samples are generally less enriched as they are less available to sequence, otherwise completely removing skin sample.
             "filter_decontaminated_cells_min_genes": 30,
             "normalize_total_target_sum": 10000,
-            "n_highly_variable_genes": 3000,
+            "n_highly_variable_genes": 5000,
             "gene_likelihood": "nb",
             "highly_variable_genes_flavor": "seurat_v3",
             "scvi_max_epochs": None,
