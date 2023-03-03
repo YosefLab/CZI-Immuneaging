@@ -34,7 +34,7 @@ integration_configs = {
         "output_destination": output_destination,
         "s3_access_file": s3_access_file,
         "integration_level": integration_level,
-        "protein_levels_max_sds": 5,
+        "protein_levels_max_sds": None,
         "n_highly_variable_genes": 10000,
         "highly_variable_genes_flavor": "seurat_v3",
         "batch_key": "donor_id" if tissue_integration else "donor_id,donor_id+tissue",

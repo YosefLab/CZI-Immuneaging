@@ -17,6 +17,7 @@ import celltypist
 import urllib.request
 import traceback
 import scirpy as ir
+import scrublet
 from typing import Optional
 
 logging.getLogger('numba').setLevel(logging.WARNING)
@@ -555,22 +556,26 @@ if not no_cells:
         train_params['plan_kwargs'].pop('reduce_lr_on_plateau', 0)
         if len(library_ids_gex)>1:
             batches = pd.unique(rna.obs[batch_key])
-            logger.add_to_log("Running solo on the following batches separately: {}".format(batches))
-            rna.obs[['solo_prediction', 'doublet_score', 'singlet_score']] = 0
+            logger.add_to_log("Running scrublet on the following batches separately: {}".format(batches))
             for batch in batches:
-                logger.add_to_log("Running solo on batch {}...".format(batch))
-                solo_batch = scvi.external.SOLO.from_scvi_model(scvi_model, restrict_to_batch=batch, doublet_ratio=6)
-                solo_batch.train(max_epochs=configs["solo_max_epochs"], validation_size=0.1, train_size=0.9, **train_params, use_gpu=select_free_gpu())
-                rna.obs.loc[
-                    rna[rna.obs[batch_key] == batch].obs_names, ['doublet_score', 'singlet_score']] = solo_batch.predict(soft=True).values
-                rna.obs.loc[
-                    rna[rna.obs[batch_key] == batch].obs_names, 'solo_prediction'] = solo_batch.predict(soft=False).astype(str).values
+                X = rna.X.A
+                batch_indices = rna.obs["batch"]
+                doublet_scores = np.zeros(shape=(X.shape[0]))
+                doublet_predictions = np.zeros(shape=(X.shape[0]))
+                cells, _, indices = np.intersect1d(adata.obs_names, scvi_adata.obs_names, return_indices=True)
+                # run scrublet separately on every batch; should take a couple of seconds
+                for b in np.unique(batch_indices.values):
+                    mask = batch_indices.values == b
+                    scores, predictions = scrublet.Scrublet(X[mask], sim_doublet_ratio=10.).scrub_doublets()
+                    doublet_scores[mask] = scores`
+                    doublet_predictions[mask] = predictions
         else:
-            logger.add_to_log("Running solo...")
-            solo = scvi.external.SOLO.from_scvi_model(scvi_model)
-            solo.train(max_epochs=configs["solo_max_epochs"], validation_size=0.1, train_size=0.9, **train_params, use_gpu=select_free_gpu())
-            rna.obs[['doublet_score', 'singlet_score']] = solo.predict(soft=True)
-            rna.obs['solo_prediction'] = solo.predict(soft=False)
+            logger.add_to_log("Running scrublet...")
+            X = rna.X.A
+            doublet_scores, doublet_predictions = scrublet.Scrublet(X, sim_doublet_ratio=10.).scrub_doublets()
+            
+        rna.obs['scrublet_score'] = doublet_scores
+        rna.obs['scrublet_prediction'] = doublet_predictions
                 
         logger.add_to_log("Removing doublets...")
         n_obs_before = rna.n_obs

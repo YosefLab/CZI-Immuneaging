@@ -231,20 +231,61 @@ def draw_separator_line():
         width = 50
         print("\u2014" * width + "\n")
 
-def write_anndata_with_object_cols(adata: AnnData, data_dir: str, h5ad_file: str) -> None:
-    try:
-        adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
-    except:
-        # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
-        # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
-        # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
-        # in future processing layers.
-        obj_cols = adata.obs.select_dtypes(include='object').columns
-        # Also call .astype("str") since there can be other values than NaN in the column that contribute to
-        # the "object" type
+def write_anndata_with_object_cols(adata: AnnData, data_dir: str, h5ad_file: str, cleanup:bool = False) -> None:
+    # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
+    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
+    # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
+    # in future processing layers.
+    obj_cols = adata.obs.select_dtypes(include='object').columns
+    # Also call .astype("str") since there can be other values than NaN in the column that contribute to
+    # the "object" type
+    if obj_cols:
         adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
-        adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+    if cleanup:
+        cleanup_adata(adata)
+    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
         
+def cleanup_adata(adata: AnnData) -> None:
+    adata.obsm['TCR_IR'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i.startswith('TCR-')], axis=1)
+    adata.obsm['BCR_IR'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i.startswith('BCR-')], axis=1)
+    adata.obsm['celltypist'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'celltypist' in i], axis=1)
+    adata.obsm['hashtag'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if
+                                       i.split('-')[0] in adata.obs['donor_id'].cat.categories], axis=1)
+    
+    adata.obsm['median_cluster_score'] = pd.concat([
+        adata.obs.pop(i) for i in adata.obs.columns if 'median_cluster_scores' in i], axis=1)
+    adata.obsm['bh_pval'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'bh_pval' in i], axis=1)
+    patient_level_obs = [
+        'DCD/DBD', 'ethnicity/race', 'death_cause', 'mech_injury', 'height', 'BMI', 'lipase_level',
+        'blood_sugar', 'smoking_period', 'smoking_packs_year', 'EBV', 'CMV', 'seq_run', 'Fresh/frozen', 'sample_cell_type', 
+        'sorting', 'stimulation', 'Notes', 'HTO_chem', 'ADT_chem']
+    adata.obsm['bh_pval'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in patient_level_obs], axis=1)
+    patient_level_obs = ['DCD/DBD', 'ethnicity/race', 'death_cause', 'mech_injury', 'height', 'BMI', 'lipase_level',
+        'blood_sugar', 'smoking_period', 'smoking_packs_year', 'EBV', 'CMV', 'seq_run', 'Fresh/frozen', 'sample_cell_type', 
+        'sorting', 'stimulation', 'Notes', 'HTO_chem', 'ADT_chem']
+    adata.obsm['patient_level_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in patient_level_obs], axis=1)
+    extra_qc = [
+        'Exclude from Aging analysis', 'total_counts_mt', 'pct_counts_mt', 'total_counts_ribo', 'pct_counts_ribo', 'total_counts_hb',
+        'pct_counts_hb', 'total_counts_hsp', 'pct_counts_hsp', 'most_likely_hypothesis', 'cluster_feature', 'negative_hypothesis_probability',
+        'singlet_hypothesis_probability', 'doublet_hypothesis_probability',  'pct_counts_hsp_percolation', 'doublet_probability_percolation',
+        'doublet_hypothesis_probability_percolation', 'pct_counts_hb_percolation', 'pct_counts_mt_percolation', 'total_counts_percolation',
+        'n_genes_percolation', 'n_proteins_percolation', 'doublet_probability', 'singlet_probability', 'contamination_levels', 'predicted_erythrocyte', 
+        'library_code_version_y', 'BCR_chem', 'TCR_chem', 'double_ir_percolation', 'double_ir', 'solo_prediction', 'doublet_score', 'singlet_score', 
+    ]
+    adata.obsm['qc_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in extra_qc], axis=1)
+    clustering = [
+        'overclustering_percolate', 'scvi_batch_key_donor_id.unstim.leiden_resolution_3.0', 
+        'scvi_batch_key_donor_id.unstim.leiden_resolution_10.0', 
+        'totalvi_batch_key_donor_id.unstim.leiden_resolution_3.0', 
+        'totalvi_batch_key_donor_id.unstim.leiden_resolution_10.0', 
+        'overclustering_tissue_percolate',
+    ]
+    adata.obsm['clustering'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'leiden_resolution' in i], axis=1)
+    adata.X = adata.layers['raw_counts']
+    del adata.layers
+    
+    
+            
 def run_model(
         adata: AnnData,
         configs: dict,

@@ -204,6 +204,7 @@ for integration_mode in integration_modes:
     prefix = configs["output_prefix"] + mode_suffix
     dotplot_dirname = "dotplots" + mode_suffix
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
+    output_h5ad_file_cleanup = "{}_cleanup.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
     try:
         if adata_dict is not None:
@@ -543,11 +544,12 @@ for integration_mode in integration_modes:
     adata.obs["BMI"] = adata.obs["BMI"].astype(str)
     adata.obs["height"] = adata.obs["height"].astype(str)
     write_anndata_with_object_cols(adata, data_dir, output_h5ad_file)
+    write_anndata_with_object_cols(adata, data_dir, output_h5ad_file_cleanup, cleanup=True)
     # OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE
     if not sandbox_mode:
         logger.add_to_log("Uploading h5ad file to S3...")
-        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
-            data_dir, s3_url, configs["output_prefix"], version, output_h5ad_file)
+        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {} {}'.format(
+            data_dir, s3_url, configs["output_prefix"], version, output_h5ad_file, output_h5ad_file_cleanup)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
         logger.add_to_log("Uploading model files (a single .zip file for each model) and CellTypist dot plots to S3...")

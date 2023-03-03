@@ -176,8 +176,7 @@ if config_type in ["sample", "all"]:
             "n_epochs_kl_warmup": 30,
             "reduce_lr_on_plateau": False,
             "empirical_protein_background_prior": "False",
-            "solo_filter_genes_min_cells": 5,
-            "solo_max_epochs": 100,
+            "solo_filter_genes_min_cells": 30,
             "neighborhood_graph_n_neighbors": 15,
             "umap_min_dist": 0.5,
             "umap_spread": 1.0,
@@ -189,13 +188,11 @@ if config_type in ["sample", "all"]:
             "rscript": "/home/eecs/cergen/anaconda3/envs/new_decontx/bin/Rscript",
             "pipeline_version": "qc_230227",
             "percolation_score": {
-                "pct_counts_hsp": {"score_key": "pct_counts_hsp"},
                 "doublet_probability" : {"score_key": "doublet_probability"},
                 "doublet_hypothesis_probability": {"score_key": "doublet_hypothesis_probability"},
                 "pct_counts_hb": {"score_key": "pct_counts_hb"},
                 "double_ir": {"score_key": "double_ir", "threshold": "True"},
                 "celltypist_predicted_labels.RBC_model_CZI": {"score_key": "celltypist_predicted_labels.RBC_model_CZI", "threshold": "RBC"},
-                "pct_counts_mt": {"score_key": "pct_counts_mt"},
                 "total_counts" : {"score_key": "total_counts", "threshold": 2000, "exclude_high": False},
                 "n_genes" : {"score_key": "n_genes", "threshold": 1200, "exclude_high": False},
                 "n_proteins" : {"score_key": "n_proteins", "threshold": 200, "exclude_high": False}
