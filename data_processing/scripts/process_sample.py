@@ -177,7 +177,7 @@ samples = read_immune_aging_sheet("Samples")
 logger.add_to_log("Reading h5ad files of processed libraries for GEX libs...")
 adata_dict = {}
 initial_n_obs = 0
-solo_genes = set()
+sub_genes = set()
 library_ids_gex = []
 for j in range(len(library_ids)):
     if library_types[j] != "GEX":
@@ -226,13 +226,13 @@ for j in range(len(library_ids)):
             del adata_dict[library_id]
             continue
     library_ids_gex.append(library_id)
-    solo_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
-    solo_genes_j = adata_dict[library_id].var.index[solo_genes_j]
+    sub_genes_j = np.logical_and(sc.pp.filter_genes(adata_dict[library_id], min_cells=configs["solo_filter_genes_min_cells"], inplace=False)[0], (adata_dict[library_id].var["feature_types"] == "Gene Expression").values)
+    sub_genes_j = adata_dict[library_id].var.index[sub_genes_j]
     initial_n_obs += adata_dict[library_id].n_obs
-    if len(solo_genes)==0:
-        solo_genes = solo_genes_j
+    if len(sub_genes)==0:
+        sub_genes = sub_genes_j
     else:
-        solo_genes = np.intersect1d(solo_genes,solo_genes_j)
+        sub_genes = np.intersect1d(sub_genes,sub_genes_j)
 
 if len(library_ids_gex)==0:
     logger.add_to_log("No cells passed the filtering steps. Terminating execution.", "error")
@@ -469,8 +469,7 @@ if not no_cells:
         adata.obs["contamination_levels"] = contamination_levels
         adata.layers['decontaminated_counts'] = decontaminated_counts
         rna = adata.copy()
-        # keep only the genes in solo_genes, which is required to prevent errors with solo in case some genes are expressed in only a subset of the batches.
-        rna = rna[:,rna.var.index.isin(solo_genes)].copy()
+        rna = rna[:,rna.var.index.isin(sub_genes)].copy()
         # remove empty cells after decontaminations
         n_obs_before = rna.n_obs
         rna = rna[rna.layers['decontaminated_counts'].sum(axis=1) >= configs["filter_decontaminated_cells_min_genes"],:].copy()
@@ -549,10 +548,7 @@ if not no_cells:
                 logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
                 is_cite = False
         scvi_model, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger)
-        logger.add_to_log("Running solo for detecting doublets...")
-        train_params = get_train_parameters(configs)
-        # Setting doesn't exist for SOLO
-        train_params['plan_kwargs'].pop('reduce_lr_on_plateau', 0)
+        logger.add_to_log("Running scrublet for detecting doublets...")
         if len(library_ids_gex)>1:
             batches = pd.unique(rna.obs[batch_key])
             logger.add_to_log("Running scrublet on the following batches separately: {}".format(batches))
@@ -561,12 +557,11 @@ if not no_cells:
                 batch_indices = rna.obs["batch"]
                 doublet_scores = np.zeros(shape=(X.shape[0]))
                 doublet_predictions = np.zeros(shape=(X.shape[0]))
-                cells, _, indices = np.intersect1d(adata.obs_names, scvi_adata.obs_names, return_indices=True)
                 # run scrublet separately on every batch; should take a couple of seconds
                 for b in np.unique(batch_indices.values):
                     mask = batch_indices.values == b
                     scores, predictions = scrublet.Scrublet(X[mask], sim_doublet_ratio=10.).scrub_doublets()
-                    doublet_scores[mask] = scores`
+                    doublet_scores[mask] = scores
                     doublet_predictions[mask] = predictions
         else:
             logger.add_to_log("Running scrublet...")
@@ -578,9 +573,9 @@ if not no_cells:
                 
         logger.add_to_log("Removing doublets...")
         n_obs_before = rna.n_obs
-        percent_removed = 100*(np.sum(rna.obs['solo_prediction']!='singlet'))/n_obs_before
+        percent_removed = 100*(np.sum(rna.obs['doublet_prediction']!='singlet'))/n_obs_before
         level = "warning" if percent_removed > 40 else "info"
-        logger.add_to_log(QC_STRING_DOUBLETS.format(np.sum(rna.obs['solo_prediction']!='singlet'), percent_removed, rna.n_obs), level=level)
+        logger.add_to_log(QC_STRING_DOUBLETS.format(np.sum(rna.obs['doublet_prediction']!='singlet'), percent_removed, rna.n_obs), level=level)
         summary.append("Removed {} estimated doublets.".format(n_obs_before-rna.n_obs))
         if rna.n_obs == 0:
             logger.add_to_log("No cells left after doublet detection. Skipping the next processing steps.", "error")
@@ -621,7 +616,6 @@ if not no_cells:
         
         adata.obsm.update(rna.obsm)
         adata.obs[rna.obs.columns] = rna.obs
-        adata.obs[['doublet_probability', 'singlet_probability']] = softmax(adata.obs[['doublet_score', 'singlet_score']])
         # save raw rna counts
         adata.obs['sum_percolation_score'] = 0
         if 'percolation_score' in configs:

@@ -34,7 +34,7 @@ with open(configs_file) as f:
 
 configs = json.loads(data)
 sandbox_mode = configs["sandbox_mode"] == "True"
-tissue_integration = configs["integration_level"] == "tissue"
+apply_filtering = configs["filtering"]["apply_filtering"] == "True"
 
 sys.path.append(configs["code_path"])
 from utils import *
@@ -52,10 +52,8 @@ processed_sample_configs_version = np.array(configs["processed_sample_configs_ve
 configs["sample_ids"] = ",".join(all_sample_ids)
 configs["processed_sample_configs_version"] = ",".join(processed_sample_configs_version)
 
-assert(len(all_sample_ids)>1)
-
 VARIABLE_CONFIG_KEYS = ["data_owner","s3_access_file","code_path","output_destination"] # config changes only to these fields will not initialize a new configs version
-sc.settings.verbosity = 1   # verbosity: errors (0), warnings (1), info (2), hilltypistnts (3)
+sc.settings.verbosity = 3   # verbosity: errors (0), warnings (1), info (2), hints (3)
 
 # apply the aws credentials to allow access though aws cli; make sure the user is authorized to run in non-sandbox mode if applicable
 s3_dict = set_access_keys(s3_access_file, return_dict = True)
@@ -137,42 +135,71 @@ unstim_h5ad_files = []
 if configs['include_stim']:
     stim_sample_ids = [] 
     stim_h5ad_files = []
-for j in range(len(all_sample_ids)):
-    sample_id = all_sample_ids[j]
-    sample_version = processed_sample_configs_version[j]
-    sample_h5ad_file = "{}_GEX.processed.{}.h5ad".format(sample_id,sample_version)
-    sample_h5ad_path = os.path.join(data_dir,sample_h5ad_file)
-    all_h5ad_files.append(sample_h5ad_path)
-    stim_status = samples["Stimulation"][samples["Sample_ID"] == sample_id].values[0]
-    if stim_status == "Nonstim":
-        unstim_sample_ids.append(sample_id)
-        unstim_h5ad_files.append(sample_h5ad_path)
-    elif configs['include_stim']:
-        stim_sample_ids.append(sample_id)
-        stim_h5ad_files.append(sample_h5ad_path)
-    sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
-    sample_id,sample_version,data_dir,sample_h5ad_file)
-    logger.add_to_log("syncing {}...".format(sample_h5ad_file))
-    logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-    aws_response = os.popen(sync_cmd).read()
-    logger.add_to_log("aws response: {}\n".format(aws_response))
-    if not os.path.exists(sample_h5ad_path):
-        logger.add_to_log("h5ad file does not exist on aws for sample {}. Terminating execution.".format(sample_id))
-        sys.exit()
+if configs['folder_local_files'].split('.')[-1]=='h5ad':
+    preexisting_h5ad = True
+    adata = sc.read(configs['folder_local_files'])
+else:
+    preexisting_h5ad = False
+    local_files = os.listdir(configs['folder_local_files']) if configs['folder_local_files'] else []
+    for j in range(len(all_sample_ids)):
+        sample_id = all_sample_ids[j]
+        sample_version = processed_sample_configs_version[j]
+        sample_h5ad_file = "{}_GEX.processed.{}.h5ad".format(sample_id,sample_version)
+        sample_h5ad_path = os.path.join(data_dir,sample_h5ad_file)
+        all_h5ad_files.append(sample_h5ad_path)
+        stim_status = samples["Stimulation"][samples["Sample_ID"] == sample_id].values[0]
+        if stim_status == "Nonstim":
+            unstim_sample_ids.append(sample_id)
+            unstim_h5ad_files.append(sample_h5ad_path)
+        elif configs['include_stim']:
+            stim_sample_ids.append(sample_id)
+            stim_h5ad_files.append(sample_h5ad_path)
+        if sample_h5ad_file in local_files:
+            if os.path.samefile(configs['folder_local_files'], data_dir):
+                sync_cmd = f'echo "{sample_h5ad_file} exists in {data_dir}"'
+            else:
+                sync_cmd = f'cp {configs["folder_local_files"]}/{sample_h5ad_file} {data_dir}; echo Copied {sample_h5ad_file} from {configs["folder_local_files"]}'
+        else:
+            sync_cmd = 'aws s3 cp --no-progress s3://immuneaging/processed_samples/{}_GEX/{}/ {} --exclude "*" --include {}'.format(
+            sample_id,sample_version,data_dir,sample_h5ad_file)
+            logger.add_to_log("syncing {}...".format(sample_h5ad_file))
+            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+        aws_response = os.popen(sync_cmd).read()
+        logger.add_to_log(f"aws response: {aws_response}")
+        if not os.path.exists(sample_h5ad_path):
+            logger.add_to_log("h5ad file does not exist on aws for sample {}. Terminating execution.".format(sample_id))
+            sys.exit()
 
-if not tissue_integration:
+if configs["integration_level"] == "compartment":
     compartment = configs["output_prefix"]
     logger.add_to_log(f"Downloading csv file containing cell barcodes for the {compartment} compartment from S3...")
-    barcodes_csv_file = f"{compartment}-compartment-barcodes.csv"
+    barcodes_csv_file = configs['compartment_barcode_csv_file']
     aws_sync("s3://immuneaging/per-compartment-barcodes/", data_dir, barcodes_csv_file, logger)
-    barcodes_csv_path = os.path.join(data_dir, barcodes_csv_file)
-    if not os.path.exists(barcodes_csv_path):
-        logger.add_to_log(f"per-compartment-barcodes csv file does not exist on aws for compartment {compartment}. Terminating execution.")
-        sys.exit()
+    compartment_barcodes_all = pd.read_csv(f"{data_dir}/{barcodes_csv_file}", index_col=0, header=0)
+    compartment_barcodes_all.iloc[:, 0] = compartment_barcodes_all.iloc[:, 0].str.upper()
+    
+    compartment_barcodes = list(compartment_barcodes_all[compartment_barcodes_all.iloc[:, 0]==compartment[0]].index)
+    
     logger.add_to_log(f"Downloading csv file containing cell barcodes to exclude, if any...")
-    exclude_barcodes_csv_file = f"Exclude-barcodes.csv"
-    aws_sync("s3://immuneaging/per-compartment-barcodes/", data_dir, exclude_barcodes_csv_file, logger)
-    exclude_barcodes_csv_path = os.path.join(data_dir, exclude_barcodes_csv_file)
+    # exclude_barcodes_csv_file = f"Exclude-barcodes.csv"
+    # aws_sync("s3://immuneaging/per-compartment-barcodes/", data_dir, exclude_barcodes_csv_file, logger)
+    # exclude_barcodes_csv_path = os.path.join(data_dir, exclude_barcodes_csv_file)
+    
+filter_dir = f"{data_dir}/filter_{configs['filtering']['filter_name']}"
+os.system("mkdir -p " + filter_dir)
+if configs["integration_level"] == "tissue":
+    tissue = samples["Organ"][samples["Sample_ID"] == sample_id].values[0]
+    filter_files = f"{tissue}*.csv"
+else:
+    filter_files = "*.csv"
+aws_sync(f"s3://immuneaging/per-compartment-barcodes/filter_{configs['filtering']['filter_name']}",
+            f"{data_dir}/filter_{configs['filtering']['filter_name']}", filter_files, logger)
+
+filter_barcodes = []
+for file in os.listdir(filter_dir):
+    if 'csv' in file:
+        filter_barcodes += list(pd.read_csv(f"{filter_dir}/{file}", index_col=0).index)
+logger.add_to_log(f"Total number of cells in low quality filter is {len(filter_barcodes)}")
 
 ############################################
 ###### SAMPLE INTEGRATION BEGINS HERE ######
@@ -206,100 +233,111 @@ for integration_mode in integration_modes:
     output_h5ad_file = "{}.{}.h5ad".format(prefix, version)
     output_h5ad_file_cleanup = "{}_cleanup.{}.h5ad".format(prefix, version)
     logger.add_to_log("Reading h5ad files of processed samples...")
-    try:
-        if adata_dict is not None:
-            logger.add_to_log("Cleaning up adata_dict to free up some memory before the next run...")
-            del adata_dict
-            gc.collect()
-    except NameError:
-        pass
-    adata_dict = {}
-    for j in range(len(h5ad_files)):
-        h5ad_file = h5ad_files[j]
-        sample_id = sample_ids[j]
-        if tissue_integration:
-            adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
-        else:
-            barcodes = pd.read_csv(barcodes_csv_path, header=None)
-            exclude_barcodes = pd.read_csv(exclude_barcodes_csv_path, header=None) if os.path.isfile(exclude_barcodes_csv_path) else None
-            adata_temp = sc.read_h5ad(h5ad_file)
-            # replace adata with the subset of adata that is limited to the compartment barcodes
-            trimmed_adata_index = adata_temp.obs.index.map(lambda x: strip_integration_markers(x, valid_libs))
-            idx = trimmed_adata_index.isin(barcodes[0])
-            if exclude_barcodes is not None:
-                # also, exclude any cells that are marked as Exclude
-                # Note: The majority of cells to be excluded are removed during earlier stages of the pipeline
-                # such as sample and library processing. However, we have this additional step here in case that
-                # we find cells to exclude later on and don't want to go back and re-run earlier processing stages
-                # (ideally though we should in order to keep everything consistent) or if for any other reason we
-                # need to exclude some cells here.
-                idx = idx & ~trimmed_adata_index.isin(exclude_barcodes[0])
-            if np.sum(idx) > 0: # i.e. if there is at least one cell that passes the condition above
-                adata_dict[sample_id] = adata_temp[idx, :].copy()
-                del adata_temp
-                gc.collect()
+    
+    if preexisting_h5ad == False:
+        adata_dict = {}
+        for j in range(len(h5ad_files)):
+            h5ad_file = h5ad_files[j]
+            sample_id = sample_ids[j]
+            if configs["integration_level"] == "compartment":
+                adata_temp = sc.read_h5ad(h5ad_file)
+                idx = adata_temp.obs_names.isin(compartment_barcodes)
+                print(idx)
+                print(adata_temp[idx, :])
+
+                if np.sum(idx) > 2: # i.e. if there are at least three cells that passes the condition above
+                    adata_dict[sample_id] = adata_temp[idx, :].copy()
+                    del adata_temp
+                    gc.collect()
+                else:
+                    del adata_temp
+                    gc.collect()
+                    continue
             else:
-                del adata_temp
-                gc.collect()
+                adata_dict[sample_id] = sc.read_h5ad(h5ad_file)
+            # add the tissue to the adata since we may need it as part of a composite batch_key later
+            adata_dict[sample_id].obs["tissue"] = samples["Organ"][samples["Sample_ID"] == sample_id].values[0]
+            adata_dict[sample_id].obs["sample_id"] = sample_id
+            for field in ('X_pca', 'X_scVI', 'X_totalVI', 'X_umap_pca', 'X_umap_scvi', 'X_umap_totalvi'):
+                if field in adata_dict[sample_id].obsm:
+                    del adata_dict[sample_id].obsm[field]
+            adata_dict[sample_id].X = adata_dict[sample_id].layers['raw_counts']
+            if configs["integration_level"] != "tissue":
+                del adata_dict[sample_id].layers
+            del adata_dict[sample_id].obsp
+        if configs["integration_level"] == "tissue" and len(adata_dict) == 0:
+            msg = f"No cells found for tissue {compartment} from all samples in {integration_mode} integration mode..."
+            if integration_mode != "stim_unstim":
+                logger.add_to_log(msg, level="warning")
+                # move on to the next integration mode
                 continue
-        # add the tissue to the adata since we may need it as part of a composite batch_key later
-        adata_dict[sample_id].obs["tissue"] = samples["Organ"][samples["Sample_ID"] == sample_id].values[0]
-        adata_dict[sample_id].obs["sample_id"] = sample_id
-        for field in ('X_pca', 'X_scVI', 'X_totalVI', 'X_umap_pca', 'X_umap_scvi', 'X_umap_totalvi'):
-            if field in adata_dict[sample_id].obsm:
-                del adata_dict[sample_id].obsm[field]
-    if tissue_integration and len(adata_dict) == 0:
-        msg = f"No cells found for compartment {compartment} from all samples in {integration_mode} integration mode..."
-        if integration_mode != "stim_unstim":
-            logger.add_to_log(msg, level="warning")
-            # move on to the next integration mode
-            continue
-        else:
-            logger.add_to_log(msg + " Terminating execution.", level="error")
-            logging.shutdown()
-            if not sandbox_mode:
-                # upload log to S3
-                aws_sync(data_dir, "{}/{}/{}/".format(s3_url, configs["output_prefix"], version), logger_file, logger, do_log=False)
-            sys.exit()
-    sample_ids = list(adata_dict.keys())
-    # get the names of all proteins and control proteins across all samples (in case the samples were collected using more than one protein panel)
-    proteins = set()
-    proteins_ctrl = set()
-    for sample_id in sample_ids:
-        if "protein_expression" in adata_dict[sample_id].obsm:
-            proteins.update(adata_dict[sample_id].obsm["protein_expression"].columns)
-        if "protein_expression_Ctrl" in adata_dict[sample_id].obsm:
-            proteins_ctrl.update(adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns)
-    # each sample should include all proteins; missing values are set as NaN
-    if len(proteins) > 0 or len(proteins_ctrl) > 0:
-        proteins = list(proteins)
-        proteins_ctrl = list(proteins_ctrl)
+            else:
+                logger.add_to_log(msg + " Terminating execution.", level="error")
+                logging.shutdown()
+                if not sandbox_mode:
+                    # upload log to S3
+                    aws_sync(data_dir, "{}/{}/{}/".format(s3_url, configs["output_prefix"], version), logger_file, logger, do_log=False)
+                sys.exit()
+        sample_ids = list(adata_dict.keys())
+        # get the names of all proteins and control proteins across all samples (in case the samples were collected using more than one protein panel)
+        proteins = set()
+        proteins_ctrl = set()
         for sample_id in sample_ids:
-            df = pd.DataFrame(columns = proteins, index = adata_dict[sample_id].obs.index)
             if "protein_expression" in adata_dict[sample_id].obsm:
-                df[adata_dict[sample_id].obsm["protein_expression"].columns] = adata_dict[sample_id].obsm["protein_expression"].copy()
-            adata_dict[sample_id].obsm["protein_expression"] = df
-            df_ctrl = pd.DataFrame(columns = proteins_ctrl, index = adata_dict[sample_id].obs.index)
+                proteins.update(adata_dict[sample_id].obsm["protein_expression"].columns)
             if "protein_expression_Ctrl" in adata_dict[sample_id].obsm:
-                df_ctrl[adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_id].obsm["protein_expression_Ctrl"].copy()
-            adata_dict[sample_id].obsm["protein_expression_Ctrl"] = df_ctrl
-    logger.add_to_log("Concatenating all datasets...")
-    adata = adata_dict[sample_ids[0]]
-    if len(sample_ids) > 1:
-        adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
-    # Move the summary statistics of the genes (under .var) to a separate csv file
-    cols_to_varm = [j for j in adata.var.columns if "n_cells" in j] + \
-    [j for j in adata.var.columns if "mean_counts" in j] + \
-    [j for j in adata.var.columns if "pct_dropout_by_counts" in j] + \
-    [j for j in adata.var.columns if "total_counts" in j]
-    output_gene_stats_csv_file = "{}.{}.gene_stats.csv".format(prefix, version)
-    adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].to_csv(os.path.join(data_dir,output_gene_stats_csv_file))
-    adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
+                proteins_ctrl.update(adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns)
+        # each sample should include all proteins; missing values are set as NaN
+        if len(proteins) > 0 or len(proteins_ctrl) > 0:
+            proteins = list(proteins)
+            proteins_ctrl = list(proteins_ctrl)
+            for sample_id in sample_ids:
+                df = pd.DataFrame(columns = proteins, index = adata_dict[sample_id].obs.index)
+                if "protein_expression" in adata_dict[sample_id].obsm:
+                    df[adata_dict[sample_id].obsm["protein_expression"].columns] = adata_dict[sample_id].obsm["protein_expression"].copy()
+                adata_dict[sample_id].obsm["protein_expression"] = df
+                df_ctrl = pd.DataFrame(columns = proteins_ctrl, index = adata_dict[sample_id].obs.index)
+                if "protein_expression_Ctrl" in adata_dict[sample_id].obsm:
+                    df_ctrl[adata_dict[sample_id].obsm["protein_expression_Ctrl"].columns] = adata_dict[sample_id].obsm["protein_expression_Ctrl"].copy()
+                adata_dict[sample_id].obsm["protein_expression_Ctrl"] = df_ctrl
+        logger.add_to_log("Concatenating all datasets...")
+        adata = adata_dict[sample_ids[0]]
+        if len(sample_ids) > 1:
+            adata = adata.concatenate([adata_dict[sample_ids[j]] for j in range(1,len(sample_ids))], join="outer", index_unique=None)
+        del adata_dict
+        gc.collect()
+        # Move the summary statistics of the genes (under .var) to a separate csv file
+        cols_to_varm = [j for j in adata.var.columns if "n_cells" in j] + \
+        [j for j in adata.var.columns if "mean_counts" in j] + \
+        [j for j in adata.var.columns if "pct_dropout_by_counts" in j] + \
+        [j for j in adata.var.columns if "total_counts" in j]
+        output_gene_stats_csv_file = "{}.{}.gene_stats.csv".format(prefix, version)
+        adata.var.iloc[:,adata.var.columns.isin(cols_to_varm)].to_csv(os.path.join(data_dir,output_gene_stats_csv_file))
+        adata.var = adata.var.drop(labels = cols_to_varm, axis = "columns")
+        if not sandbox_mode:
+            sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
+                data_dir, s3_url, configs["output_prefix"], version, output_gene_stats_csv_file)
+            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+            logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        
+        write_anndata_with_object_cols(adata, data_dir, "concatenated_data_before_processing.h5ad")
+    else:
+        if configs["integration_level"] == "compartment":
+            adata = adata[adata.obs_names.isin(compartment_barcodes)]
+    
+    if apply_filtering:
+        n_obs = len(adata.obs_names)
+        logger.add_to_log(f"{len(set(filter_barcodes) - set(adata.obs_names))}: Cells in filter were not part of the adata object.")
+        adata = adata[list(set(adata.obs_names) - set(filter_barcodes))]
+        logger.add_to_log(f"Applied low quality filter and removed {n_obs - len(adata.obs_names)} cells.")
+    else:
+        adata.obs['loaded_filter'] = "filtered"
+        adata.obs.loc[list(set(adata.obs_names) - set(filter_barcodes)), 'loaded_filter'] = "pass filtering"   
     # protein QC
     protein_levels_max_sds = configs["protein_levels_max_sds"] if "protein_levels_max_sds" in configs else None
-    if (len(proteins) > 0) and protein_levels_max_sds is not None:
+    n_cells_before, n_proteins_before = adata.obsm["protein_expression"].shape
+    if n_proteins_before > 0 and protein_levels_max_sds is not None:
         logger.add_to_log("Running protein QC...")
-        n_cells_before, n_proteins_before = adata.obsm["protein_expression"].shape
         # (1) remove cells that demonstrate extremely high (or low) protein library size; normalize library size by the total number of non NaN proteins available for the cell.
         prot_exp = adata.obsm["protein_expression"]
         normalized_cell_lib_size = prot_exp.sum(axis=1)/(prot_exp.shape[1] - prot_exp.isnull().sum(axis=1))
@@ -355,6 +393,14 @@ for integration_mode in integration_modes:
         totalvi_model_files = {}
         run_pca = True
         for batch_key in batch_keys:
+            if batch_key == 'seq_batch':
+                dir_path = os.path.dirname(os.path.realpath(__file__))
+                with open(os.path.join(dir_path, "rename_dictionaries.json"), 'r') as j:
+                    extra_setting = json.loads(j.read())
+                adata.uns['seq_batch_dict'] = extra_setting['seq_batch']
+                adata.obs['seq_batch'] = adata.obs['sample_id']
+                adata.obs['seq_batch'] = adata.obs['seq_batch'].replace(adata.uns['seq_batch_dict'])
+                adata.obs['seq_batch'] = adata.obs['seq_batch'].astype('category')
             logger.add_to_log("Running for batch_key {}...".format(batch_key))
             rna = adata.copy()
             if batch_key not in rna.obs:
@@ -381,30 +427,32 @@ for integration_mode in integration_modes:
                     sys.exit()
             logger.add_to_log("Filtering out vdj genes...")
             rna = filter_vdj_genes(rna, configs["vdj_genes"], data_dir, logger)
-            rna.X = rna.layers["raw_counts"].copy()
-            sc.pp.normalize_total(rna)
-            sc.pp.log1p(rna)
             rna.layers["log1p_transformed"] = rna.X.copy()
+            sc.pp.normalize_total(rna, layers=["log1p_transformed"])
+            sc.pp.log1p(rna, layer="log1p_transformed")
             logger.add_to_log("Detecting highly variable genes...")
             if configs["highly_variable_genes_flavor"] == "seurat_v3":
                 # highly_variable_genes requires counts data in this case
-                rna.X = rna.layers["raw_counts"]
+                layer = None
+            else:
+                layer = "log1p_transformed"
             sc.pp.highly_variable_genes(
                 rna,
                 n_top_genes=configs["n_highly_variable_genes"],
                 subset=False,
                 flavor=configs["highly_variable_genes_flavor"],
                 batch_key=batch_key,
-                span = 1.0)
+                span=1.0,
+                layer=layer)
 
             sc.pp.highly_variable_genes(
                 rna,
                 n_top_genes=configs["n_highly_variable_genes"],
                 subset=False,
                 flavor=configs["highly_variable_genes_flavor"],
-                span = 1.0)
-            rna = rna[:, np.logical_and(rna.var['highly_variable']==True, rna.var['highly_variable_nbatches']>max(2.5, 0.1*len(rna.obs[batch_key].unique())))].copy()
-            rna.X = rna.layers["raw_counts"]
+                span=1.0,
+                layer=layer)
+            rna = rna[:, np.logical_and(rna.var['highly_variable']==True, rna.var['highly_variable_nbatches']>max(min(0.9*len(rna.obs[batch_key].unique()), 1.5), 0.2*len(rna.obs[batch_key].unique())))].copy()
             # scvi
             key = f"X_scvi_integrated_batch_key_{batch_key}"
             _, scvi_model_file = run_model(rna, configs, batch_key, None, "scvi", prefix, version, data_dir, logger, key)
@@ -420,7 +468,7 @@ for integration_mode in integration_modes:
                 neighbors_key=neighbors_key,
                 copy=True
             ).obsm["X_umap"]
-            if is_cite:
+            if is_cite and configs["integration_level"] == "tissue":
                 # totalVI
                 key = f"X_totalVI_integrated_batch_key_{batch_key}"
                 # if there is no protein information for some of the cells set them to zero (instead of NaN)
@@ -447,8 +495,7 @@ for integration_mode in integration_modes:
                     logger.add_to_log("Execution of totalVI failed with the following error (latest) with retry count {}: {}. Moving on...".format(retry_count, err), "warning")
             if run_pca:
                 logger.add_to_log("Calculating PCA...")
-                rna.X = rna.layers["log1p_transformed"]
-                sc.pp.pca(rna)
+                rna.obsm['X_pca'] = sc.pp.pca(rna.layers['log1p_transformed'])
                 logger.add_to_log("Calculating neighborhood graph and UMAP based on PCA...")
                 key = "pca_neighbors"
                 sc.pp.neighbors(rna, n_neighbors=configs["neighborhood_graph_n_neighbors"], use_rep="X_pca", key_added=key) 
@@ -518,14 +565,31 @@ for integration_mode in integration_modes:
                 dotplot_min_frac = celltypist_dotplot_min_frac,
                 logger = logger,
             )
-    sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"],
+    if configs["integration_level"] == "tissue":
+        sc.pp.neighbors(adata, n_neighbors=configs["neighborhood_graph_n_neighbors"],
                     use_rep=f"X_scvi_integrated_batch_key_{batch_key}", key_added="overclustering") 
-    sc.tl.leiden(adata, key_added='overclustering_tissue_percolate', resolution=3.0, neighbors_key="overclustering")
-    
-    df = adata.obs.groupby('overclustering_tissue_percolate')['sum_percolation_score'].agg(['median', 'mean'])
-    for cluster in df.index:
-        adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_median_cluster'] = df.loc[cluster, 'median']
-        adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_mean_cluster'] = df.loc[cluster, 'mean']
+        sc.tl.leiden(adata, key_added='overclustering_tissue_percolate', resolution=5.0, neighbors_key="overclustering")
+        adata.obs['sum_percolation_score'] = adata.obs['sum_percolation_score'].astype(float)
+        
+        df = adata.obs.groupby('overclustering_tissue_percolate')['sum_percolation_score'].agg(['median', 'mean', lambda x: x.quantile(0.75)])
+        for cluster in df.index:
+            adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_q75_cluster'] = df.loc[cluster, '<lambda_0>']
+            adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_median_cluster'] = df.loc[cluster, 'median']
+            adata.obs.loc[adata.obs['overclustering_tissue_percolate'] == cluster, 'sum_percolation_score_mean_cluster'] = df.loc[cluster, 'mean']
+        if "filtering" in configs and not apply_filtering:
+            tissue = adata.obs['tissue'].iloc[0]
+            adata.obs["to_filter"] = "pass filtering"  
+            
+            for key, value in configs["filtering"]["percolation_score_median"].items():
+                adata.obs.loc[adata.obs[key] < value, "to_filter"] = "filtered"
+            threshold = configs["filtering"]["sum_percolation_score_mean_cluster"][tissue]
+            adata.obs.loc[adata.obs["sum_percolation_score_mean_cluster"] > threshold, "to_filter"] = "filtered"
+            
+            celltypist_key = 'celltypist_majority_voting.Immune_All_High.scvi_batch_key_donor_id.unstim.leiden_resolution_10.0'
+            key = tissue if tissue in configs["filtering"]["celltypes_passing_filtering"] else "all"
+            
+            adata.obs.loc[adata.obs[celltypist_key].isin(configs["filtering"]["celltypes_passing_filtering"][key]), "to_filter"] = "pass filtering"
+            adata.obs.loc[adata.obs["to_filter"]=='filtered', "to_filter"].to_csv(os.path.join(data_dir,f'{tissue}_low_quality_filter.csv'))
     
     dotplot_dir = os.path.join(data_dir,dotplot_dirname)
     os.system("rm -r -f {}".format(dotplot_dir))
@@ -548,7 +612,7 @@ for integration_mode in integration_modes:
     # OUTPUT UPLOAD TO S3 - ONLY IF NOT IN SANDBOX MODE
     if not sandbox_mode:
         logger.add_to_log("Uploading h5ad file to S3...")
-        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {} {}'.format(
+        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {} --include {}'.format(
             data_dir, s3_url, configs["output_prefix"], version, output_h5ad_file, output_h5ad_file_cleanup)
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
@@ -560,10 +624,14 @@ for integration_mode in integration_modes:
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
         logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
         logger.add_to_log("Uploading gene stats csv file to S3...")
-        sync_cmd = 'aws s3 sync --no-progress {} {}/{}/{} --exclude "*" --include {}'.format(
-            data_dir, s3_url, configs["output_prefix"], version, output_gene_stats_csv_file)
-        logger.add_to_log("sync_cmd: {}".format(sync_cmd))
-        logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+        if "filtering" in configs and not configs["filtering"]["apply_filtering"]:
+            sync_cmd = 'aws s3 sync --no-progress {} {}/{}/ --exclude "*" --include {}'.format(
+                data_dir, "s3://immuneaging/per-compartment-barcodes", 
+                f"filter_{configs['filtering']['filter_name']}", 
+                f'{tissue}_low_quality_filter.csv')
+            logger.add_to_log("sync_cmd: {}".format(sync_cmd))
+            logger.add_to_log("aws response: {}\n".format(os.popen(sync_cmd).read()))
+            
     logger.add_to_log("Number of cells: {}, number of genes: {}.".format(adata.n_obs, adata.n_vars))
 
 logger.add_to_log("Execution of integrate_samples.py is complete.")

@@ -39,7 +39,7 @@ CELLRANGER_METRICS = CELLRANGER_METRICS_NT()
 # if you edit these make sure to update all call sites that use them
 QC_STRING_DOUBLETS = "Removed {} estimated doublets (percent removed: {:.2f}%); {} droplets remained."
 QC_STRING_AMBIENT_RNA = "Removed {} cells (percent removed: {:.2f}%) with total decontaminated counts below filter_decontaminated_cells_min_genes={}"
-QC_STRING_VDJ = "Removed {} vdj genes (percent removed: {:.2f}%); {} gpercolationenes remained."
+QC_STRING_VDJ = "Removed {} vdj genes (percent removed: {:.2f}%); {} genes remained."
 QC_STRING_RBC = "Removed {} red blood cells (percent removed: {:.2f}%); {} droplets remained."
 QC_STRING_COUNTS = "Final number of cells: {}, final number of genes: {}."
 QC_STRING_START_TIME = "Starting time: {}"
@@ -52,7 +52,8 @@ def init_scvi_settings():
     scvi.settings.dl_pin_memory_gpu_training = False
     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 
-init_scvi_settings()
+sc.settings.n_jobs = 20
+sc.settings.max_memory = 300
 
 TIME_FORMAT = "%H:%M, %m-%d-%Y"
 DATE_FORMAT = "%m/%d/%Y"
@@ -100,12 +101,13 @@ def load_configs(filename):
 def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_keys, data_dir):
 	ls_cmd = 'aws s3 ls {} --recursive'.format(s3_path)
 	files = os.popen(ls_cmd).read()
+	files = [file.split(' ')[-1] for file in files.rstrip().split('\n')]
 	latest_configs_file = None
 	latest_version_num = 0
 	is_new_version = False
-	for f in files.rstrip().split('\n'):
+	for f in files:
 		j = f.split('/')[-1].split('.')[0:-1]
-		if ".".join(j[0:-1]) == configs_file_prefix:
+		if ".".join(j[0:-1]) == configs_file_prefix and '/'.join(f.split('/')[:-1] + ['.'.join([f.split('/')[-3], 'unstim', f.split('/')[-2], 'h5ad'])]) in files:
 			v = int(j[-1][1:])
 			if v > latest_version_num:
 				latest_version_num = v
@@ -125,6 +127,7 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 				version = latest_version_num + 1
 	if version > latest_version_num:
 		is_new_version = True
+	print(is_new_version,"v"+str(version))
 	return [is_new_version,"v"+str(version)]
 
 def get_latest_object_version(s3_access_file: str, s3_path: str, folder_name: Optional[str] = None):
@@ -239,38 +242,46 @@ def write_anndata_with_object_cols(adata: AnnData, data_dir: str, h5ad_file: str
     obj_cols = adata.obs.select_dtypes(include='object').columns
     # Also call .astype("str") since there can be other values than NaN in the column that contribute to
     # the "object" type
-    if obj_cols:
+    if len(obj_cols):
         adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
     if cleanup:
-        cleanup_adata(adata)
+        try:
+            cleanup_adata(adata)
+        except Exception as e:
+            print(Exception)
+            pass
     adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
         
 def cleanup_adata(adata: AnnData) -> None:
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(dir_path, "rename_dictionaries.json"), 'r') as j:
+        extra_setting = json.loads(j.read())
+    adata.obsm['protein_expression'].rename(columns=extra_setting['protein_rename'], inplace=True)
+    adata.obs.rename(columns=extra_setting['obs_rename'], inplace=True)
+    
+    adata.uns['tissue_colors'] = extra_setting['tissue_colors']
+    adata.uns['site_colors'] = extra_setting['site_colors']
+    
     adata.obsm['TCR_IR'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i.startswith('TCR-')], axis=1)
     adata.obsm['BCR_IR'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i.startswith('BCR-')], axis=1)
     adata.obsm['celltypist'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'celltypist' in i], axis=1)
     adata.obsm['hashtag'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if
-                                       i.split('-')[0] in adata.obs['donor_id'].cat.categories], axis=1)
-    
+                                       i.split('-')[0] in adata.obs['donor'].cat.categories], axis=1)
     adata.obsm['median_cluster_score'] = pd.concat([
         adata.obs.pop(i) for i in adata.obs.columns if 'median_cluster_scores' in i], axis=1)
     adata.obsm['bh_pval'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'bh_pval' in i], axis=1)
-    patient_level_obs = [
-        'DCD/DBD', 'ethnicity/race', 'death_cause', 'mech_injury', 'height', 'BMI', 'lipase_level',
-        'blood_sugar', 'smoking_period', 'smoking_packs_year', 'EBV', 'CMV', 'seq_run', 'Fresh/frozen', 'sample_cell_type', 
+    donor_level_obs = [
+        'DCD/DBD', 'ethnicity/race', 'death_cause', 'mech_injury', 'height', 'bmi', 'lipase_level',
+        'blood_sugar', 'smoking_period', 'smoking_packs_year', 'ebv', 'cmv', 'seq_run', 'Fresh/frozen', 'sample_cell_type', 
         'sorting', 'stimulation', 'Notes', 'HTO_chem', 'ADT_chem']
-    adata.obsm['bh_pval'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in patient_level_obs], axis=1)
-    patient_level_obs = ['DCD/DBD', 'ethnicity/race', 'death_cause', 'mech_injury', 'height', 'BMI', 'lipase_level',
-        'blood_sugar', 'smoking_period', 'smoking_packs_year', 'EBV', 'CMV', 'seq_run', 'Fresh/frozen', 'sample_cell_type', 
-        'sorting', 'stimulation', 'Notes', 'HTO_chem', 'ADT_chem']
-    adata.obsm['patient_level_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in patient_level_obs], axis=1)
+    adata.obsm['donor_level_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in donor_level_obs], axis=1)
     extra_qc = [
-        'Exclude from Aging analysis', 'total_counts_mt', 'pct_counts_mt', 'total_counts_ribo', 'pct_counts_ribo', 'total_counts_hb',
+        'exclude_from_aging', 'total_counts_mt', 'pct_counts_mt', 'total_counts_ribo', 'pct_counts_ribo', 'total_counts_hb',
         'pct_counts_hb', 'total_counts_hsp', 'pct_counts_hsp', 'most_likely_hypothesis', 'cluster_feature', 'negative_hypothesis_probability',
         'singlet_hypothesis_probability', 'doublet_hypothesis_probability',  'pct_counts_hsp_percolation', 'doublet_probability_percolation',
         'doublet_hypothesis_probability_percolation', 'pct_counts_hb_percolation', 'pct_counts_mt_percolation', 'total_counts_percolation',
-        'n_genes_percolation', 'n_proteins_percolation', 'doublet_probability', 'singlet_probability', 'contamination_levels', 'predicted_erythrocyte', 
-        'library_code_version_y', 'BCR_chem', 'TCR_chem', 'double_ir_percolation', 'double_ir', 'solo_prediction', 'doublet_score', 'singlet_score', 
+        'n_genes_percolation', 'n_proteins_percolation', 'doublet_probability', 'doublet_prediction', 'contamination_levels', 'predicted_erythrocyte', 
+        'library_code_version_y', 'BCR_chem', 'TCR_chem', 'double_ir_percolation', 'double_ir', 'solo_prediction', 'singlet_score', 
     ]
     adata.obsm['qc_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in extra_qc], axis=1)
     clustering = [
@@ -280,12 +291,11 @@ def cleanup_adata(adata: AnnData) -> None:
         'totalvi_batch_key_donor_id.unstim.leiden_resolution_10.0', 
         'overclustering_tissue_percolate',
     ]
+    
     adata.obsm['clustering'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'leiden_resolution' in i], axis=1)
-    adata.X = adata.layers['raw_counts']
-    del adata.layers
+    adata.obsm['versions'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'pipeline_version' in i or 'code_version' in i], axis=1)
+    del adata.obsp
     
-    
-            
 def run_model(
         adata: AnnData,
         configs: dict,
@@ -402,6 +412,7 @@ def _run_model_impl(
         if i in configs:
             if model_name=="totalvi" and i=="n_layers":
                 model_params["n_layers_encoder"] = model_params["n_layers_decoder"] = configs[i]
+                
             else:
                 model_params[i] = configs[i]
     logger.add_to_log("Training {} model with batch key {}...".format(model_name, batch_key))
@@ -427,14 +438,13 @@ def _run_model_impl(
     logger.add_to_log("Saving the model into {}...".format(model_file))
     model_file_path = os.path.join(data_dir, model_file)
     model_dir_path = os.path.join(data_dir,"{}.{}_model_batch_key_{}/".format(prefix, model_name, batch_key))
-    if os.path.isdir(model_dir_path):
-        os.system("rm -r " + model_dir_path)
-    model.save(model_dir_path)
+    model.save(model_dir_path, overwrite=True)
     # save the data used for fitting the model; this is useful for applying reference-based integration on query data later on (based on the current model and data).
-    logger.add_to_log("Saving the data used for fitting the model...")
-    data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
-    adata_copy = adata.copy()
-    write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
+    if adata.n_obs < 200000: # Reduce disk foot print of models.
+        logger.add_to_log("Saving the data used for fitting the model...")
+        data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
+        adata_copy = adata.copy()
+        write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
     # zip the dir with all the model outputs
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
@@ -442,7 +452,7 @@ def _run_model_impl(
     return model, model_file
 
 def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger], do_log: bool = True) -> None:
-    sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(source, target, include)
+    sync_cmd = 'aws s3 cp --recursive --no-progress {} {} --exclude "*" --include "{}"'.format(source, target, include)
     if do_log:
         logger.add_to_log("syncing {}...".format(include))
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -647,12 +657,14 @@ def annotate(
     save_all_outputs: bool = False
 ):
     adata_new = adata.copy()
+    sc.pp.normalize_total(adata_new, target_sum=1e4)
+    sc.pp.log1p(adata_new)
     dotplot_paths = []
     for r in range(len(resolutions)):
         resolution = resolutions[r]
         logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
         sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
-        sc.tl.leiden(adata_new, resolution = resolution, key_added='leiden', neighbors_key = neighbors_key)
+        sc.tl.leiden(adata_new, resolution = resolution, key_added='leiden', neighbors_key = neighbors_key, n_iterations=2)
         # save the leiden clusters and majority voting results in the original anndata
         leiden_key_added = f"{model_name}.leiden_resolution_{str(resolution)}"
         adata.obs[leiden_key_added] = adata_new.obs["leiden"]
