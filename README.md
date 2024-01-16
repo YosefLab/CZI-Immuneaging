@@ -1,7 +1,7 @@
 # The Immune Aging Data Hub
 
 This repository serves as the data hub of the Immune Aging project.
-Here you can find all the resources and information needed for accessing the currently available processed data of the project, as well as a complete documentation of the data collection process, including instructions for data upload, data processing and other data management procedures.
+Here you can find all the resources and information needed for accessing the currently available processed data of the project, as well as a complete documentation of the data collection process, including instructions for data upload, data processing and other data management procedures and the scripts used for creating figures in the manuscripts. Parts of the description in the readme are outdated. For a full reference of used preprocessing look into the respective files or in the preprint.
 
 This page did not answer your question? Please <a href="https://github.com/YosefLab/Immune-Aging-Data-Hub/issues">open an issue</a> and label it as a 'question'.
 
