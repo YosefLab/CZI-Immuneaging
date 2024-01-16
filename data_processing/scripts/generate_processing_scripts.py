@@ -5,6 +5,7 @@ import sys
 import os
 import json
 import subprocess
+from pathlib import Path
 
 s3_access_file = sys.argv[1]
 output_destination = sys.argv[2]
@@ -21,6 +22,10 @@ os.system("mkdir -p " + jobs_queue_destination)
 jobs_run_destination = os.path.join(output_destination,"job_run")
 os.system("mkdir -p " + jobs_run_destination)
 
+code_version = subprocess.check_output(
+    ["git", "describe", "--always"], cwd=Path(code_path).resolve().parent).strip().decode()
+print(code_version)
+
 outfiles = []
 
 for job_type in ("process_library", "process_sample"):
@@ -28,7 +33,7 @@ for job_type in ("process_library", "process_sample"):
     ls_cmd = 'aws s3 ls s3://immuneaging/job_queue/{}/'.format(job_type)
     aws_response = os.popen(ls_cmd).read()
     if len(aws_response):
-        sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/job_queue/{}/ {}'.format(job_type, jobs_queue_destination)
+        sync_cmd = 'aws s3 cp --recursive --no-progress s3://immuneaging/job_queue/{}/ {}'.format(job_type, jobs_queue_destination)
         print("Running aws command: " + sync_cmd)
         print("output:\n" + os.popen(sync_cmd).read())
     else:
@@ -41,27 +46,26 @@ for job_type in ("process_library", "process_sample"):
             with open(queue_filename, "r") as f:
                 configs = json.loads(f.read())
             run_filename = os.path.join(jobs_run_destination, configs_filename)
-            configs["sandbox_mode"] = "False"
             configs["code_path"] = code_path
             configs["output_destination"] = output_destination
             configs["s3_access_file"] = s3_access_file
+            configs["code_version"] = code_version
             if configs["donor"] not in sh_cmds:
                 sh_cmds[configs["donor"]] = []
             # save configs file
             with open(run_filename, 'w') as f:
                 json.dump(configs, f)
             # add commands for running the current job
-            sh_cmds[configs["donor"]].append("source activate {}".format(configs["python_env_version"])) 
-            sh_cmds[configs["donor"]].append("python {}.py {}".format(os.path.join(code_path,job_type),run_filename))
-            sh_cmds[configs["donor"]].append("conda deactivate")
-            sh_cmds[configs["donor"]].append('echo "Execution of {}.py on job {} is complete."'.format(job_type,run_filename))
-            # move the original file on S3 from the queue to the running folder
-            mv_cmd = 'aws s3 mv s3://immuneaging/job_queue/{0}/{1} s3://immuneaging/job_queue/{0}.running/{1}'.format(job_type, configs_filename)
-            os.popen(mv_cmd).read()
+            sh_cmds[configs["donor"]].append('{}'.format(run_filename))
+    # move the original file on S3 from the queue to the running folder
+    mv_cmd = 'aws s3 mv --recursive s3://immuneaging/job_queue/{0}/ s3://immuneaging/job_queue/{0}.running/ --exclude "*" --include "{0}*"'.format(job_type)
+    os.system(mv_cmd)
     # save the commands in sh_cmds, for each donor separately
     if len(sh_cmds):
         for i in sh_cmds:
-            outfiles.append(os.path.join(output_path,"{}.{}_jobs.sh".format(i,job_type)))
+            if not os.path.exists(os.path.join(output_path,"{}".format(job_type))):
+                os.mkdir(os.path.join(output_path,"{}".format(job_type)))
+            outfiles.append(os.path.join(output_path,"{}/{}.{}_jobs.sh".format(job_type,i,job_type)))
             with open(outfiles[-1], 'w') as f:
                 for cmd in sh_cmds[i]:
                     f.write(cmd+"\n")

@@ -33,13 +33,14 @@ class BaseDigestClass(ABC):
             utils.set_access_keys(self.s3_access_file)
 
     def _ingest_and_sanity_check_input(self, args):
-        assert(len(args) == 9)
+        assert(len(args) == 10)
         self.donor_id = args[3]
         self.seq_run = args[4]
         self.logs_location = args[5] # must be either "aws" or the absolute path to the logs location on the local disk
         self.version = args[6] # must be either the version to use (e.g. "v1") or the latest version for each sample ("latest") - "latest" can only be used if logs_location is "aws"
-        self.working_dir = args[7] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
-        self.s3_access_file = args[8] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
+        self.version_ir = args[7] # must be either the version to use (e.g. "v1") ignored if version is "latest" - "latest" can only be used if logs_location is "aws"
+        self.working_dir = args[8] # must be either "" or the absolute path to the local directory where we will place the logs downloaded from aws - only used if logs_location is "aws"
+        self.s3_access_file = args[9] # must be either "" or the absolute path to the aws credentials file - only used if logs_location is "aws"
 
         assert(self.version != "latest" or self.logs_location == "aws")
         assert(self.logs_location == "aws" or os.path.isdir(self.logs_location))
@@ -126,7 +127,10 @@ class BaseDigestClass(ABC):
                         # the code further below to fail to find the file and emit an error message
                         version = "v" + str(latest_version)
                     else:
-                        version = self.version
+                        if "GEX" in prefix:
+                            version = self.version
+                        else:
+                            version = self.version_ir
                     object_versions.append(version)
                     filename = self._get_log_file_name(object_id, version)
                     sync_cmd = 'aws s3 sync --no-progress s3://immuneaging/{}/{}/{} {} --exclude "*" --include {}'.format(aws_dir_name, prefix, version, self.working_dir, filename)

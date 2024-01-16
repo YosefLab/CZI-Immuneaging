@@ -9,6 +9,8 @@ import numpy as np
 import scvi
 import zipfile
 import anndata
+import subprocess
+import time
 from anndata import AnnData
 from math import floor
 import csv
@@ -19,10 +21,12 @@ from logger import BaseLogger
 import scanpy as sc
 import celltypist
 import logging
+from scipy.stats import norm
+from statsmodels.stats import multitest
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
-AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
+AUTHORIZED_EXECUTERS = ["b750bd0287811e901c88dc328187e25f", "1c75133ab6a1fc3ed9233d3fe40b3d73", "5781bb0290325ec9e3f9c4c930dc3412"] # md5 checksums of the AWS_SECRET_ACCESS_KEY value of those that are authorized to upload outputs of processing scripts to the server; note that individuals with upload permission to aws can bypass that by changing the code - this is just designed to alert users that they should only use sandbox mode.
 
 class CELLRANGER_METRICS_NT(NamedTuple):
     MEDIAN_GENES_PER_CELL: str = "Median Genes per Cell"
@@ -46,8 +50,10 @@ def init_scvi_settings():
     # 2. Changes a bit how torch pins memory when copying to GPU, which allows you to more easily run models in parallel with an estimated 1-5% time hit
     scvi.settings.reset_logging_handler()
     scvi.settings.dl_pin_memory_gpu_training = False
+    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 
-init_scvi_settings()
+sc.settings.n_jobs = 20
+sc.settings.max_memory = 300
 
 TIME_FORMAT = "%H:%M, %m-%d-%Y"
 DATE_FORMAT = "%m/%d/%Y"
@@ -95,12 +101,13 @@ def load_configs(filename):
 def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_keys, data_dir):
 	ls_cmd = 'aws s3 ls {} --recursive'.format(s3_path)
 	files = os.popen(ls_cmd).read()
+	files = [file.split(' ')[-1] for file in files.rstrip().split('\n')]
 	latest_configs_file = None
 	latest_version_num = 0
 	is_new_version = False
-	for f in files.rstrip().split('\n'):
+	for f in files:
 		j = f.split('/')[-1].split('.')[0:-1]
-		if ".".join(j[0:-1]) == configs_file_prefix:
+		if ".".join(j[0:-1]) == configs_file_prefix and '/'.join(f.split('/')[:-1] + ['.'.join([f.split('/')[-3], 'unstim', f.split('/')[-2], 'h5ad'])]) in files:
 			v = int(j[-1][1:])
 			if v > latest_version_num:
 				latest_version_num = v
@@ -120,6 +127,7 @@ def get_configs_status(configs, s3_path, configs_file_prefix, variable_config_ke
 				version = latest_version_num + 1
 	if version > latest_version_num:
 		is_new_version = True
+	print(is_new_version,"v"+str(version))
 	return [is_new_version,"v"+str(version)]
 
 def get_latest_object_version(s3_access_file: str, s3_path: str, folder_name: Optional[str] = None):
@@ -180,36 +188,40 @@ def zipdir(path, ziph):
             ziph.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), 
                 os.path.join(path, '..')))
 
-def read_immune_aging_sheet(sheet, output_fn=None, sheet_name=None, quiet=False):
-    url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
-        sheet
-    )
-
-    # testing url of bad sample sheet
-    # url = "https://docs.google.com/spreadsheets/d/1YO1HLGLnO3PPUiK1vKZd52yoCInwpLl60zoi4zxkOrE/gviz/tq?tqx=out:csv&sheet={}".format(
-    #     sheet
-    # )
-
-    try:
-        import gdown
-    except ImportError as e:
-        raise ImportError(
-            "gdown is not installed. Please install gdown via: pip install gdown"
+def read_immune_aging_sheet(sheet, output_fn=None, quiet=True):
+    if 'IA_sample_spreadsheet.xlsx' in os.listdir(os.getcwd()):
+        logging.warning(f'Using previously downloaded sample spreadsheet at {os.getcwd()}/IA_sample_spreadsheet.xlsx')
+        data = pd.read_excel('IA_sample_spreadsheet.xlsx', sheet_name=sheet)
+    else:
+        url = "https://docs.google.com/spreadsheets/d/1XC6DnTpdLjnsTMReGIeqY4sYWXViKke_cMwHwhbdxIY/gviz/tq?tqx=out:csv&sheet={}".format(
+            sheet
         )
 
-    with warnings.catch_warnings(record=True) as w:
-        warnings.filterwarnings("error")
-        # output_fn = gdown.download(url, output_fn, quiet=quiet, fuzzy=True)
-        output_fn = gdown.download(url, output_fn, quiet=quiet)
+        # testing url of bad sample sheet
+        # url = "https://docs.google.com/spreadsheets/d/1YO1HLGLnO3PPUiK1vKZd52yoCInwpLl60zoi4zxkOrE/gviz/tq?tqx=out:csv&sheet={}".format(
+        #     sheet
+        # )
 
-        if len(w) == 1:
-            msg = w[0]
-            warnings.showwarning(
-                msg.message, msg.category, msg.filename, msg.lineno, msg.line
+        try:
+            import gdown
+        except ImportError as e:
+            raise ImportError(
+                "gdown is not installed. Please install gdown via: pip install gdown"
             )
 
-    data = pd.read_csv(output_fn)
-    os.remove(output_fn)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.filterwarnings("error")
+            # output_fn = gdown.download(url, output_fn, quiet=quiet, fuzzy=True)
+            output_fn = gdown.download(url, output_fn, quiet=quiet)
+
+            if len(w) == 1:
+                msg = w[0]
+                warnings.showwarning(
+                    msg.message, msg.category, msg.filename, msg.lineno, msg.line
+                )
+
+        data = pd.read_csv(output_fn)
+        os.remove(output_fn)
     return data
 
 def draw_separator_line():
@@ -222,20 +234,68 @@ def draw_separator_line():
         width = 50
         print("\u2014" * width + "\n")
 
-def write_anndata_with_object_cols(adata: AnnData, data_dir: str, h5ad_file: str) -> None:
-    try:
-        adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
-    except:
-        # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
-        # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
-        # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
-        # in future processing layers.
-        obj_cols = adata.obs.select_dtypes(include='object').columns
-        # Also call .astype("str") since there can be other values than NaN in the column that contribute to
-        # the "object" type
+def write_anndata_with_object_cols(adata: AnnData, data_dir: str, h5ad_file: str, cleanup:bool = False) -> None:
+    # There can be some BCR-/TCR- columns that have dtype "object" due to being all NaN, thus causing
+    # the write to fail. We replace them with 'nan'. Note this isn't ideal, however, since some of those
+    # columns can be non-string types (e.g. they can be integer counts), but is something we can handle
+    # in future processing layers.
+    obj_cols = adata.obs.select_dtypes(include='object').columns
+    # Also call .astype("str") since there can be other values than NaN in the column that contribute to
+    # the "object" type
+    if len(obj_cols):
         adata.obs.loc[:, obj_cols] = adata.obs.loc[:, obj_cols].fillna('nan').astype("str")
-        adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
+    if cleanup:
+        try:
+            cleanup_adata(adata)
+        except Exception as e:
+            print(Exception)
+            pass
+    adata.write(os.path.join(data_dir,h5ad_file), compression="lzf")
         
+def cleanup_adata(adata: AnnData) -> None:
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(dir_path, "rename_dictionaries.json"), 'r') as j:
+        extra_setting = json.loads(j.read())
+    adata.obsm['protein_expression'].rename(columns=extra_setting['protein_rename'], inplace=True)
+    adata.obs.rename(columns=extra_setting['obs_rename'], inplace=True)
+    
+    adata.uns['tissue_colors'] = extra_setting['tissue_colors']
+    adata.uns['site_colors'] = extra_setting['site_colors']
+    
+    adata.obsm['TCR_IR'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i.startswith('TCR-')], axis=1)
+    adata.obsm['BCR_IR'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i.startswith('BCR-')], axis=1)
+    adata.obsm['celltypist'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'celltypist' in i], axis=1)
+    adata.obsm['hashtag'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if
+                                       i.split('-')[0] in adata.obs['donor'].cat.categories], axis=1)
+    adata.obsm['median_cluster_score'] = pd.concat([
+        adata.obs.pop(i) for i in adata.obs.columns if 'median_cluster_scores' in i], axis=1)
+    adata.obsm['bh_pval'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'bh_pval' in i], axis=1)
+    donor_level_obs = [
+        'DCD/DBD', 'ethnicity/race', 'death_cause', 'mech_injury', 'height', 'bmi', 'lipase_level',
+        'blood_sugar', 'smoking_period', 'smoking_packs_year', 'ebv', 'cmv', 'seq_run', 'Fresh/frozen', 'sample_cell_type', 
+        'sorting', 'stimulation', 'Notes', 'HTO_chem', 'ADT_chem']
+    adata.obsm['donor_level_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in donor_level_obs], axis=1)
+    extra_qc = [
+        'exclude_from_aging', 'total_counts_mt', 'pct_counts_mt', 'total_counts_ribo', 'pct_counts_ribo', 'total_counts_hb',
+        'pct_counts_hb', 'total_counts_hsp', 'pct_counts_hsp', 'most_likely_hypothesis', 'cluster_feature', 'negative_hypothesis_probability',
+        'singlet_hypothesis_probability', 'doublet_hypothesis_probability',  'pct_counts_hsp_percolation', 'doublet_probability_percolation',
+        'doublet_hypothesis_probability_percolation', 'pct_counts_hb_percolation', 'pct_counts_mt_percolation', 'total_counts_percolation',
+        'n_genes_percolation', 'n_proteins_percolation', 'doublet_probability', 'doublet_prediction', 'contamination_levels', 'predicted_erythrocyte', 
+        'library_code_version_y', 'BCR_chem', 'TCR_chem', 'double_ir_percolation', 'double_ir', 'solo_prediction', 'singlet_score', 
+    ]
+    adata.obsm['qc_obs'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if i in extra_qc], axis=1)
+    clustering = [
+        'overclustering_percolate', 'scvi_batch_key_donor_id.unstim.leiden_resolution_3.0', 
+        'scvi_batch_key_donor_id.unstim.leiden_resolution_10.0', 
+        'totalvi_batch_key_donor_id.unstim.leiden_resolution_3.0', 
+        'totalvi_batch_key_donor_id.unstim.leiden_resolution_10.0', 
+        'overclustering_tissue_percolate',
+    ]
+    
+    adata.obsm['clustering'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'leiden_resolution' in i], axis=1)
+    adata.obsm['versions'] = pd.concat([adata.obs.pop(i) for i in adata.obs.columns if 'pipeline_version' in i or 'code_version' in i], axis=1)
+    del adata.obsp
+    
 def run_model(
         adata: AnnData,
         configs: dict,
@@ -247,7 +307,7 @@ def run_model(
         data_dir: str,
         logger: Type[BaseLogger],
         latent_key: str = None,
-        max_retry_count: int = 0,
+        max_retry_count: int = 0
     ):
     """
     Wrapper for `_run_model_impl` that retries the call up to `max_retry_count` times
@@ -272,7 +332,34 @@ def run_model(
             logger.add_to_log("Execution failed with the following error: {}. Tried {} time(s)...\n{}".format(err, n_tries, traceback.format_exc()))
             if n_tries == max_retry_count + 1:
                 raise
+
+def select_free_gpu():
+    while True:
+        memory_free_command = "nvidia-smi --query-gpu=memory.free --format=csv"
+        memory_free = subprocess.check_output(memory_free_command.split(), stderr=subprocess.STDOUT)
+        # Get use of each GPU.
+        mem_free = np.array([int(i.split(' ')[0]) for i in memory_free.decode().split('\n')[1:] if i])
+        if np.max(mem_free) < 3000:
+            time.sleep(10)
+        else:
+            break
+    return f'cuda:{np.argmax(mem_free)}'
+
+def get_train_parameters(configs):
+    train_params = {'plan_kwargs': {}, 'early_stopping_monitor': 'reconstruction_loss_validation'}
+    train_params_keys = [
+        "lr", "early_stopping", "train_size", "early_stopping_patience", "batch_size",
+        "limit_train_batches", "n_epochs_kl_warmup", "reduce_lr_on_plateau"]
+    plan_kwargs = ["n_epochs_kl_warmup", "reduce_lr_on_plateau"]
+    for i in train_params_keys:
+        if i in configs:
+            if i in plan_kwargs:
+                    train_params['plan_kwargs'] = {i: configs[i]}
+            else:
+                train_params[i] = configs[i]
+    return train_params
     
+
 def _run_model_impl(
         adata: AnnData,
         configs: dict,
@@ -283,7 +370,7 @@ def _run_model_impl(
         version: str,
         data_dir: str,
         logger: Type[BaseLogger],
-        latent_key: str = None,
+        latent_key: str = None
     ):
     """
     Runs scvi or totalvi model depending on the given model_name.
@@ -319,27 +406,27 @@ def _run_model_impl(
     logger.add_to_log("Setting up {}...".format(model_name))
     scvi.data.setup_anndata(adata, batch_key=batch_key, protein_expression_obsm_key=protein_expression_obsm_key)
     empirical_protein_background_prior = None if "empirical_protein_background_prior" not in configs else configs["empirical_protein_background_prior"] == "True"
-    model_params_keys = ["use_layer_norm", "use_batch_norm", "n_latent"]
+    model_params_keys = ["use_layer_norm", "use_batch_norm", "gene_likelihood", "n_layers", "n_latent"]
     model_params = dict()
     for i in model_params_keys:
         if i in configs:
-            model_params[i] = configs[i]
+            if model_name=="totalvi" and i=="n_layers":
+                model_params["n_layers_encoder"] = model_params["n_layers_decoder"] = configs[i]
+                
+            else:
+                model_params[i] = configs[i]
     logger.add_to_log("Training {} model with batch key {}...".format(model_name, batch_key))
     model = scvi.model.SCVI(adata, **model_params) if model_name=="scvi" else scvi.model.TOTALVI(adata, \
         empirical_protein_background_prior = empirical_protein_background_prior, **model_params)
-    train_params = dict()
-    train_params_keys = ["lr","early_stopping","train_size","early_stopping_patience","batch_size","limit_train_batches"]
-    for i in train_params_keys:
-        if i in configs:
-            train_params[i] = configs[i]
+    train_params = get_train_parameters(configs)
     max_epochs_config_key = "scvi_max_epochs" if model_name=="scvi" else "totalvi_max_epochs"
     if max_epochs_config_key in configs:
         train_params["max_epochs"] = configs[max_epochs_config_key]
-    elif model_name == "totalvi":
+    else:
         # totalvi has a bug where it fails to heuristically determine max_epochs
         # so for now we replicate that code below (https://github.com/scverse/scvi-tools/issues/1638)
         train_params["max_epochs"] = np.min([round((20000 / adata.n_obs) * 400), 400])
-    model.train(**train_params)
+    model.train(**train_params, use_gpu=select_free_gpu())
     if "elbo_train" in model.history_:
         logger.add_to_log("Number of {} training epochs: {}...".format(model_name, len(model.history_["elbo_train"])))
     logger.add_to_log("Saving {} latent representation...".format(model_name))
@@ -351,14 +438,13 @@ def _run_model_impl(
     logger.add_to_log("Saving the model into {}...".format(model_file))
     model_file_path = os.path.join(data_dir, model_file)
     model_dir_path = os.path.join(data_dir,"{}.{}_model_batch_key_{}/".format(prefix, model_name, batch_key))
-    if os.path.isdir(model_dir_path):
-        os.system("rm -r " + model_dir_path)
-    model.save(model_dir_path)
+    model.save(model_dir_path, overwrite=True)
     # save the data used for fitting the model; this is useful for applying reference-based integration on query data later on (based on the current model and data).
-    logger.add_to_log("Saving the data used for fitting the model...")
-    data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
-    adata_copy = adata.copy()
-    write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
+    if adata.n_obs < 200000: # Reduce disk foot print of models.
+        logger.add_to_log("Saving the data used for fitting the model...")
+        data_file = "{}.{}.{}_model_batch_key_{}.data.h5ad".format(prefix, version, model_name, batch_key)
+        adata_copy = adata.copy()
+        write_anndata_with_object_cols(adata_copy, model_dir_path, data_file)
     # zip the dir with all the model outputs
     zipf = zipfile.ZipFile(model_file_path, 'w', zipfile.ZIP_DEFLATED)
     zipdir(model_dir_path, zipf)
@@ -366,7 +452,7 @@ def _run_model_impl(
     return model, model_file
 
 def aws_sync(source: str, target: str, include: str, logger: Type[BaseLogger], do_log: bool = True) -> None:
-    sync_cmd = 'aws s3 sync --no-progress {} {} --exclude "*" --include {}'.format(source, target, include)
+    sync_cmd = 'aws s3 cp --recursive --no-progress {} {} --exclude "*" --include "{}"'.format(source, target, include)
     if do_log:
         logger.add_to_log("syncing {}...".format(include))
         logger.add_to_log("sync_cmd: {}".format(sync_cmd))
@@ -399,6 +485,10 @@ def get_internal_protein_names(df):
     i = 1
     while True:
         protein_panel_i_name = "Protein panel {}".format(str(i))
+        if 'IA_sample_spreadsheet.xlsx' in os.listdir(os.getcwd()):
+            xl = pd.ExcelFile('IA_sample_spreadsheet.xlsx')
+            if protein_panel_i_name not in xl.sheet_names:
+                break
         protein_panel_i = read_immune_aging_sheet(protein_panel_i_name)
         if np.sum(np.in1d(protein_panel_columns, protein_panel_i.columns)) != len(protein_panel_columns):
             break
@@ -567,12 +657,14 @@ def annotate(
     save_all_outputs: bool = False
 ):
     adata_new = adata.copy()
+    sc.pp.normalize_total(adata_new, target_sum=1e4)
+    sc.pp.log1p(adata_new)
     dotplot_paths = []
     for r in range(len(resolutions)):
         resolution = resolutions[r]
         logger.add_to_log("Running Leiden clustering using resolution={0}...".format(resolution))
         sc.pp.neighbors(adata_new, n_neighbors = n_neighbors, use_rep = components_key, key_added = neighbors_key)
-        sc.tl.leiden(adata_new, resolution = resolution, key_added = 'leiden', neighbors_key = neighbors_key)
+        sc.tl.leiden(adata_new, resolution = resolution, key_added='leiden', neighbors_key = neighbors_key, n_iterations=2)
         # save the leiden clusters and majority voting results in the original anndata
         leiden_key_added = f"{model_name}.leiden_resolution_{str(resolution)}"
         adata.obs[leiden_key_added] = adata_new.obs["leiden"]
@@ -732,3 +824,26 @@ def get_cluster_wise_cell_type_overview(adata: AnnData, ct_key: str, leiden_key:
         df.loc[c, col4] = cell_types[0]
 
     return df
+
+def percolate_observation(adata, overclustering_key, score_key, exclude_high=True, qval=0.1, threshold=None):
+    def grouped_threshold(x, threshold):
+        if isinstance(threshold, str):
+            return np.mean(x==threshold)
+        elif threshold is not None:
+            return np.mean(x>threshold)
+        else:
+            return np.median(x)
+    df = adata.obs.groupby(overclustering_key).agg({score_key: lambda x: grouped_threshold(x, threshold)})
+    for cluster in df.index:
+        adata.obs.loc[adata.obs[overclustering_key] == cluster, f'{score_key}_median_cluster_scores'] = df.loc[cluster, score_key]
+    med = adata.obs[f'{score_key}_median_cluster_scores'][adata.obs[f'{score_key}_median_cluster_scores']>0].median()
+    mad = 0.03 + np.median(abs(adata.obs[f'{score_key}_median_cluster_scores'][adata.obs[f'{score_key}_median_cluster_scores'] < med] - med))
+    if exclude_high:
+        pvals = 1 - norm.cdf(adata.obs[f'{score_key}_median_cluster_scores'], loc = med, scale = 1.4826*mad)
+    else:
+        pvals = norm.cdf(adata.obs[f'{score_key}_median_cluster_scores'], loc = med, scale = 1.4826*mad)
+    adata.obs[f'{score_key}_bh_pval'] = multitest.fdrcorrection(pvals, alpha=qval)[1]
+    adata.obs[f'{score_key}_percolation'] = adata.obs[f'{score_key}_bh_pval'] < qval
+    
+def softmax(x):
+    return(np.exp(x)/np.sum(np.exp(x.values), axis=1, keepdims=True))
